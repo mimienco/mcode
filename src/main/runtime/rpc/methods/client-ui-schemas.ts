@@ -301,4 +301,3 @@ export const UiUpdate = z
   .transform(omitUndefinedValues)
 
 // The key/value parity assertions over this live in ui-state-schema-parity-checks.ts.
-export type UiUpdateFieldsSchema = typeof UiUpdateFields

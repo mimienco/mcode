@@ -133,9 +133,7 @@ export const pluginManifestSchema = z
   .superRefine(validatePluginManifestContributions)
 
 export type PluginManifest = z.infer<typeof pluginManifestSchema>
-export type PluginPanelContribution = z.infer<typeof panelContributionSchema>
 export type PluginCommandContribution = z.infer<typeof commandContributionSchema>
-export type PluginEventContribution = z.infer<typeof eventContributionSchema>
 
 export {
   isSafePluginId,

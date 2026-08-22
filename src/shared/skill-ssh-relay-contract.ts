@@ -72,8 +72,3 @@ export const SkillSshListParamsSchema = z
   .strict()
 
 export type SkillSshWorkspaceAuthority = z.infer<typeof SkillSshWorkspaceAuthoritySchema>
-export type SkillSshInstallParams = z.infer<typeof SkillSshInstallParamsSchema>
-export type SkillSshInstallBundleParams = z.infer<typeof SkillSshInstallBundleParamsSchema>
-export type SkillSshPreviewParams = z.infer<typeof SkillSshPreviewParamsSchema>
-export type SkillSshPreviewBundleParams = z.infer<typeof SkillSshPreviewBundleParamsSchema>
-export type SkillSshRemoveParams = z.infer<typeof SkillSshRemoveParamsSchema>

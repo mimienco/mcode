@@ -1293,7 +1293,6 @@ export type BrowserTabCreateResult = {
 }
 
 export type BrowserErrorCode =
-  | 'browser_no_tab'
   | 'browser_tab_not_found'
   | 'browser_tab_closed'
   | 'browser_tab_changed'

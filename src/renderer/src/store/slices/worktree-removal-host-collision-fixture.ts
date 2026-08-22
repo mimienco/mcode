@@ -20,8 +20,6 @@ export const COLLIDING_WORKTREE_ID = 'repo1::/shared/workspace/path'
 export const COLLIDING_WORKTREE_PATH = '/shared/workspace/path'
 export const LOCAL_HOST: ExecutionHostId = 'local'
 export const SSH_HOST: ExecutionHostId = 'ssh:ssh-1'
-export const HOST_UNRESOLVED_MESSAGE =
-  'MCode cannot tell which host owns this workspace. Refresh projects and review it again.'
 
 export type HostCheckout = { root: string; markerPath: string }
 

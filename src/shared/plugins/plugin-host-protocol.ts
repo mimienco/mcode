@@ -103,7 +103,6 @@ export const pluginWorkerChildMessageSchema = z.discriminatedUnion('type', [
 
 export type PluginWorkerParentMessage = z.infer<typeof pluginWorkerParentMessageSchema>
 export type PluginWorkerChildMessage = z.infer<typeof pluginWorkerChildMessageSchema>
-export type PluginWorkerInit = z.infer<typeof pluginWorkerInitSchema>
 
 export const PLUGIN_WORKER_READY_TIMEOUT_MS = 10_000
 export const PLUGIN_WORKER_INVOKE_TIMEOUT_MS = 30_000

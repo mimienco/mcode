@@ -143,5 +143,3 @@ export function useSourceControlDiffCommentNotes({
     setPendingDiffCommentsClear
   }
 }
-
-export type SourceControlDiffCommentNotes = ReturnType<typeof useSourceControlDiffCommentNotes>

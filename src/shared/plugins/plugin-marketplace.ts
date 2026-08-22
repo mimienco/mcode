@@ -116,7 +116,6 @@ export const pluginMarketplaceTrustMetadataSchema = z
 export type PluginMarketplace = z.infer<typeof pluginMarketplaceSchema>
 export type PluginMarketplaceEntry = z.infer<typeof pluginMarketplaceEntrySchema>
 export type PluginMarketplaceGitSource = z.infer<typeof pluginMarketplaceGitSourceSchema>
-export type PluginMarketplaceTrustMetadata = z.infer<typeof pluginMarketplaceTrustMetadataSchema>
 
 export const OFFICIAL_MARKETPLACE_GIT_SOURCE: PluginMarketplaceGitSource = {
   kind: 'git',

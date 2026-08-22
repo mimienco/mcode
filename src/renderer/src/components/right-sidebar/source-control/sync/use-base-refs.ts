@@ -80,5 +80,3 @@ export function useSourceControlBaseRefs({
     pinnedBaseRef
   }
 }
-
-export type SourceControlBaseRefs = ReturnType<typeof useSourceControlBaseRefs>

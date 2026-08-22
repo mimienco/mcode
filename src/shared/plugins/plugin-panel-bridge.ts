@@ -89,8 +89,6 @@ export const panelActionCallSchema = z
   })
   .strict()
 
-export type PluginPanelActionCall = z.infer<typeof panelActionCallSchema>
-
 export type PluginPanelEntry = {
   html: string
   sessionToken: string

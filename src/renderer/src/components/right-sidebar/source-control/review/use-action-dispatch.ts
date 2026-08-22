@@ -161,5 +161,3 @@ export function useSourceControlActionDispatch({
     handleSourceControlKeyDown
   }
 }
-
-export type SourceControlActionDispatch = ReturnType<typeof useSourceControlActionDispatch>

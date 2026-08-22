@@ -150,5 +150,3 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
     ...providerHint
   }
 }
-
-export type SourceControlReviewContext = ReturnType<typeof useSourceControlReviewContext>

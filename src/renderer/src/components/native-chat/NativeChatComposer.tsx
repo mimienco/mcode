@@ -13,12 +13,7 @@ import { resolveNativeChatLaunchDraftSend } from './native-chat-launch-draft-sen
 import { getVerifiedNativeChatCommands } from '../../../../shared/native-chat-agent-profiles'
 import { isSlashCommandDraft } from '../../../../shared/native-chat-slash-commands'
 import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
-import {
-  applyMentionSuggestion,
-  EMPTY_HISTORY,
-  pushHistory,
-  type HistoryState
-} from './native-chat-composer-state'
+import { EMPTY_HISTORY, pushHistory, type HistoryState } from './native-chat-composer-state'
 import { readNativeChatDraftCache } from './native-chat-draft-cache'
 import { useNativeChatDraft } from './use-native-chat-draft'
 import { useNativeChatLaunchDraftAdoption } from './use-native-chat-launch-draft-adoption'
@@ -140,7 +135,8 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       textareaRef,
       setDraft,
       setCaret,
-      setActiveSuggestion
+      setActiveSuggestion,
+      activeSuggestion
     })
     const {
       autocomplete,
@@ -148,7 +144,8 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       clearSkillOrigin,
       completeItem,
       dismiss,
-      handleDraftOrCaretChange
+      handleDraftOrCaretChange,
+      mention
     } = picker
 
     // Resolve the live ptyId for this chat leaf; runtime owner settings route
@@ -372,6 +369,8 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       completePickerItem: completeItem,
       dispatchPickerCommand,
       dismissPicker: dismiss,
+      mentionOptionCount: mention.files.length,
+      acceptMention: mention.accept,
       interrupt,
       send,
       setActiveSuggestion,
@@ -428,17 +427,10 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
         pickerListboxId={picker.listboxId}
         onChoosePickerItem={completeItem}
         onRetrySkills={picker.retrySkills}
-        onAcceptMention={() => {
-          if (autocomplete.mode !== 'mention') {
-            return
-          }
-          const result = applyMentionSuggestion(draft, caret, autocomplete.query)
-          setDraft(result.draft)
-          setCaret(result.caret)
-          const textarea = textareaRef.current
-          textarea?.focus()
-          requestAnimationFrame(() => textarea?.setSelectionRange(result.caret, result.caret))
-        }}
+        mentionFiles={mention.files}
+        mentionLoading={mention.loading}
+        mentionLoadError={mention.loadError}
+        onChooseMention={mention.accept}
         onRemoveImageAttachment={(id) => removeImageAttachment(id)}
         onAttach={pickAttachment}
         onDictationToggle={toggleDictation}
