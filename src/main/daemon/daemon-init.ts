@@ -468,8 +468,14 @@ function createOutOfProcessLauncher(
     })
     try {
       // Why: acquire the full pair before control-only probes so an expired inherited deadline can't fire in the probe-to-adoption gap.
-      await adoptionClient.ensureConnected()
-      await reconcileDaemonPidOwnership(adoptionClient, pidPath)
+      // Why: a missing token means this protocol version never had a daemon here — the dead-endpoint
+      // connect can only burn its failure latency (~300ms measured). The post-fork endpoint-occupied
+      // fallback covers the exotic live-daemon-without-token case.
+      const endpointKnownAbsent = !existsSync(tokenPath)
+      if (!endpointKnownAbsent) {
+        await adoptionClient.ensureConnected()
+        await reconcileDaemonPidOwnership(adoptionClient, pidPath)
+      }
     } catch {
       adoptionClient.disconnect()
       adoptionClient = null
