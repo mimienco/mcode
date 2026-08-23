@@ -8,6 +8,7 @@ import type { SpeechModelManifest } from '../../../../shared/speech-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { getDefaultVoiceSettings } from '../../../../shared/constants'
 import { handleVoiceDictationToggle, VoicePane } from './VoicePane'
+import { TooltipProvider } from '../ui/tooltip'
 
 const { useAppStoreMock, useShortcutLabelMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
@@ -17,7 +18,8 @@ const { useAppStoreMock, useShortcutLabelMock } = vi.hoisted(() => ({
 vi.mock('@/store', () => ({ useAppStore: useAppStoreMock }))
 
 vi.mock('@/hooks/useShortcutLabel', () => ({
-  useShortcutLabel: useShortcutLabelMock
+  useShortcutLabel: useShortcutLabelMock,
+  useOptionalShortcutLabel: useShortcutLabelMock
 }))
 
 vi.mock('sonner', () => ({
@@ -62,6 +64,9 @@ function installWindowApi(
         clearOpenAiApiKey: vi.fn(async () => ({ configured: false })),
         onDownloadProgress: vi.fn(() => () => {}),
         downloadModel: vi.fn()
+      },
+      ui: {
+        setShortcutRecorderFocused: vi.fn()
       }
     }
   })
@@ -78,14 +83,20 @@ async function renderVoicePane(args: {
   root: Root
   container: HTMLDivElement
   refreshModelStates: ReturnType<typeof vi.fn>
+  setKeybindingOverride: ReturnType<typeof vi.fn>
 }> {
   const refreshModelStates = vi.fn()
+  const setKeybindingOverride = vi.fn(async () => undefined)
   useAppStoreMock.mockImplementation((selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       modelStates: [],
       refreshModelStates,
       markFeatureTipsSeen: args.markFeatureTipsSeen,
-      recordFeatureInteraction: args.recordFeatureInteraction ?? vi.fn()
+      recordFeatureInteraction: args.recordFeatureInteraction ?? vi.fn(),
+      keybindings: {},
+      keybindingSnapshot: null,
+      setKeybindingOverride,
+      resetKeybindingOverride: vi.fn(async () => undefined)
     })
   )
   useShortcutLabelMock.mockReturnValue('Ctrl+Shift+Y')
@@ -96,7 +107,12 @@ async function renderVoicePane(args: {
   const root = createRoot(container)
   await act(async () => {
     root.render(
-      <VoicePane settings={makeSettings(args.voiceEnabled)} updateSettings={args.updateSettings} />
+      <TooltipProvider>
+        <VoicePane
+          settings={makeSettings(args.voiceEnabled)}
+          updateSettings={args.updateSettings}
+        />
+      </TooltipProvider>
     )
   })
 
@@ -105,7 +121,7 @@ async function renderVoicePane(args: {
     throw new Error('Voice Dictation switch was not rendered')
   }
 
-  return { button, root, container, refreshModelStates }
+  return { button, root, container, refreshModelStates, setKeybindingOverride }
 }
 
 async function clickSwitch(button: HTMLButtonElement): Promise<void> {
@@ -137,13 +153,79 @@ describe('VoicePane', () => {
 
     for (let i = 0; i < 4; i++) {
       await act(async () => {
-        root.render(<VoicePane settings={{} as GlobalSettings} updateSettings={updateSettings} />)
+        root.render(
+          <TooltipProvider>
+            <VoicePane settings={{} as GlobalSettings} updateSettings={updateSettings} />
+          </TooltipProvider>
+        )
       })
     }
     act(() => root.unmount())
 
     expect(window.api.speech.getCatalog).toHaveBeenCalledTimes(1)
     expect(refreshModelStates).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets the user rebind dictation from the Voice pane', async () => {
+    const { container, root, setKeybindingOverride } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings: vi.fn()
+    })
+
+    const shortcut = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Change shortcut for Dictation"]'
+    )
+    expect(shortcut).not.toBeNull()
+
+    await act(async () => {
+      shortcut?.click()
+    })
+    await act(async () => {
+      shortcut?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Y',
+          code: 'KeyY',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true
+        })
+      )
+      await Promise.resolve()
+    })
+
+    expect(setKeybindingOverride).toHaveBeenCalledWith('voice.dictation', ['Mod+Shift+Y'])
+    root.unmount()
+  })
+
+  it('keeps a conflicting dictation shortcut unsaved and explains the conflict', async () => {
+    const { container, root, setKeybindingOverride } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings: vi.fn()
+    })
+    const shortcut = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Change shortcut for Dictation"]'
+    )
+
+    await act(async () => {
+      shortcut?.click()
+    })
+    await act(async () => {
+      shortcut?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'B',
+          code: 'KeyB',
+          ctrlKey: true,
+          bubbles: true
+        })
+      )
+      await Promise.resolve()
+    })
+
+    expect(setKeybindingOverride).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('conflicts with Toggle Sidebar')
+    root.unmount()
   })
 
   it('clicking the switch marks the voice tip seen before disabling voice settings', async () => {
@@ -265,7 +347,11 @@ describe('VoicePane', () => {
         modelStates: [],
         refreshModelStates: vi.fn(),
         markFeatureTipsSeen: vi.fn(),
-        recordFeatureInteraction: vi.fn()
+        recordFeatureInteraction: vi.fn(),
+        keybindings: {},
+        keybindingSnapshot: null,
+        setKeybindingOverride: vi.fn(async () => undefined),
+        resetKeybindingOverride: vi.fn(async () => undefined)
       })
     )
     useShortcutLabelMock.mockReturnValue('Ctrl+Shift+Y')
@@ -288,7 +374,11 @@ describe('VoicePane', () => {
     document.body.appendChild(container)
     const root = createRoot(container)
     await act(async () => {
-      root.render(<VoicePane settings={settingsWithKey(true)} updateSettings={updateSettings} />)
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={settingsWithKey(true)} updateSettings={updateSettings} />
+        </TooltipProvider>
+      )
     })
 
     const disconnect = container.querySelector<HTMLButtonElement>(
@@ -303,7 +393,11 @@ describe('VoicePane', () => {
 
     // The user turns dictation off while the clear-key IPC is still in flight.
     await act(async () => {
-      root.render(<VoicePane settings={settingsWithKey(false)} updateSettings={updateSettings} />)
+      root.render(
+        <TooltipProvider>
+          <VoicePane settings={settingsWithKey(false)} updateSettings={updateSettings} />
+        </TooltipProvider>
+      )
     })
 
     await act(async () => {

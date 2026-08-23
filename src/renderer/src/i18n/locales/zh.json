@@ -7463,6 +7463,11 @@
           "c2c64b24d0": "重置"
         },
         "VoicePane": {
+          "dictationShortcut": "听写快捷键",
+          "dictationShortcutDescription": "选择当前快捷键，然后按下新的组合键。",
+          "setDictationShortcut": "在下方设置快捷键，即可在当前聚焦的窗格中输入听写文本。",
+          "unassignedDictationMode": "切换模式下，每按一次即可开始或停止；按住模式下，仅在按住快捷键时听写。",
+          "resetDictationShortcut": "将听写快捷键重置为默认值",
           "68de13f72c": "删除模型失败。",
           "1ba81c0ff0": "受到推崇的",
           "cfde55c7b0": "下载模型失败。",

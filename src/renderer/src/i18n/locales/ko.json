@@ -7453,6 +7453,11 @@
           "c2c64b24d0": "재설정"
         },
         "VoicePane": {
+          "dictationShortcut": "받아쓰기 단축키",
+          "dictationShortcutDescription": "현재 단축키를 선택한 다음 새 키 조합을 누르세요.",
+          "setDictationShortcut": "아래에서 단축키를 설정하면 포커스된 창에 텍스트를 받아쓸 수 있습니다.",
+          "unassignedDictationMode": "토글 모드는 누를 때마다 시작하고 중지합니다. 길게 누르기 모드는 단축키를 누르고 있는 동안에만 받아씁니다.",
+          "resetDictationShortcut": "받아쓰기 단축키를 기본값으로 재설정",
           "68de13f72c": "모델을 삭제하지 못했습니다.",
           "1ba81c0ff0": "추천",
           "cfde55c7b0": "모델을 다운로드하지 못했습니다.",

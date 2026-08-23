@@ -2,9 +2,10 @@ import type { VoiceSettings } from '../../../../shared/speech-types'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
 import { Switch } from '../ui/switch'
-import { useShortcutLabel } from '@/hooks/useShortcutLabel'
+import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import { translate } from '@/i18n/i18n'
 import { VoiceMicrophoneSetting } from './VoiceMicrophoneSetting'
+import { VoiceDictationShortcutSetting } from './VoiceDictationShortcutSetting'
 
 type VoiceDictationSettingsSectionProps = {
   voiceSettings: VoiceSettings
@@ -19,7 +20,7 @@ export function VoiceDictationSettingsSection({
   onToggleVoiceDictation,
   onUpdateVoiceSettings
 }: VoiceDictationSettingsSectionProps): React.JSX.Element {
-  const shortcutLabel = useShortcutLabel('voice.dictation')
+  const shortcutLabel = useOptionalShortcutLabel('voice.dictation')
 
   return (
     <>
@@ -29,10 +30,20 @@ export function VoiceDictationSettingsSection({
             {translate('auto.components.settings.VoicePane.0121960365', 'Enable Voice Dictation')}
           </Label>
           <p className="text-xs text-muted-foreground">
-            {translate('auto.components.settings.VoicePane.4465596675', 'Press')} {shortcutLabel}{' '}
-            {translate(
-              'auto.components.settings.VoicePane.366e1b4f36',
-              'to dictate text into any focused pane.'
+            {shortcutLabel ? (
+              <>
+                {translate('auto.components.settings.VoicePane.4465596675', 'Press')}{' '}
+                {shortcutLabel}{' '}
+                {translate(
+                  'auto.components.settings.VoicePane.366e1b4f36',
+                  'to dictate text into any focused pane.'
+                )}
+              </>
+            ) : (
+              translate(
+                'auto.components.settings.VoicePane.setDictationShortcut',
+                'Set a shortcut below to dictate text into any focused pane.'
+              )
             )}
           </p>
         </div>
@@ -51,19 +62,33 @@ export function VoiceDictationSettingsSection({
 
       <Separator />
 
+      <VoiceDictationShortcutSetting />
+
+      <Separator />
+
       <div className="flex items-center justify-between gap-4 py-2">
         <div className="space-y-0.5">
           <Label>
             {translate('auto.components.settings.VoicePane.ba4a900d1d', 'Dictation Mode')}
           </Label>
           <p className="text-xs text-muted-foreground">
-            {translate('auto.components.settings.VoicePane.ff9a680010', 'Toggle: press')}{' '}
-            {shortcutLabel}{' '}
-            {translate(
-              'auto.components.settings.VoicePane.295d84b849',
-              'once to start, again to stop. Hold: dictate while'
-            )}{' '}
-            {shortcutLabel} {translate('auto.components.settings.VoicePane.7cf715f891', 'is held.')}
+            {shortcutLabel ? (
+              <>
+                {translate('auto.components.settings.VoicePane.ff9a680010', 'Toggle: press')}{' '}
+                {shortcutLabel}{' '}
+                {translate(
+                  'auto.components.settings.VoicePane.295d84b849',
+                  'once to start, again to stop. Hold: dictate while'
+                )}{' '}
+                {shortcutLabel}{' '}
+                {translate('auto.components.settings.VoicePane.7cf715f891', 'is held.')}
+              </>
+            ) : (
+              translate(
+                'auto.components.settings.VoicePane.unassignedDictationMode',
+                'Toggle starts and stops with each press. Hold dictates only while the shortcut is held.'
+              )
+            )}
           </p>
         </div>
         <div className="flex shrink-0 items-center rounded-md border border-border/60 bg-background/50 p-0.5">

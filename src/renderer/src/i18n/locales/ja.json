@@ -7488,6 +7488,11 @@
           "c2c64b24d0": "リセット"
         },
         "VoicePane": {
+          "dictationShortcut": "音声入力ショートカット",
+          "dictationShortcutDescription": "現在のショートカットを選択し、新しいキーの組み合わせを押します。",
+          "setDictationShortcut": "下でショートカットを設定すると、フォーカス中のペインに音声入力できます。",
+          "unassignedDictationMode": "切り替えモードでは押すたびに開始と停止が切り替わります。長押しモードではショートカットを押している間だけ音声入力します。",
+          "resetDictationShortcut": "音声入力ショートカットをデフォルトに戻す",
           "68de13f72c": "モデルの削除に失敗しました。",
           "1ba81c0ff0": "推奨",
           "cfde55c7b0": "モデルのダウンロードに失敗しました。",

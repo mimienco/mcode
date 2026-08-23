@@ -7466,6 +7466,11 @@
           "c2c64b24d0": "Restablecer"
         },
         "VoicePane": {
+          "dictationShortcut": "Atajo de dictado",
+          "dictationShortcutDescription": "Selecciona el atajo actual y pulsa una nueva combinación de teclas.",
+          "setDictationShortcut": "Configura un atajo abajo para dictar texto en cualquier panel enfocado.",
+          "unassignedDictationMode": "El modo Alternar inicia y detiene el dictado con cada pulsación. El modo Mantener dicta solo mientras se mantiene pulsado el atajo.",
+          "resetDictationShortcut": "Restablecer el atajo de dictado predeterminado",
           "68de13f72c": "No se pudo eliminar el modelo.",
           "1ba81c0ff0": "recomendado",
           "cfde55c7b0": "No se pudo descargar el modelo.",
