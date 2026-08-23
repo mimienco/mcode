@@ -47,6 +47,7 @@ export class ProjectGroupPersistenceOperations {
     connectionId?: string | null
     parentGroupId?: string | null
     createdFrom: ProjectGroup['createdFrom']
+    purpose?: ProjectGroup['purpose']
   }): ProjectGroup {
     let maxOrder = -1
     // Why: persisted group lists can be large enough to exceed spread limits.

@@ -100,6 +100,7 @@ import {
 } from '../../../../shared/worktree/visibility-sources'
 import { cleanupEphemeralVmRuntimesForDeleted } from '@/lib/ephemeral-vm-runtime-cleanup'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { isQuickChatWorkspace } from '../../../../shared/quick-chat-workspaces'
 import { formatFolderWorkspaceCreateError } from '../../lib/folder-workspace-path-status'
 import { getEnvironmentSshStateGeneration } from './runtime-environment-ssh'
 import { getRuntimeEnvironmentConnectionGeneration } from './runtime-status'
@@ -1862,6 +1863,7 @@ export type RepoSlice = {
       linkedTaskSourceContext?: FolderWorkspace['linkedTaskSourceContext']
       createdWithAgent?: FolderWorkspace['createdWithAgent']
       pendingFirstAgentMessageRename?: boolean
+      kind?: FolderWorkspace['kind']
     },
     options?: FolderWorkspacePathStatusRouteOptions
   ) => Promise<FolderWorkspace | null>
@@ -2954,9 +2956,13 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
 
   deleteFolderWorkspace: async (folderWorkspaceId) => {
     const state = get()
-    if (!findFolderWorkspaceOwner(state, folderWorkspaceId)) {
+    const folderWorkspaceOwner = findFolderWorkspaceOwner(state, folderWorkspaceId)
+    if (!folderWorkspaceOwner) {
       return false
     }
+    const folderWorkspace = state.folderWorkspaces.find(
+      (workspace) => workspace.id === folderWorkspaceId
+    )
     const runtimeEnvironmentId = getRuntimeEnvironmentIdForFolderWorkspace(state, folderWorkspaceId)
     try {
       // Why: deletion targets the folder's owner; focus may be on a different host.
@@ -2983,6 +2989,25 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
         folderWorkspacePathStatuses: {}
       }))
       get().purgeWorktreeTerminalState([workspaceKey])
+      if (target.kind === 'local' && isQuickChatWorkspace(folderWorkspace)) {
+        try {
+          // fs:deletePath uses the OS trash for local paths, so generated chat
+          // files remain recoverable after the chat record is removed.
+          await window.api.fs.deletePath({
+            targetPath: folderWorkspace.folderPath,
+            recursive: true
+          })
+        } catch (error) {
+          console.error('Failed to move quick chat files to trash:', error)
+          toast.warning(
+            translate(
+              'auto.store.slices.repos.quickChatFilesRetained',
+              'Chat removed, but its generated files could not be moved to Trash.'
+            ),
+            { description: folderWorkspace.folderPath }
+          )
+        }
+      }
       return true
     } catch (err) {
       console.error('Failed to delete folder workspace:', err)

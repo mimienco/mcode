@@ -14,6 +14,10 @@ import {
   getDuplicateProjectDetailsById,
   type ProjectSetupDirectory
 } from './new-workspace-duplicate-project-details'
+import {
+  getUserManagedProjectGroups,
+  isQuickChatProjectGroup
+} from '../../../shared/quick-chat-workspaces'
 
 export const NEW_WORKSPACE_PROJECT_GROUP_OPTION_PREFIX = 'project-group:'
 export const NEW_WORKSPACE_FOLDER_SOURCE_OPTION_PREFIX = 'folder-source:'
@@ -200,6 +204,7 @@ export function findActionableFolderProjectGroup({
     projectGroups.find(
       (group) =>
         group.id === groupId &&
+        !isQuickChatProjectGroup(group) &&
         Boolean(group.parentPath?.trim()) &&
         actionableHostIds.has(getNewWorkspaceProjectGroupHostId(group))
     ) ?? null
@@ -227,7 +232,7 @@ export function buildNewWorkspaceCreateTargetOptions({
 }: BuildNewWorkspaceCreateTargetOptionsInput): NewWorkspaceProjectOption[] {
   const projectOptions = buildNewWorkspaceProjectOptions(projectInput)
   const liveHostIds = projectInput.hosts ? new Set(projectInput.hosts.map((host) => host.id)) : null
-  const groupOptions = projectGroups
+  const groupOptions = getUserManagedProjectGroups(projectGroups)
     .filter(
       (group) =>
         Boolean(group.parentPath?.trim()) &&

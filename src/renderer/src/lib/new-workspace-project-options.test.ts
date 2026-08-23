@@ -467,6 +467,12 @@ describe('buildNewWorkspaceCreateTargetOptions', () => {
       hosts: [{ id: 'local', label: 'Local Mac' }],
       projectGroups: [
         group({ id: 'folder-group', name: 'Platform', parentPath: '/tmp/platform' }),
+        group({
+          id: 'quick-chats-group',
+          name: 'Chats',
+          parentPath: '/tmp/floating/chats',
+          purpose: 'quick-chats'
+        }),
         group({ id: 'org-group', name: 'Org', parentPath: null }),
         group({
           id: 'removed-folder-group',
@@ -494,7 +500,8 @@ describe('findActionableFolderProjectGroup', () => {
   const folderGroups = [
     group({ id: 'local-group' }),
     group({ id: 'ssh-group', connectionId: 'box' }),
-    group({ id: 'repo-group', parentPath: null })
+    group({ id: 'repo-group', parentPath: null }),
+    group({ id: 'quick-chats-group', purpose: 'quick-chats' })
   ]
 
   it('finds a folder group whose host is actionable', () => {
@@ -524,6 +531,13 @@ describe('findActionableFolderProjectGroup', () => {
       findActionableFolderProjectGroup({
         projectGroups: folderGroups,
         groupId: 'repo-group',
+        actionableHostIds: new Set(['local'])
+      })
+    ).toBeNull()
+    expect(
+      findActionableFolderProjectGroup({
+        projectGroups: folderGroups,
+        groupId: 'quick-chats-group',
         actionableHostIds: new Set(['local'])
       })
     ).toBeNull()

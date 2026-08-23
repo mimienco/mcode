@@ -10,7 +10,12 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../../../../shared/execution-host
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import { getCyclicProjectedWorktreeLineageIds } from '../../worktree-lineage-projection'
-import { ALL_GROUP_KEY, ALL_GROUP_META } from './group-keys'
+import {
+  ALL_GROUP_KEY,
+  ALL_GROUP_META,
+  QUICK_CHATS_GROUP_KEY,
+  QUICK_CHATS_GROUP_META
+} from './group-keys'
 import { appendOrderedGroups } from './group-sections'
 import type { SectionAppendContext } from './group-sections'
 import {
@@ -44,6 +49,10 @@ import type {
 } from './row-types'
 import { getRenderedNaturalAnchorRepoIds, withRepoSectionDisplayLabels } from './section-order'
 import { buildOrderedGroups } from './worktree-grouping'
+import {
+  isQuickChatProjectGroup,
+  isQuickChatWorkspace
+} from '../../../../../../shared/quick-chat-workspaces'
 
 export function buildRows(
   groupBy: WorktreeGroupBy,
@@ -76,7 +85,16 @@ export function buildRows(
   const projectIndex = buildProjectGroupingIndex(projectGrouping)
   // Membership is decided once, above the groupBy switch: every mode renders the
   // same set of folder workspaces and only chooses where they land (#15362).
-  const renderableFolderWorkspaces = getRenderableFolderWorkspaces(folderWorkspaces, projectGroups)
+  const allRenderableFolderWorkspaces = getRenderableFolderWorkspaces(
+    folderWorkspaces,
+    projectGroups
+  )
+  const quickChatFolderWorkspaces = allRenderableFolderWorkspaces.filter(({ folderWorkspace }) =>
+    isQuickChatWorkspace(folderWorkspace)
+  )
+  const renderableFolderWorkspaces = allRenderableFolderWorkspaces.filter(
+    ({ folderWorkspace }) => !isQuickChatWorkspace(folderWorkspace)
+  )
   const cyclicLineageIds = nestLineage
     ? getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
     : new Set<string>()
@@ -86,6 +104,24 @@ export function buildRows(
     const list = pendingByRepo.get(creation.repoId) ?? []
     list.push(creation)
     pendingByRepo.set(creation.repoId, list)
+  }
+
+  if (quickChatFolderWorkspaces.length > 0) {
+    result.push({
+      type: 'header',
+      key: QUICK_CHATS_GROUP_KEY,
+      label: QUICK_CHATS_GROUP_META.label,
+      count: quickChatFolderWorkspaces.length,
+      tone: QUICK_CHATS_GROUP_META.tone,
+      icon: QUICK_CHATS_GROUP_META.icon
+    })
+    if (!collapsedGroups.has(QUICK_CHATS_GROUP_KEY)) {
+      for (const pair of [...quickChatFolderWorkspaces].sort((left, right) =>
+        compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace)
+      )) {
+        result.push(buildFolderWorkspaceRow(pair, 0))
+      }
+    }
   }
 
   // Why: non-repo groupings have no repo section to nest an in-progress create
@@ -238,7 +274,7 @@ export function buildRows(
 
   appendProjectGroupSections(sectionContext, {
     orderedGroups,
-    projectGroups,
+    projectGroups: projectGroups.filter((group) => !isQuickChatProjectGroup(group)),
     folderWorkspaces: renderableFolderWorkspaces,
     projectOrderBy,
     repoOrder

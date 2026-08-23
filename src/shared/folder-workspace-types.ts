@@ -19,6 +19,8 @@ export type FolderWorkspace = {
   projectGroupId: string
   name: string
   folderPath: string
+  /** Distinguishes app-owned no-project chats from user-selected folders. */
+  kind?: 'quick-chat'
   /** SSH target ID for folder workspaces whose folder path lives remotely. */
   connectionId?: string | null
   /** Renderer-owned host stamp for host-qualified folder catalogs. */

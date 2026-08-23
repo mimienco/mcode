@@ -14,6 +14,7 @@ import { translate } from '@/i18n/i18n'
 import { getProjectGroupHeaderKey } from '../sidebar/worktree-list/grouping/group-keys'
 import { getProjectHeaderRevealTarget } from '../sidebar/worktree-list/grouping/project-grouping'
 import type { ProjectGroupingModel } from '../sidebar/worktree-list/grouping/project-grouping'
+import { getUserManagedProjectGroups } from '../../../../shared/quick-chat-workspaces'
 
 export type CmdJProjectGroupResult = {
   id: string
@@ -81,7 +82,7 @@ function buildCmdJProjectSearchCandidates({
   const repoMap = new Map(repos.map((repo) => [repo.id, repo]))
   const candidates: CmdJProjectSearchResult[] = []
 
-  projectGroups.forEach((group, order) => {
+  getUserManagedProjectGroups(projectGroups).forEach((group, order) => {
     candidates.push({
       id: `project-group:${group.id}`,
       kind: 'project-group',

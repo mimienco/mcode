@@ -49,6 +49,7 @@ const folderWorkspacesGetPathStatus = vi.fn()
 const folderWorkspacesCreate = vi.fn()
 const folderWorkspacesUpdate = vi.fn()
 const folderWorkspacesDelete = vi.fn()
+const fsDeletePath = vi.fn()
 const runtimeEnvironmentCall = vi.fn()
 const runtimeEnvironmentTransportCall = vi.fn()
 
@@ -82,6 +83,7 @@ beforeEach(() => {
   folderWorkspacesCreate.mockReset()
   folderWorkspacesUpdate.mockReset()
   folderWorkspacesDelete.mockReset()
+  fsDeletePath.mockReset()
   runtimeEnvironmentCall.mockReset()
   runtimeEnvironmentTransportCall.mockReset()
   runtimeEnvironmentTransportCall.mockImplementation((args: RuntimeEnvironmentCallRequest) => {
@@ -111,6 +113,7 @@ beforeEach(() => {
         update: folderWorkspacesUpdate,
         delete: folderWorkspacesDelete
       },
+      fs: { deletePath: fsDeletePath },
       runtimeEnvironments: { call: runtimeEnvironmentTransportCall }
     }
   })
@@ -367,6 +370,37 @@ describe('project group store routing', () => {
     })
     expect(store.getState().folderWorkspaces).toEqual([])
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+  })
+
+  it('moves local quick-chat files to Trash after deleting the workspace record', async () => {
+    const folderWorkspace: FolderWorkspace = {
+      id: 'quick-chat-1',
+      projectGroupId: projectGroup.id,
+      name: 'New chat',
+      folderPath: '/workspace/chats/quick-chat-1',
+      linkedTask: null,
+      comment: '',
+      isArchived: false,
+      isUnread: false,
+      isPinned: false,
+      sortOrder: 1,
+      lastActivityAt: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      kind: 'quick-chat'
+    }
+    folderWorkspacesDelete.mockResolvedValue(true)
+    fsDeletePath.mockResolvedValue(undefined)
+    const store = createTestStore()
+    store.setState({ projectGroups: [projectGroup], folderWorkspaces: [folderWorkspace] })
+
+    await expect(store.getState().deleteFolderWorkspace(folderWorkspace.id)).resolves.toBe(true)
+
+    expect(folderWorkspacesDelete).toHaveBeenCalledWith({ folderWorkspaceId: folderWorkspace.id })
+    expect(fsDeletePath).toHaveBeenCalledWith({
+      targetPath: folderWorkspace.folderPath,
+      recursive: true
+    })
   })
 
   it('caches local folder workspace path status by scope', async () => {

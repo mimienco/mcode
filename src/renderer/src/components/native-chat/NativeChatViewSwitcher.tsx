@@ -1,6 +1,9 @@
 import { Bot } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { isMacPlatform, nativeChatToggleShortcutLabel } from './native-chat-shortcut'
+import { useAppStore } from '@/store'
+import { getActiveQuickChatWorkspace } from '../../../../shared/quick-chat-workspaces'
+import { Badge } from '@/components/ui/badge'
 
 export type NativeChatViewSwitcherProps = {
   isChatViewMode: boolean
@@ -22,6 +25,7 @@ export function NativeChatViewSwitcher({
   chatPanelId,
   terminalPanelId
 }: NativeChatViewSwitcherProps): React.JSX.Element {
+  const isNoProjectChat = useAppStore((state) => getActiveQuickChatWorkspace(state) !== null)
   const terminalLabel = translate('components.native-chat.toggle.terminal', 'Terminal')
   const chatLabel = translate('components.native-chat.toggle.chat', 'Chat')
   const viewSwitcherLabel = translate('components.native-chat.toggle.viewSwitcher', 'Session view')
@@ -55,6 +59,11 @@ export function NativeChatViewSwitcher({
           <Bot size={12} strokeWidth={1.8} />
         </span>
         <span className="titlebar-session-context-label">{contextLabel}</span>
+        {isNoProjectChat ? (
+          <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-medium">
+            {translate('components.native-chat.toggle.noProject', 'No project')}
+          </Badge>
+        ) : null}
         {contextDetail ? (
           <>
             <span className="titlebar-session-context-separator" aria-hidden="true" />

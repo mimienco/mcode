@@ -62,6 +62,7 @@ export class FolderWorkspacePersistenceOperations {
     creatorProvenance?: FolderWorkspace['creatorProvenance']
     createdWithAgent?: FolderWorkspace['createdWithAgent']
     pendingFirstAgentMessageRename?: boolean
+    kind?: FolderWorkspace['kind']
   }): FolderWorkspace {
     const group = (this.state.projectGroups ?? []).find(
       (entry) => entry.id === input.projectGroupId
@@ -82,6 +83,7 @@ export class FolderWorkspacePersistenceOperations {
       projectGroupId: group.id,
       name: normalizeFolderWorkspaceName(input.name, `${group.name} workspace`),
       folderPath,
+      ...(input.kind ? { kind: input.kind } : {}),
       connectionId: input.connectionId ?? group.connectionId ?? null,
       ...(input.creatorProvenance ? { creatorProvenance: input.creatorProvenance } : {}),
       linkedTask,

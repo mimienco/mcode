@@ -1,4 +1,4 @@
-import { CircleX, FolderTree, List, Pin } from 'lucide-react'
+import { CircleX, FolderTree, List, MessageSquare, Pin } from 'lucide-react'
 import type React from 'react'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
@@ -68,6 +68,16 @@ export const PR_GROUP_META: Record<
 export const PROJECT_GROUP_META = {
   tone: 'text-foreground',
   icon: FolderTree
+} as const
+
+export const QUICK_CHATS_GROUP_KEY = 'quick-chats'
+
+export const QUICK_CHATS_GROUP_META = {
+  get label() {
+    return translate('auto.components.sidebar.worktree.list.groups.quickChats', 'Chats')
+  },
+  tone: 'text-foreground',
+  icon: MessageSquare
 } as const
 
 export function getProjectGroupHeaderKey(groupId: string | null): string {

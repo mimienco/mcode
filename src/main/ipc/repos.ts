@@ -118,6 +118,8 @@ import {
   getFolderWorkspacePathStatusForPath
 } from '../project-groups/folder-workspace-path-status'
 import { getGitCloneFailureMessage } from '../../shared/git-clone-failure-message'
+import { isWslUncPath } from '../../shared/wsl-paths'
+import { isQuickChatProjectGroup } from '../../shared/quick-chat-workspaces'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import {
   normalizeCustomWorktreeVisibilitySources,
@@ -808,7 +810,8 @@ const ProjectGroupCreateArgs = z.object({
   parentPath: z.string().nullable().optional(),
   connectionId: z.string().nullable().optional(),
   parentGroupId: z.string().nullable().optional(),
-  createdFrom: z.enum(['manual', 'folder-scan', 'migration']).optional()
+  createdFrom: z.enum(['manual', 'folder-scan', 'migration']).optional(),
+  purpose: z.literal('quick-chats').optional()
 })
 
 const ProjectGroupUpdateArgs = z.object({
@@ -933,7 +936,8 @@ const FolderWorkspaceCreateArgs = z
     linkedTask: FolderWorkspaceLinkedTaskArgs.optional(),
     linkedTaskSourceContext: TaskSourceContextSchema.nullable().optional(),
     createdWithAgent: z.string().refine(isTuiAgent).optional(),
-    pendingFirstAgentMessageRename: z.boolean().optional()
+    pendingFirstAgentMessageRename: z.boolean().optional(),
+    kind: z.literal('quick-chat').optional()
   })
   .superRefine(assertFolderWorkspaceLinkedSourceContextMatch)
 
@@ -1510,6 +1514,20 @@ export function registerRepoHandlers(mainWindow: BrowserWindow, store: Store): v
       if (!group || !folderPath) {
         throw new Error('folder_workspace_project_group_not_found')
       }
+      const isQuickChatCreate = args.kind === 'quick-chat'
+      const isQuickChatGroup = group.purpose === 'quick-chats'
+      const quickChatRelativePath = group.parentPath
+        ? relativePathInsideRoot(group.parentPath, folderPath)
+        : null
+      if (
+        isQuickChatCreate !== isQuickChatGroup ||
+        (isQuickChatCreate &&
+          (group.connectionId !== null ||
+            !quickChatRelativePath ||
+            /[\\/]/.test(quickChatRelativePath)))
+      ) {
+        throw new Error('invalid_quick_chat_workspace_scope')
+      }
       const status = await getFolderWorkspacePathStatusForPath(
         {
           folderPath,
@@ -1589,12 +1607,22 @@ export function registerRepoHandlers(mainWindow: BrowserWindow, store: Store): v
       rawArgs,
       'invalid_project_group_create_args'
     )
+    if (
+      args.purpose === 'quick-chats' &&
+      (!args.parentPath?.trim() ||
+        args.connectionId ||
+        args.parentGroupId ||
+        isWslUncPath(args.parentPath))
+    ) {
+      throw new Error('invalid_quick_chat_project_group_scope')
+    }
     const group = store.createProjectGroup({
       name: args.name,
       parentPath: args.parentPath ?? null,
       connectionId: args.connectionId ?? null,
       parentGroupId: args.parentGroupId ?? null,
-      createdFrom: args.createdFrom ?? 'manual'
+      createdFrom: args.createdFrom ?? 'manual',
+      ...(args.purpose ? { purpose: args.purpose } : {})
     })
     notifyReposChanged(mainWindow)
     return group
@@ -1606,6 +1634,11 @@ export function registerRepoHandlers(mainWindow: BrowserWindow, store: Store): v
       rawArgs,
       'invalid_project_group_update_args'
     )
+    if (
+      isQuickChatProjectGroup(store.getProjectGroups().find((group) => group.id === args.groupId))
+    ) {
+      return null
+    }
     const updated = store.updateProjectGroup(args.groupId, args.updates)
     if (updated) {
       notifyReposChanged(mainWindow)
@@ -1619,6 +1652,11 @@ export function registerRepoHandlers(mainWindow: BrowserWindow, store: Store): v
       rawArgs,
       'invalid_project_group_delete_args'
     )
+    if (
+      isQuickChatProjectGroup(store.getProjectGroups().find((group) => group.id === args.groupId))
+    ) {
+      return false
+    }
     const deleted = store.deleteProjectGroup(args.groupId)
     if (deleted) {
       notifyReposChanged(mainWindow)
@@ -1632,6 +1670,12 @@ export function registerRepoHandlers(mainWindow: BrowserWindow, store: Store): v
       rawArgs,
       'invalid_project_group_move_repo_args'
     )
+    if (
+      args.groupId &&
+      isQuickChatProjectGroup(store.getProjectGroups().find((group) => group.id === args.groupId))
+    ) {
+      throw new Error('invalid_quick_chat_project_group_assignment')
+    }
     const moved = store.moveProjectToGroup(args.projectId, args.groupId, args.order)
     if (moved) {
       notifyReposChanged(mainWindow)

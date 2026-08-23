@@ -62,6 +62,7 @@ export function normalizeFolderWorkspaces(
       projectGroupId: raw.projectGroupId,
       name: normalizeFolderWorkspaceName(raw.name),
       folderPath,
+      ...(raw.kind === 'quick-chat' ? { kind: raw.kind } : {}),
       connectionId:
         typeof raw.connectionId === 'string'
           ? raw.connectionId

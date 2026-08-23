@@ -8,6 +8,7 @@ import type { FolderWorkspace } from '../../../../../../shared/folder-workspace-
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { QUICK_CHATS_GROUP_KEY } from './group-keys'
 
 const GROUP: ProjectGroup = {
   id: 'group-1',
@@ -95,6 +96,51 @@ describe('folder workspaces render under every Group by mode', () => {
   it('does not duplicate the row under repo grouping', () => {
     const rows = buildSidebarRows({ groupBy: 'repo' })
     expect(folderRows(rows).map((row) => row.key)).toEqual(['folder-workspace:fw-1'])
+  })
+})
+
+describe('quick chat section', () => {
+  const quickChatGroup: ProjectGroup = {
+    ...GROUP,
+    id: 'quick-chat-group',
+    name: 'Chats',
+    purpose: 'quick-chats'
+  }
+  const quickChat = makeFolderWorkspace({
+    id: 'quick-chat-1',
+    projectGroupId: quickChatGroup.id,
+    name: 'New chat',
+    kind: 'quick-chat'
+  })
+
+  for (const groupBy of ALL_GROUP_BY) {
+    it(`keeps chats in a dedicated top-level section when groupBy is ${groupBy}`, () => {
+      const rows = buildSidebarRows({
+        groupBy,
+        worktrees: [],
+        projectGroups: [quickChatGroup],
+        folderWorkspaces: [quickChat]
+      })
+      expect(rows[0]).toMatchObject({
+        type: 'header',
+        key: QUICK_CHATS_GROUP_KEY,
+        label: 'Chats',
+        count: 1
+      })
+      expect(folderRows(rows).map((row) => row.folderWorkspace.id)).toEqual(['quick-chat-1'])
+      expect(rows.filter((row) => row.type === 'header')).toHaveLength(1)
+    })
+  }
+
+  it('respects the Chats collapse state', () => {
+    const rows = buildSidebarRows({
+      groupBy: 'repo',
+      worktrees: [],
+      projectGroups: [quickChatGroup],
+      folderWorkspaces: [quickChat],
+      collapsedGroups: new Set([QUICK_CHATS_GROUP_KEY])
+    })
+    expect(folderRows(rows)).toHaveLength(0)
   })
 })
 

@@ -5,6 +5,8 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NativeChatViewSwitcher } from './NativeChatViewSwitcher'
+import { useAppStore } from '@/store'
+import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children?: ReactNode }) => children,
@@ -44,6 +46,11 @@ afterEach(() => {
     act(() => root.unmount())
     container.remove()
   }
+  useAppStore.setState({
+    activeWorkspaceKey: null,
+    activeWorktreeId: null,
+    folderWorkspaces: []
+  })
 })
 
 describe('NativeChatViewSwitcher', () => {
@@ -61,6 +68,34 @@ describe('NativeChatViewSwitcher', () => {
     ])
     expect(container.textContent).toContain('Codex')
     expect(container.textContent).toContain('Fix titlebar polish')
+  })
+
+  it('labels a quick chat as having no project', () => {
+    const workspaceId = 'quick-chat-1'
+    useAppStore.setState({
+      activeWorkspaceKey: folderWorkspaceKey(workspaceId),
+      activeWorktreeId: folderWorkspaceKey(workspaceId),
+      folderWorkspaces: [
+        {
+          id: workspaceId,
+          projectGroupId: 'quick-chats',
+          name: 'New chat',
+          folderPath: '/app/chats/quick-chat-1',
+          kind: 'quick-chat',
+          linkedTask: null,
+          comment: '',
+          isArchived: false,
+          isUnread: false,
+          isPinned: false,
+          sortOrder: 1,
+          lastActivityAt: 0,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      ]
+    })
+
+    expect(renderSwitcher(true).container.textContent).toContain('No project')
   })
 
   it('only toggles when the inactive view is selected', () => {

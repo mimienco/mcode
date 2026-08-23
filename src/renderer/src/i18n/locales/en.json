@@ -362,7 +362,8 @@
           "15cf5319ec": "{{path}} was checked on {{hostName}}, but that host did not report a usable folder.",
           "2dcd706774": "Project also exists in another profile",
           "presenceProfileOverflow": "{{names}} +{{count}} more",
-          "removeProjectFailed": "Failed to remove project"
+          "removeProjectFailed": "Failed to remove project",
+          "quickChatFilesRetained": "Chat removed, but its generated files could not be moved to Trash."
         },
         "settings": {
           "e12dab333b": "Failed to switch servers",
@@ -976,6 +977,11 @@
         "description": "Running MCode terminals are hosted by a daemon started by a previous MCode installation. macOS may not apply MCode’s Accessibility, Automation, or protected-file permissions to them. Restart the daemon from Manage Sessions to restore access. This will close all running MCode terminals.",
         "openManageSessions": "Open Manage Sessions",
         "dismiss": "Dismiss"
+      },
+      "useQuickChatCreation": {
+        "noAgent": "No enabled local chat-capable coding agent is available. Choose an agent in Settings, then try again.",
+        "createFailed": "The no-project chat could not be created.",
+        "failedTitle": "Could not start a new chat"
       }
     },
     "components": {
@@ -1328,7 +1334,11 @@
         "0d0ace8861": "Star on GitHub",
         "ec43b38ba7": "Starred on GitHub",
         "157bb5ecbb": "Open GitHub",
-        "preflightDismiss": "Dismiss"
+        "preflightDismiss": "Dismiss",
+        "quickChatEmptyHint": "Start a chat now, or add a project when you need repository context.",
+        "newChat": "New Chat",
+        "newTarget": "New {{target}}",
+        "createTarget": "Create {{target}}"
       },
       "LinearIssueMarkdownDescriptionEditor": {
         "d9c47069ef": "Markdown",
@@ -4989,7 +4999,9 @@
           "49f62c5665": "Workspace board",
           "5c9c7c16aa": "Add a project to create workspaces",
           "ca6f729da2": "New workspace ({{value0}})",
-          "a30e34eb5c": "Close workspace board"
+          "a30e34eb5c": "Close workspace board",
+          "newChat": "New chat without a project",
+          "newChatShort": "New chat"
         },
         "SidebarNav": {
           "80611a8b10": "Search",
@@ -5291,7 +5303,8 @@
           "deleteWorktree": "Delete Worktree",
           "sleepWithDescendants": "Sleep with Descendants ({{value0}})",
           "sleepWithDescendantsDescription": "Close active panels in this workspace and every nested descendant to free up memory and CPU.",
-          "deleteWithDescendants": "Delete with Descendants…"
+          "deleteWithDescendants": "Delete with Descendants…",
+          "deleteQuickChat": "Delete Chat and Move Files to Trash"
         },
         "WorktreeList": {
           "7a8b9c0d1e": "Update required",
@@ -5335,7 +5348,8 @@
           "groupDeleteFailedDesc": "Something went wrong while deleting the group. No projects were removed.",
           "failedNestWorkspace": "Failed to nest workspace",
           "sidebarRowMissing": "Target no longer exists",
-          "failedUnnestWorkspace": "Failed to unnest workspace"
+          "failedUnnestWorkspace": "Failed to unnest workspace",
+          "quickChatEmptyHint": "Start a chat now. Add a project when you need repository context."
         },
         "WorktreeMetaDialog": {
           "3db0a2a593": "Cancel",
@@ -5589,7 +5603,8 @@
               "682ed5d551": "Closed",
               "7c2f009786": "In progress",
               "6798dc7c94": "In review",
-              "5076efc3d2": "Done"
+              "5076efc3d2": "Done",
+              "quickChats": "Chats"
             }
           }
         },
@@ -11385,7 +11400,8 @@
             "79b1537dd3": "Select a workspace to browse files",
             "4da4d89845": "Back to Explorer",
             "6ed5ce817b": "Search",
-            "2f4483d6c4": "No files match this filter"
+            "2f4483d6c4": "No files match this filter",
+            "chatFiles": "Chat files"
           },
           "FileExplorerBackgroundMenu": {
             "3b5e2dcb8d": "New Folder",
@@ -15984,7 +16000,8 @@
       "jumpToLatest": "Jump to latest",
       "toggle": {
         "showTerminal": "Show terminal",
-        "showChat": "Show chat view"
+        "showChat": "Show chat view",
+        "noProject": "No project"
       },
       "state": {
         "loading": {

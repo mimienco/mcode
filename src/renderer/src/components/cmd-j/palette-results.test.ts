@@ -483,6 +483,18 @@ describe('Cmd+J project and repo-group search', () => {
     })
   })
 
+  it('does not expose the internal quick-chat group as a repo group', () => {
+    expect(
+      searchCmdJProjectResults({
+        query: 'chats',
+        projectGroups: [{ ...projectGroup('quick-chats-group', 'Chats'), purpose: 'quick-chats' }],
+        repos: [],
+        projects: [],
+        projectHostSetups: []
+      })
+    ).toEqual([])
+  })
+
   it('finds a Project by project name and a repo-backed fallback by repo name', () => {
     const projectResults = searchCmdJProjectResults({
       query: 'api',

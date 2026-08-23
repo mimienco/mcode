@@ -29,6 +29,7 @@ import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { WorktreeVisibilityDefaults } from '../../../../../../shared/global-settings-types'
 import { isGitRepoKind } from '../../../../../../shared/repo-kind'
+import { getUserManagedProjectGroups } from '../../../../../../shared/quick-chat-workspaces'
 import {
   effectiveExternalWorktreeVisibility,
   isLegacyRepoForExternalWorktreeVisibility
@@ -78,6 +79,7 @@ export function RepoHeaderProjectActionsMenu({
   projectGroups: readonly ProjectGroup[]
   actions: RepoHeaderProjectActions
 }): React.JSX.Element {
+  const assignableProjectGroups = getUserManagedProjectGroups(projectGroups)
   return (
     <DropdownMenu modal={false}>
       <Tooltip>
@@ -138,14 +140,14 @@ export function RepoHeaderProjectActionsMenu({
           <FolderPlus className="size-3.5" />
           {translate('auto.components.sidebar.WorktreeList.cbfd565f83', 'New group from project')}
         </DropdownMenuItem>
-        {projectGroups.length > 0 ? (
+        {assignableProjectGroups.length > 0 ? (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <FolderInput className="size-3.5" />
               {translate('auto.components.sidebar.WorktreeList.4a08fb55f2', 'Move to group')}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {projectGroups.map((group) => (
+              {assignableProjectGroups.map((group) => (
                 <DropdownMenuItem
                   key={group.id}
                   disabled={repo.projectGroupId === group.id}

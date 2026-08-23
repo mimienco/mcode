@@ -68,6 +68,10 @@ import { translate } from '@/i18n/i18n'
 import { unnestWorktrees } from './worktree-unnest'
 import { parseWorkspaceKey, worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getDeleteStateForWorktreeHost } from './worktree-delete-state-host-match'
+import {
+  getUserManagedProjectGroups,
+  isQuickChatWorkspace
+} from '../../../../shared/quick-chat-workspaces'
 
 type Props = {
   worktree: Worktree
@@ -331,6 +335,10 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
   const workspaceStatuses = useAppStore((s) => s.workspaceStatuses)
   const openModal = useAppStore((s) => s.openModal)
   const projectGroups = useAppStore((s) => s.projectGroups)
+  const assignableProjectGroups = useMemo(
+    () => getUserManagedProjectGroups(projectGroups),
+    [projectGroups]
+  )
   const createProjectGroup = useAppStore((s) => s.createProjectGroup)
   const moveProjectToGroup = useAppStore((s) => s.moveProjectToGroup)
   const repo = useRepoById(worktree.repoId)
@@ -401,6 +409,13 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
   const workspaceScope = parseWorkspaceKey(worktree.id)
   const folderWorkspaceId =
     workspaceScope?.type === 'folder' ? workspaceScope.folderWorkspaceId : null
+  const isQuickChat = useAppStore((state) =>
+    isQuickChatWorkspace(
+      folderWorkspaceId
+        ? state.folderWorkspaces.find((workspace) => workspace.id === folderWorkspaceId)
+        : null
+    )
+  )
   const sleepableWorktrees = useMemo(
     () =>
       activeContextWorktrees.filter((item) =>
@@ -923,7 +938,7 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
                       'New group from project'
                     )}
                   </DropdownMenuItem>
-                  {projectGroups.length > 0 ? (
+                  {assignableProjectGroups.length > 0 ? (
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger disabled={isDeleting}>
                         <FolderInput className="size-3.5" />
@@ -933,7 +948,7 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
                         )}
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent>
-                        {projectGroups.map((group) => (
+                        {assignableProjectGroups.map((group) => (
                           <DropdownMenuItem
                             key={group.id}
                             disabled={repo.projectGroupId === group.id}
@@ -1067,25 +1082,30 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
               ? translate('auto.components.sidebar.WorktreeContextMenu.b42391d8bf', 'Deleting…')
               : isMultiContext
                 ? deleteLabel
-                : folderWorkspaceId
+                : isQuickChat
                   ? translate(
-                      'auto.components.sidebar.WorktreeContextMenu.250de158fd',
-                      'Remove Workspace'
+                      'auto.components.sidebar.WorktreeContextMenu.deleteQuickChat',
+                      'Delete Chat and Move Files to Trash'
                     )
-                  : removesProject
+                  : folderWorkspaceId
                     ? translate(
-                        'auto.components.sidebar.WorktreeContextMenu.f5ac91531d',
-                        'Remove Project from MCode'
+                        'auto.components.sidebar.WorktreeContextMenu.250de158fd',
+                        'Remove Workspace'
                       )
-                    : lineageDescendantCount > 0
+                    : removesProject
                       ? translate(
-                          'auto.components.sidebar.WorktreeContextMenu.deleteWithDescendants',
-                          'Delete with Descendants…'
+                          'auto.components.sidebar.WorktreeContextMenu.f5ac91531d',
+                          'Remove Project from MCode'
                         )
-                      : translate(
-                          'auto.components.sidebar.WorktreeContextMenu.f4475537d8',
-                          'Delete'
-                        )}
+                      : lineageDescendantCount > 0
+                        ? translate(
+                            'auto.components.sidebar.WorktreeContextMenu.deleteWithDescendants',
+                            'Delete with Descendants…'
+                          )
+                        : translate(
+                            'auto.components.sidebar.WorktreeContextMenu.f4475537d8',
+                            'Delete'
+                          )}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

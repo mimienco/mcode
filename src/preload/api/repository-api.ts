@@ -137,6 +137,7 @@ export type ProjectGroupsApi = {
     connectionId?: string | null
     parentGroupId?: string | null
     createdFrom?: ProjectGroup['createdFrom']
+    purpose?: ProjectGroup['purpose']
   }) => Promise<ProjectGroup>
   update: (args: {
     groupId: string

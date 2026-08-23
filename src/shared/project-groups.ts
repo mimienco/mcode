@@ -23,6 +23,7 @@ export function createProjectGroup(input: {
   connectionId?: string | null
   parentGroupId?: string | null
   createdFrom: ProjectGroupCreatedFrom
+  purpose?: ProjectGroup['purpose']
   tabOrder: number
   now?: number
 }): ProjectGroup {
@@ -34,6 +35,7 @@ export function createProjectGroup(input: {
     connectionId: input.connectionId ?? null,
     parentGroupId: input.parentGroupId ?? null,
     createdFrom: input.createdFrom,
+    ...(input.purpose ? { purpose: input.purpose } : {}),
     tabOrder: input.tabOrder,
     isCollapsed: false,
     color: null,
@@ -76,6 +78,7 @@ export function normalizeProjectGroups(value: unknown): ProjectGroup[] {
         raw.createdFrom === 'migration'
           ? raw.createdFrom
           : 'manual',
+      ...(raw.purpose === 'quick-chats' ? { purpose: raw.purpose } : {}),
       tabOrder:
         typeof raw.tabOrder === 'number' && Number.isFinite(raw.tabOrder) ? raw.tabOrder : 0,
       isCollapsed: raw.isCollapsed === true,

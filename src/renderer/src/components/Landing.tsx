@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ExternalLink, FolderPlus, GitBranchPlus, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ExternalLink,
+  FolderPlus,
+  GitBranchPlus,
+  Loader2,
+  MessageSquarePlus,
+  X
+} from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAppStore } from '../store'
 import { isGitRepoKind } from '../../../shared/repo-kind'
@@ -15,6 +23,8 @@ import logo from '../../../../resources/logo.svg'
 import { translate } from '@/i18n/i18n'
 import type { PreflightIssue } from './landing-preflight-issues'
 import { useLandingPreflightRuntime } from './landing-preflight-runtime'
+import { useQuickChatCreation } from '@/hooks/useQuickChatCreation'
+import { Button } from '@/components/ui/button'
 
 type ShortcutItem = {
   id: string
@@ -106,9 +116,21 @@ function PreflightBanner({
 export default function Landing(): React.JSX.Element {
   const repos = useAppStore((s) => s.repos)
   const openModal = useAppStore((s) => s.openModal)
+  const {
+    createQuickChat,
+    creating: creatingQuickChat,
+    available: quickChatAvailable
+  } = useQuickChatCreation()
 
   const createTargetLabel =
     repos.length > 0 && repos.every((repo) => isGitRepoKind(repo)) ? 'Worktree' : 'Workspace'
+  const createTargetActionLabel = quickChatAvailable
+    ? translate('auto.components.Landing.newTarget', 'New {{target}}', {
+        target: createTargetLabel
+      })
+    : translate('auto.components.Landing.createTarget', 'Create {{target}}', {
+        target: createTargetLabel
+      })
   const hasProjects = repos.length > 0
 
   // Why: the runtime-aware slice probes the active remote host instead of the renderer host.
@@ -165,27 +187,48 @@ export default function Landing(): React.JSX.Element {
                     'auto.components.Landing.9c00bd4adf',
                     'Select a workspace from the sidebar to begin.'
                   )
-                : translate(
-                    'auto.components.Landing.cd21242762',
-                    'Add a project to get started.'
-                  )}
+                : quickChatAvailable
+                  ? translate(
+                      'auto.components.Landing.quickChatEmptyHint',
+                      'Start a chat now, or add a project when you need repository context.'
+                    )
+                  : translate(
+                      'auto.components.Landing.cd21242762',
+                      'Add a project to get started.'
+                    )}
             </p>
 
-            <div className="flex items-center justify-center gap-2.5">
-              <button
-                className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              {quickChatAvailable ? (
+                <Button
+                  className="h-10 gap-2 px-5"
+                  disabled={creatingQuickChat}
+                  onClick={createQuickChat}
+                >
+                  {creatingQuickChat ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <MessageSquarePlus className="size-4" />
+                  )}
+                  {translate('auto.components.Landing.newChat', 'New Chat')}
+                </Button>
+              ) : null}
+              <Button
+                variant={quickChatAvailable ? 'outline' : 'default'}
+                className={cn('h-10 gap-2 px-4', !quickChatAvailable && 'px-5')}
                 onClick={() => openModal('new-workspace-composer', { telemetrySource: 'unknown' })}
               >
                 <GitBranchPlus className="size-4" />
-                Create {createTargetLabel.toLowerCase()}
-              </button>
-              <button
-                className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-border text-foreground text-sm font-medium px-4 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                {createTargetActionLabel}
+              </Button>
+              <Button
+                variant="ghost"
+                className="h-10 gap-2 px-3 text-muted-foreground hover:text-foreground"
                 onClick={() => openModal('add-repo')}
               >
                 <FolderPlus className="size-4" />
                 {translate('auto.components.Landing.f9eaa9e12d', 'Add Project')}
-              </button>
+              </Button>
             </div>
 
             <div className="mt-1 flex items-center justify-center">

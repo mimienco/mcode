@@ -10,6 +10,8 @@ export type ProjectGroup = {
   executionHostId?: string | null
   parentGroupId: string | null
   createdFrom: ProjectGroupCreatedFrom
+  /** App-owned grouping lane for folderless quick chats. */
+  purpose?: 'quick-chats'
   tabOrder: number
   isCollapsed: boolean
   color: string | null

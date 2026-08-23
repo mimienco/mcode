@@ -112,6 +112,7 @@ import { shouldShowMobileDriverOverlay } from './mobile-driver-overlay-visibilit
 import { getAllDrivers, getDriverForPty, isPtyLocked } from '@/lib/pane-manager/mobile-driver-state'
 import { shouldChatTakeOverMobileSurface } from '../native-chat/native-chat-send-eligibility'
 import { canToggleNativeChat } from '../native-chat/native-chat-availability'
+import { getQuickChatWorkspaceForKey } from '../../../../shared/quick-chat-workspaces'
 import { NativeChatViewSwitcher } from '../native-chat/NativeChatViewSwitcher'
 import { useNativeChatTitlebarPortalTarget } from '../native-chat/NativeChatTitlebarPortal'
 import {
@@ -520,7 +521,11 @@ function TerminalPane(
       getCachedUnifiedTerminalTabForWorktree(store.unifiedTabsByWorktree, worktreeId, tabId)
         ?.viewMode === 'chat'
   )
-  const nativeChatEnabled = useAppStore((store) => store.settings?.experimentalNativeChat === true)
+  const nativeChatEnabled = useAppStore(
+    (store) =>
+      store.settings?.experimentalNativeChat === true ||
+      getQuickChatWorkspaceForKey(worktreeId, store.folderWorkspaces) !== null
+  )
   const effectiveChatViewMode = nativeChatEnabled && isChatViewMode
   const unifiedTabLabel = useAppStore(
     (store) =>
