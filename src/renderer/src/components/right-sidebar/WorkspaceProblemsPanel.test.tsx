@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { WorkspaceDiagnosticsList } from './WorkspaceProblemsPanel'
-import { workspaceDiagnosticsLiveStatus } from './workspace-problems-panel-model'
+import {
+  showWorkspaceOutputLabel,
+  workspaceDiagnosticsLiveStatus
+} from './workspace-problems-panel-model'
 
 describe('WorkspaceDiagnosticsList', () => {
   it('shows objective failure counts and exposes source locations as buttons', () => {
@@ -258,6 +261,15 @@ describe('WorkspaceDiagnosticsList', () => {
     expect(markup).toContain('packages/a')
     expect(markup).toContain('env-b.js')
     expect(markup).toContain('packages/b')
+    expect(markup).toContain('max-w-full')
+    expect(markup).toContain('min-w-0 truncate')
+    expect(markup).toContain('title="Show output for')
+  })
+
+  it('omits an empty cwd suffix for a filesystem root', () => {
+    expect(showWorkspaceOutputLabel('command', 'pnpm test', '/')).toBe(
+      'Show output for “pnpm test”'
+    )
   })
 
   it('announces successful and warning count changes', () => {

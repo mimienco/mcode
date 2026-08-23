@@ -160,18 +160,23 @@ export function WorkspaceDiagnosticsList({
           </p>
           {onShowOutput
             ? availableLocationlessOutputs.map(
-                ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => (
-                  <Button
-                    key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => onShowOutput(ptyId)}
-                  >
-                    {showWorkspaceOutputLabel(tool, commandLabel, commandCwd)}
-                  </Button>
-                )
+                ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => {
+                  const outputLabel = showWorkspaceOutputLabel(tool, commandLabel, commandCwd)
+                  return (
+                    <Button
+                      key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 max-w-full"
+                      aria-label={outputLabel}
+                      title={outputLabel}
+                      onClick={() => onShowOutput(ptyId)}
+                    >
+                      <span className="min-w-0 truncate">{outputLabel}</span>
+                    </Button>
+                  )
+                }
               )
             : null}
         </div>
@@ -188,17 +193,23 @@ export function WorkspaceDiagnosticsList({
               {onShowOutput && availableLocationlessOutputs.length > 0 ? (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {availableLocationlessOutputs.map(
-                    ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => (
-                      <Button
-                        key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onShowOutput(ptyId)}
-                      >
-                        {showWorkspaceOutputLabel(tool, commandLabel, commandCwd)}
-                      </Button>
-                    )
+                    ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => {
+                      const outputLabel = showWorkspaceOutputLabel(tool, commandLabel, commandCwd)
+                      return (
+                        <Button
+                          key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="max-w-full"
+                          aria-label={outputLabel}
+                          title={outputLabel}
+                          onClick={() => onShowOutput(ptyId)}
+                        >
+                          <span className="min-w-0 truncate">{outputLabel}</span>
+                        </Button>
+                      )
+                    }
                   )}
                 </div>
               ) : null}

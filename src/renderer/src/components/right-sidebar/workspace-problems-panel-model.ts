@@ -73,6 +73,9 @@ function boundedCommandContext(command: string, cwd?: string): string {
   }
   const cwdParts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
   const compactCwd = cwdParts.slice(-2).join('/')
+  if (!compactCwd) {
+    return commandSnippet
+  }
   const cwdSnippet = compactCwd.length > 28 ? `…${compactCwd.slice(-27)}` : compactCwd
   return `${commandSnippet} — ${cwdSnippet}`
 }
