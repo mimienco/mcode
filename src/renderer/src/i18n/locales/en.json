@@ -4645,6 +4645,7 @@
       },
       "sidebar": {
         "worktreeDiagnostics": {
+          "checkFailed": "Check failed",
           "failedChecks": "{{value0}} failed checks",
           "openProblems": "{{value0}}. Open Problems."
         },
@@ -12194,6 +12195,7 @@
           },
           "problems": {
             "allPassed": "All {{value0}} tests passed",
+            "checkFailed": "Check failed",
             "clear": "Clear diagnostics",
             "emptyDescription": "Run tests, typecheck, or lint in a terminal. Failures will appear here automatically.",
             "emptyTitle": "No diagnostics yet",
@@ -12203,6 +12205,7 @@
             "lineColumnLocation": "Line {{value0}}:{{value1}}",
             "lineLocation": "Line {{value0}}",
             "noFailures": "No failures",
+            "noSourceLocation": "The check exited unsuccessfully without a source location.",
             "passedCount": "{{value0}} passed",
             "unknownTool": "Diagnostics",
             "warningCount": "{{value0}} warnings"
