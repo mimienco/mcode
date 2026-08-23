@@ -71,6 +71,11 @@ export function WorkspaceDiagnosticsList({
                 ? translate('auto.components.right.sidebar.problems.failedCount', '{{value0}} failed', {
                     value0: run.failed
                   })
+                : run.status === 'failed'
+                  ? translate(
+                      'auto.components.right.sidebar.problems.checkFailed',
+                      'Check failed'
+                    )
                 : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')}
             </span>
             {run.passed > 0 ? (
@@ -103,9 +108,15 @@ export function WorkspaceDiagnosticsList({
 
       {groups.length === 0 ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
-          <CheckCircle2 className="mb-3 size-7 text-emerald-500" aria-hidden="true" />
+          {run.status === 'failed' ? (
+            <AlertCircle className="mb-3 size-7 text-destructive" aria-hidden="true" />
+          ) : (
+            <CheckCircle2 className="mb-3 size-7 text-emerald-500" aria-hidden="true" />
+          )}
           <p className="text-sm font-medium text-foreground">
-            {run.total > 0
+            {run.status === 'failed'
+              ? translate('auto.components.right.sidebar.problems.checkFailed', 'Check failed')
+              : run.total > 0
               ? translate(
                   'auto.components.right.sidebar.problems.allPassed',
                   'All {{value0}} tests passed',
@@ -114,10 +125,15 @@ export function WorkspaceDiagnosticsList({
               : translate('auto.components.right.sidebar.problems.healthy', 'No problems found')}
           </p>
           <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
-            {translate(
-              'auto.components.right.sidebar.problems.latestRunHealthy',
-              'The latest observed check completed without errors.'
-            )}
+            {run.status === 'failed'
+              ? translate(
+                  'auto.components.right.sidebar.problems.noSourceLocation',
+                  'The check exited unsuccessfully without a source location.'
+                )
+              : translate(
+                  'auto.components.right.sidebar.problems.latestRunHealthy',
+                  'The latest observed check completed without errors.'
+                )}
           </p>
         </div>
       ) : (

@@ -19,4 +19,13 @@ describe('WorktreeDiagnosticsBadge', () => {
     expect(markup).toContain('3 failed checks')
     expect(markup).toContain('>3<')
   })
+
+  it('represents an unsuccessful check even when the runner has no failure count', () => {
+    const markup = renderToStaticMarkup(
+      <WorktreeDiagnosticsBadgeView failed={0} onOpen={() => {}} />
+    )
+
+    expect(markup).toContain('Check failed')
+    expect(markup).toContain('>!<')
+  })
 })

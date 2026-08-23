@@ -39,4 +39,26 @@ describe('WorkspaceDiagnosticsList', () => {
     expect(markup).toContain('Line 142:7')
     expect(markup).toContain('<button')
   })
+
+  it('does not present a failed check without locations as healthy', () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceDiagnosticsList
+        run={{
+          tool: 'vitest',
+          status: 'failed',
+          failed: 0,
+          passed: 2,
+          total: 2,
+          diagnostics: [],
+          updatedAt: 1
+        }}
+        onClear={() => {}}
+        onOpenDiagnostic={() => {}}
+      />
+    )
+
+    expect(markup).toContain('Check failed')
+    expect(markup).toContain('without a source location')
+    expect(markup).not.toContain('All 2 tests passed')
+  })
 })
