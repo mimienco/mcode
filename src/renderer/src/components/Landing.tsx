@@ -1,14 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  AlertTriangle,
-  ExternalLink,
-  FolderPlus,
-  GitBranchPlus,
-  Loader2,
-  MessageSquarePlus,
-  X
-} from 'lucide-react'
-import { cn } from '../lib/utils'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, ExternalLink, X } from 'lucide-react'
 import { useAppStore } from '../store'
 import { isGitRepoKind } from '../../../shared/repo-kind'
 import type { Repo } from '../../../shared/repo-types'
@@ -17,20 +8,13 @@ import {
   githubProjectKeys,
   isPreflightIssueDismissed
 } from './landing-preflight-dismissal'
-import { ShortcutKeyCombo } from './ShortcutKeyCombo'
-import { useShortcutKeyDetails, type ShortcutKeyComboDetails } from '@/hooks/useShortcutLabel'
+import { useShortcutKeyDetails } from '@/hooks/useShortcutLabel'
 import logo from '../../../../resources/logo.svg'
 import { translate } from '@/i18n/i18n'
 import type { PreflightIssue } from './landing-preflight-issues'
 import { useLandingPreflightRuntime } from './landing-preflight-runtime'
 import { useQuickChatCreation } from '@/hooks/useQuickChatCreation'
-import { Button } from '@/components/ui/button'
-
-type ShortcutItem = {
-  id: string
-  shortcut: ShortcutKeyComboDetails
-  action: string
-}
+import { LandingCommandLauncher } from './LandingCommandLauncher'
 
 function PreflightBanner({
   issues,
@@ -139,17 +123,6 @@ export default function Landing(): React.JSX.Element {
   const createWorktreeShortcut = useShortcutKeyDetails('workspace.create')
   const previousWorktreeShortcut = useShortcutKeyDetails('worktree.navigateUp')
   const nextWorktreeShortcut = useShortcutKeyDetails('worktree.navigateDown')
-  const shortcuts = useMemo<ShortcutItem[]>(() => {
-    return [
-      {
-        id: 'create',
-        shortcut: createWorktreeShortcut,
-        action: `Create ${createTargetLabel.toLowerCase()}`
-      },
-      { id: 'up', shortcut: previousWorktreeShortcut, action: 'Move up workspace' },
-      { id: 'down', shortcut: nextWorktreeShortcut, action: 'Move down workspace' }
-    ]
-  }, [createTargetLabel, createWorktreeShortcut, nextWorktreeShortcut, previousWorktreeShortcut])
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-background">
@@ -198,59 +171,21 @@ export default function Landing(): React.JSX.Element {
                     )}
             </p>
 
-            <div className="flex flex-wrap items-center justify-center gap-2.5">
-              {quickChatAvailable ? (
-                <Button
-                  className="h-10 gap-2 px-5"
-                  disabled={creatingQuickChat}
-                  onClick={createQuickChat}
-                >
-                  {creatingQuickChat ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <MessageSquarePlus className="size-4" />
-                  )}
-                  {translate('auto.components.Landing.newChat', 'New Chat')}
-                </Button>
-              ) : null}
-              <Button
-                variant={quickChatAvailable ? 'outline' : 'default'}
-                className={cn('h-10 gap-2 px-4', !quickChatAvailable && 'px-5')}
-                onClick={() => openModal('new-workspace-composer', { telemetrySource: 'unknown' })}
-              >
-                <GitBranchPlus className="size-4" />
-                {createTargetActionLabel}
-              </Button>
-              <Button
-                variant="ghost"
-                className="h-10 gap-2 px-3 text-muted-foreground hover:text-foreground"
-                onClick={() => openModal('add-repo')}
-              >
-                <FolderPlus className="size-4" />
-                {translate('auto.components.Landing.f9eaa9e12d', 'Add Project')}
-              </Button>
-            </div>
-
-            <div className="mt-1 flex items-center justify-center">
-              {shortcuts.map((shortcut, index) => (
-                <div
-                  key={shortcut.id}
-                  className={cn(
-                    'flex items-center gap-2.5 px-5',
-                    index > 0 && 'border-l border-border'
-                  )}
-                >
-                  <span className="whitespace-nowrap text-xs text-muted-foreground">
-                    {shortcut.action}
-                  </span>
-                  <ShortcutKeyCombo
-                    keys={shortcut.shortcut.keys}
-                    doubleTap={shortcut.shortcut.doubleTap}
-                    separatorClassName="mx-0.5 text-[10px] text-muted-foreground"
-                  />
-                </div>
-              ))}
-            </div>
+            <LandingCommandLauncher
+              quickChatAvailable={quickChatAvailable}
+              creatingQuickChat={creatingQuickChat}
+              newChatLabel={translate('auto.components.Landing.newChat', 'New Chat')}
+              addProjectLabel={translate('auto.components.Landing.f9eaa9e12d', 'Add Project')}
+              createTargetActionLabel={createTargetActionLabel}
+              createTargetShortcut={createWorktreeShortcut}
+              previousWorkspaceShortcut={previousWorktreeShortcut}
+              nextWorkspaceShortcut={nextWorktreeShortcut}
+              onCreateQuickChat={createQuickChat}
+              onCreateTarget={() =>
+                openModal('new-workspace-composer', { telemetrySource: 'unknown' })
+              }
+              onAddProject={() => openModal('add-repo')}
+            />
           </div>
         </div>
       </div>
