@@ -8,6 +8,9 @@ const {
   storeState,
   openSettingsPageMock,
   openSettingsTargetMock,
+  openUrlMock,
+  launchAgentInNewTabMock,
+  menuSelectHandlers,
   useDetectedAgentsMock
 } = vi.hoisted(() => ({
   shortcutLabelMock: vi.fn<() => string | null>(),
@@ -23,6 +26,9 @@ const {
   },
   openSettingsPageMock: vi.fn(),
   openSettingsTargetMock: vi.fn(),
+  openUrlMock: vi.fn(() => Promise.resolve()),
+  launchAgentInNewTabMock: vi.fn(),
+  menuSelectHandlers: new Map<string, () => void>(),
   useDetectedAgentsMock: vi.fn(() => ({ detectedIds: ['claude', 'codex', 'gemini'] }))
 }))
 
@@ -56,7 +62,15 @@ vi.mock('@/lib/agent-catalog', async () => {
     getAgentCatalog: () => [
       { id: 'claude', label: 'Claude' },
       { id: 'codex', label: 'Codex' },
-      { id: 'gemini', label: 'Gemini' }
+      { id: 'gemini', label: 'Gemini' },
+      { id: 'opencode', label: 'OpenCode', homepageUrl: 'https://opencode.ai/docs/cli/' },
+      { id: 'omp', label: 'OMP', homepageUrl: 'https://omp.sh' },
+      {
+        id: 'kimi',
+        label: 'Kimi',
+        homepageUrl: 'https://www.kimi.com/code/docs/en/kimi-code-cli/getting-started.html'
+      },
+      { id: 'pi', label: 'Pi', homepageUrl: 'https://pi.dev' }
     ],
     AgentIcon: ({ agent }: { agent: string }) => ReactActual.createElement('span', null, agent)
   }
@@ -68,8 +82,21 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
   }
 
   return {
-    DropdownMenuItem: ({ children, ...props }: { children: React.ReactNode }) =>
-      ReactActual.createElement('div', props, children),
+    DropdownMenuItem: ({
+      children,
+      onSelect,
+      title,
+      ...props
+    }: {
+      children: React.ReactNode
+      onSelect?: () => void
+      title?: string
+    }) => {
+      if (onSelect && title) {
+        menuSelectHandlers.set(title, onSelect)
+      }
+      return ReactActual.createElement('div', { ...props, title }, children)
+    },
     DropdownMenuShortcut: ({ children }: { children: React.ReactNode }) =>
       ReactActual.createElement('span', { 'data-dropdown-shortcut': 'true' }, children)
   }
@@ -91,7 +118,7 @@ vi.mock('sonner', () => ({
 }))
 
 vi.mock('@/lib/launch-agent-in-new-tab', () => ({
-  launchAgentInNewTab: vi.fn()
+  launchAgentInNewTab: launchAgentInNewTabMock
 }))
 
 function renderAgentMenuItems(): string {
@@ -117,6 +144,11 @@ beforeEach(() => {
   shortcutLabelMock.mockReset()
   shortcutLabelMock.mockReturnValue(null)
   useDetectedAgentsMock.mockClear()
+  useDetectedAgentsMock.mockReturnValue({ detectedIds: ['claude', 'codex', 'gemini'] })
+  openUrlMock.mockClear()
+  launchAgentInNewTabMock.mockClear()
+  menuSelectHandlers.clear()
+  vi.stubGlobal('window', { api: { shell: { openUrl: openUrlMock } } })
   openSettingsPageMock.mockReset()
   openSettingsTargetMock.mockReset()
   storeState.settings.defaultTuiAgent = 'codex'
@@ -145,6 +177,36 @@ describe('QuickLaunchAgentMenuItems', () => {
     const html = renderAgentMenuItems()
 
     expect(html).not.toContain('data-dropdown-shortcut="true"')
+  })
+
+  it('offers installation for the curated harnesses not detected on the active host', () => {
+    const html = renderAgentMenuItems()
+
+    expect(html).toContain('title="Install OpenCode"')
+    expect(html).toContain('title="Install OMP"')
+    expect(html).toContain('title="Install Kimi Code CLI"')
+    expect(html).not.toContain('title="Install Pi"')
+  })
+
+  it('opens the official setup page for a missing curated harness', () => {
+    renderAgentMenuItems()
+
+    menuSelectHandlers.get('Install OMP')?.()
+
+    expect(openUrlMock).toHaveBeenCalledWith('https://omp.sh')
+    expect(launchAgentInNewTabMock).not.toHaveBeenCalled()
+  })
+
+  it('launches a curated harness normally once it is detected', () => {
+    useDetectedAgentsMock.mockReturnValueOnce({
+      detectedIds: ['claude', 'codex', 'gemini', 'opencode']
+    })
+    renderAgentMenuItems()
+
+    menuSelectHandlers.get('Launch OpenCode in a new terminal')?.()
+
+    expect(launchAgentInNewTabMock).toHaveBeenCalled()
+    expect(openUrlMock).not.toHaveBeenCalled()
   })
 
   it('routes agent detection to the worktree-owning runtime host, not the local client', () => {

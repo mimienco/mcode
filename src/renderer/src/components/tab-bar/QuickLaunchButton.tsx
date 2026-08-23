@@ -12,9 +12,17 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { LaunchSource } from '../../../../shared/telemetry-events'
 import {
   DEFAULT_DISABLED_TUI_AGENTS,
-  filterEnabledTuiAgents
+  filterEnabledTuiAgents,
+  isTuiAgentEnabled
 } from '../../../../shared/tui-agent-selection'
 import { translate } from '@/i18n/i18n'
+
+// Provider-flexible harnesses; OpenRouter is configured inside them, not launched itself.
+const FEATURED_UNDETECTED_AGENTS = [
+  'opencode',
+  'omp',
+  'kimi'
+] as const satisfies readonly TuiAgent[]
 
 export type QuickLaunchAgentMenuItemsProps = {
   worktreeId: string
@@ -37,8 +45,18 @@ export type QuickLaunchAgentMenuItemsProps = {
   onPromptDelivered?: () => void
 }
 
-function getCatalogEntry(agent: TuiAgent): { id: TuiAgent; label: string } | null {
+function getCatalogEntry(
+  agent: TuiAgent
+): { id: TuiAgent; label: string; homepageUrl?: string } | null {
   return getAgentCatalog().find((a) => a.id === agent) ?? null
+}
+
+function getQuickLaunchAgentLabel(agent: TuiAgent, catalogLabel: string): string {
+  if (agent === 'kimi') {
+    return translate('auto.components.tab.bar.QuickLaunchButton.kimiCodeCliLabel', 'Kimi Code CLI')
+  }
+
+  return catalogLabel
 }
 
 function orderAgents(
@@ -54,6 +72,28 @@ function orderAgents(
   // Why: surface the user's configured default first — matches the prior
   // split-button behavior where the default agent was the primary action.
   return [defaultAgent, ...inCatalogOrder.filter((id) => id !== defaultAgent)]
+}
+
+export type QuickLaunchAgentMenuEntry = {
+  agent: TuiAgent
+  action: 'launch' | 'install'
+}
+
+export function buildQuickLaunchAgentMenuEntries(
+  defaultAgent: TuiAgent | 'blank' | null | undefined,
+  detected: TuiAgent[],
+  disabled?: Iterable<unknown> | null
+): QuickLaunchAgentMenuEntry[] {
+  const enabledDetectedIds = filterEnabledTuiAgents(detected, disabled)
+  const installed = orderAgents(defaultAgent, enabledDetectedIds).map((agent) => ({
+    agent,
+    action: 'launch' as const
+  }))
+  const availableToInstall = FEATURED_UNDETECTED_AGENTS.filter(
+    (agent) => !detected.includes(agent) && isTuiAgentEnabled(agent, disabled)
+  ).map((agent) => ({ agent, action: 'install' as const }))
+
+  return [...installed, ...availableToInstall]
 }
 
 export function shouldShowLaunchWatchdogTimeout({ hasPty }: { hasPty: boolean }): boolean {
@@ -176,8 +216,25 @@ function QuickLaunchAgentMenuItemsInner({
     [worktreeId, groupId, onFocusTerminal, prompt, promptDelivery, launchSource, onPromptDelivered]
   )
 
-  const enabledDetectedIds = detectedIds ? filterEnabledTuiAgents(detectedIds, disabledAgents) : []
-  const agents = detectedIds ? orderAgents(defaultAgent, enabledDetectedIds) : []
+  const openInstallPage = useCallback((agent: TuiAgent, label: string) => {
+    const entry = getCatalogEntry(agent)
+    if (!entry?.homepageUrl) {
+      return
+    }
+    void window.api.shell.openUrl(entry.homepageUrl).catch(() => {
+      toast.error(
+        translate(
+          'auto.components.tab.bar.QuickLaunchButton.installPageFailed',
+          'Could not open the {{value0}} installation page.',
+          { value0: label }
+        )
+      )
+    })
+  }, [])
+
+  const agents = detectedIds
+    ? buildQuickLaunchAgentMenuEntries(defaultAgent, detectedIds, disabledAgents)
+    : []
 
   return (
     <>
@@ -194,25 +251,39 @@ function QuickLaunchAgentMenuItemsInner({
               )}
         </DropdownMenuItem>
       ) : null}
-      {agents.map((agent) => {
+      {agents.map(({ agent, action }) => {
         const entry = getCatalogEntry(agent)
-        const label = entry?.label ?? agent
+        const label = getQuickLaunchAgentLabel(agent, entry?.label ?? agent)
+        const installLabel = translate('auto.components.settings.AgentsPane.f95b5c79b8', 'Install')
         const showsDefaultAgentShortcut =
-          newAgentShortcut !== null && defaultAgent !== 'blank' && agent === defaultAgent
+          action === 'launch' &&
+          newAgentShortcut !== null &&
+          defaultAgent !== 'blank' &&
+          agent === defaultAgent
         return (
           <DropdownMenuItem
             key={agent}
-            onSelect={() => runLaunch(agent)}
+            onSelect={() =>
+              action === 'launch' ? runLaunch(agent) : openInstallPage(agent, label)
+            }
             className="gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 font-medium"
-            title={translate(
-              'auto.components.tab.bar.QuickLaunchButton.ec2adf093e',
-              'Launch {{value0}} in a new terminal',
-              { value0: label }
-            )}
+            title={
+              action === 'launch'
+                ? translate(
+                    'auto.components.tab.bar.QuickLaunchButton.ec2adf093e',
+                    'Launch {{value0}} in a new terminal',
+                    { value0: label }
+                  )
+                : `${installLabel} ${label}`
+            }
           >
             <AgentIcon agent={agent} size={14} />
             <span className="flex-1">{label}</span>
-            {showsDefaultAgentShortcut ? (
+            {action === 'install' ? (
+              <span className="ml-auto shrink-0 text-[11px] text-muted-foreground/85">
+                {installLabel}
+              </span>
+            ) : showsDefaultAgentShortcut ? (
               <DropdownMenuShortcut>{newAgentShortcut}</DropdownMenuShortcut>
             ) : null}
           </DropdownMenuItem>
