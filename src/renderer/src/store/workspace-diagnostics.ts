@@ -18,6 +18,8 @@ export type WorkspaceDiagnosticsEntry = WorkspaceDiagnosticsRun & {
   ptyId: string
   updatedAt: number
   commandIdentity?: string
+  commandLabel?: string
+  commandCwd?: string
 }
 
 export type WorkspaceDiagnosticsSummary = Omit<WorkspaceDiagnosticsRun, 'tool'> & {
@@ -200,7 +202,14 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   commandMetadataByPtyId.delete(args.ptyId)
   const output = capture?.chunks.slice(capture.headIndex).join('') ?? ''
   const commandAnalysis = metadata ? analyzeWorkspaceDiagnosticCommand(metadata.command) : null
-  const commandIdentity = metadata?.command.trim().replace(/\r\n?/g, '\n')
+  const basePath = args.cwdIsLive && args.cwd ? args.cwd : (metadata?.cwd ?? args.cwd)
+  const commandLabel = metadata?.command.trim().replace(/\r\n?/g, '\n')
+  const commandCwd = basePath?.replace(/\\/g, '/').replace(/\/+$/, '')
+  const commandIdentity = commandLabel
+    ? commandCwd
+      ? `${commandCwd}\0${commandLabel}`
+      : commandLabel
+    : undefined
   const runs = resolveWorkspaceDiagnosticCommandRuns({
     commandAnalysis,
     exitCode: args.exitCode,
@@ -210,12 +219,13 @@ export function completeWorkspaceDiagnosticsCommand(args: {
     return []
   }
   const updatedAt = args.now ?? Date.now()
-  const basePath = args.cwdIsLive && args.cwd ? args.cwd : (metadata?.cwd ?? args.cwd)
   const entries = runs.map(
     (run): WorkspaceDiagnosticsEntry => ({
       ...run,
       ptyId: args.ptyId,
       ...(run.tool === 'command' && commandIdentity ? { commandIdentity } : {}),
+      ...(run.tool === 'command' && commandLabel ? { commandLabel } : {}),
+      ...(run.tool === 'command' && commandCwd ? { commandCwd } : {}),
       diagnostics: attachBasePath(run.diagnostics, basePath),
       updatedAt
     })

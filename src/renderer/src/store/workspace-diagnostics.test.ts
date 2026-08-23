@@ -413,6 +413,45 @@ describe('workspace diagnostics capture', () => {
     ])
   })
 
+  it('scopes identical pipeline failures to their execution directory', () => {
+    const command = 'pnpm test && node scripts/check-env.js'
+    for (const cwd of ['/repo/packages/a', '/repo/packages/b']) {
+      beginWorkspaceDiagnosticsCommand({
+        ptyId: 'pty-checks',
+        worktreeId: 'wt-1',
+        command,
+        cwd
+      })
+      completeWorkspaceDiagnosticsCommand({
+        ptyId: 'pty-checks',
+        worktreeId: 'wt-1',
+        exitCode: 1
+      })
+    }
+
+    expect(commandRuns()).toHaveLength(2)
+
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command,
+      cwd: '/repo/packages/b'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 0
+    })
+
+    expect(commandRuns()).toEqual([
+      expect.objectContaining({
+        commandCwd: '/repo/packages/a',
+        commandLabel: command,
+        status: 'failed'
+      })
+    ])
+  })
+
   it('retires a generic package-test failure when a concrete runner recovers', () => {
     beginWorkspaceDiagnosticsCommand({
       ptyId: 'pty-tests',

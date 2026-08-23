@@ -159,18 +159,20 @@ export function WorkspaceDiagnosticsList({
                 )}
           </p>
           {onShowOutput
-            ? availableLocationlessOutputs.map(({ ptyId, tool }) => (
-                <Button
-                  key={ptyId}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => onShowOutput(ptyId)}
-                >
-                  {showWorkspaceOutputLabel(tool)}
-                </Button>
-              ))
+            ? availableLocationlessOutputs.map(
+                ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => (
+                  <Button
+                    key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => onShowOutput(ptyId)}
+                  >
+                    {showWorkspaceOutputLabel(tool, commandLabel, commandCwd)}
+                  </Button>
+                )
+              )
             : null}
         </div>
       ) : (
@@ -185,17 +187,19 @@ export function WorkspaceDiagnosticsList({
               </p>
               {onShowOutput && availableLocationlessOutputs.length > 0 ? (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {availableLocationlessOutputs.map(({ ptyId, tool }) => (
-                    <Button
-                      key={ptyId}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onShowOutput(ptyId)}
-                    >
-                      {showWorkspaceOutputLabel(tool)}
-                    </Button>
-                  ))}
+                  {availableLocationlessOutputs.map(
+                    ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => (
+                      <Button
+                        key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onShowOutput(ptyId)}
+                      >
+                        {showWorkspaceOutputLabel(tool, commandLabel, commandCwd)}
+                      </Button>
+                    )
+                  )}
                 </div>
               ) : null}
             </div>

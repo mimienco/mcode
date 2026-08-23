@@ -215,6 +215,51 @@ describe('WorkspaceDiagnosticsList', () => {
     expect(markup).toContain('cart fails')
   })
 
+  it('distinguishes output actions for independent command failures', () => {
+    const commandA = 'vitest run && node env-a.js'
+    const commandB = 'eslint src && node env-b.js'
+    const commandRun = (ptyId: string, commandLabel: string, commandCwd: string) => ({
+      tool: 'command' as const,
+      ptyId,
+      commandIdentity: `${commandCwd}\0${commandLabel}`,
+      commandLabel,
+      commandCwd,
+      status: 'failed' as const,
+      failed: 1,
+      passed: 0,
+      total: 1,
+      diagnostics: [],
+      updatedAt: 1
+    })
+    const markup = renderToStaticMarkup(
+      <WorkspaceDiagnosticsList
+        run={{
+          tools: ['command'],
+          runsByTool: {
+            'command:a': commandRun('pty-a', commandA, '/repo/packages/a'),
+            'command:b': commandRun('pty-b', commandB, '/repo/packages/b')
+          },
+          outputPtyId: 'pty-b',
+          status: 'failed',
+          failed: 2,
+          passed: 0,
+          total: 2,
+          diagnostics: [],
+          updatedAt: 1
+        }}
+        onClear={() => {}}
+        onOpenDiagnostic={() => {}}
+        onShowOutput={() => {}}
+        availableOutputPtyIds={new Set(['pty-a', 'pty-b'])}
+      />
+    )
+
+    expect(markup).toContain('env-a.js')
+    expect(markup).toContain('packages/a')
+    expect(markup).toContain('env-b.js')
+    expect(markup).toContain('packages/b')
+  })
+
   it('announces successful and warning count changes', () => {
     expect(
       workspaceDiagnosticsLiveStatus({

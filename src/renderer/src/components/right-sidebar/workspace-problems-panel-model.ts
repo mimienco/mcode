@@ -27,16 +27,30 @@ export function workspaceDiagnosticsStatusLabel(run: WorkspaceDiagnosticsSummary
     : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')
 }
 
-export function locationlessFailedOutputs(
-  run: WorkspaceDiagnosticsSummary
-): { ptyId: string; tool: WorkspaceDiagnosticTool | null }[] {
-  const outputs = new Map<string, WorkspaceDiagnosticTool | null>()
+export function locationlessFailedOutputs(run: WorkspaceDiagnosticsSummary): {
+  ptyId: string
+  tool: WorkspaceDiagnosticTool | null
+  commandIdentity?: string
+  commandLabel?: string
+  commandCwd?: string
+}[] {
+  const outputs = new Map<string, ReturnType<typeof locationlessFailedOutputs>[number]>()
   for (const entry of Object.values(run.runsByTool)) {
     const locatedErrors = entry?.diagnostics.filter(
       (diagnostic) => diagnostic.severity === 'error'
     ).length
     if (entry?.status === 'failed' && entry.failed > (locatedErrors ?? 0)) {
-      outputs.set(entry.ptyId, entry.tool)
+      const key =
+        entry.tool === 'command' && entry.commandIdentity
+          ? `${entry.ptyId}\0${entry.commandIdentity}`
+          : entry.ptyId
+      outputs.set(key, {
+        ptyId: entry.ptyId,
+        tool: entry.tool,
+        ...(entry.commandIdentity ? { commandIdentity: entry.commandIdentity } : {}),
+        ...(entry.commandLabel ? { commandLabel: entry.commandLabel } : {}),
+        ...(entry.commandCwd ? { commandCwd: entry.commandCwd } : {})
+      })
     }
   }
   if (
@@ -45,12 +59,36 @@ export function locationlessFailedOutputs(
     run.diagnostics.length === 0 &&
     run.outputPtyId
   ) {
-    outputs.set(run.outputPtyId, null)
+    outputs.set(run.outputPtyId, { ptyId: run.outputPtyId, tool: null })
   }
-  return [...outputs].map(([ptyId, tool]) => ({ ptyId, tool }))
+  return [...outputs.values()]
 }
 
-export function showWorkspaceOutputLabel(tool: WorkspaceDiagnosticTool | null): string {
+function boundedCommandContext(command: string, cwd?: string): string {
+  const compactCommand = command.replace(/\s+/g, ' ').trim()
+  const commandSnippet =
+    compactCommand.length > 44 ? `${compactCommand.slice(0, 43)}…` : compactCommand
+  if (!cwd) {
+    return commandSnippet
+  }
+  const cwdParts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
+  const compactCwd = cwdParts.slice(-2).join('/')
+  const cwdSnippet = compactCwd.length > 28 ? `…${compactCwd.slice(-27)}` : compactCwd
+  return `${commandSnippet} — ${cwdSnippet}`
+}
+
+export function showWorkspaceOutputLabel(
+  tool: WorkspaceDiagnosticTool | null,
+  commandLabel?: string,
+  commandCwd?: string
+): string {
+  if (tool === 'command' && commandLabel) {
+    return translate(
+      'auto.components.right.sidebar.problems.showCommandOutput',
+      'Show output for “{{value0}}”',
+      { value0: boundedCommandContext(commandLabel, commandCwd) }
+    )
+  }
   return tool
     ? translate('auto.components.right.sidebar.problems.showToolOutput', 'Show {{value0}} output', {
         value0: workspaceDiagnosticToolLabel(tool)
