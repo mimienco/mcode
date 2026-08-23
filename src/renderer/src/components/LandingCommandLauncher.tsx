@@ -62,7 +62,7 @@ export function LandingCommandLauncher({
       <Button
         type="button"
         data-landing-command="primary"
-        className="group h-14 w-full justify-start gap-0 overflow-hidden rounded-lg bg-ai-action-accent p-0 text-base text-primary-foreground shadow-xs hover:bg-ai-action-accent/90"
+        className="group h-14 w-full justify-start gap-0 overflow-hidden rounded-md bg-[color-mix(in_srgb,var(--ai-action-accent)_95%,black)] p-0 text-base text-primary-foreground shadow-xs hover:bg-[color-mix(in_srgb,var(--ai-action-accent)_90%,black)]"
         disabled={primaryDisabled}
         aria-busy={primaryDisabled}
         onClick={primaryAction}
@@ -86,7 +86,7 @@ export function LandingCommandLauncher({
             keyCapClassName="border-primary-foreground/25 bg-primary-foreground/10 text-[11px] text-primary-foreground shadow-none"
           />
         ) : null}
-        <ArrowRight className="mr-5 ml-auto size-5 transition-transform duration-200 ease-out group-hover:translate-x-1" />
+        <ArrowRight className="mr-5 ml-auto size-5 transition-transform duration-200 ease-out group-hover:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none" />
       </Button>
 
       <div
@@ -120,19 +120,19 @@ export function LandingCommandLauncher({
             type="button"
             variant="outline"
             data-landing-command="secondary"
-            className="h-12 min-w-0 justify-start gap-0 overflow-hidden rounded-lg bg-card p-0 shadow-xs hover:border-muted-foreground/35 hover:bg-accent"
+            className="h-12 min-w-0 justify-start gap-0 overflow-hidden rounded-md bg-card p-0 shadow-xs hover:border-muted-foreground/35 hover:bg-accent"
             onClick={onCreateTarget}
           >
-            <span className="flex h-full w-12 shrink-0 items-center justify-center">
+            <span className="flex h-full w-10 shrink-0 items-center justify-center">
               <GitBranchPlus className="size-5" />
             </span>
-            <span className="min-w-0 truncate pr-2 font-semibold">{createTargetActionLabel}</span>
+            <span className="min-w-0 truncate pr-1 font-semibold">{createTargetActionLabel}</span>
             <ShortcutKeyCombo
               keys={createTargetShortcut.keys}
               doubleTap={createTargetShortcut.doubleTap}
-              className="ml-auto mr-3 shrink-0"
+              className="ml-auto mr-2 shrink-0 gap-0.5"
               separatorClassName="mx-0 text-[10px] text-muted-foreground"
-              keyCapClassName="bg-muted/70 text-[11px] shadow-none"
+              keyCapClassName="min-w-5 bg-muted/70 px-1 text-[10px] shadow-none"
             />
           </Button>
         ) : null}
@@ -141,10 +141,10 @@ export function LandingCommandLauncher({
           type="button"
           variant="outline"
           data-landing-command="secondary"
-          className="h-12 min-w-0 justify-start gap-0 overflow-hidden rounded-lg bg-card p-0 shadow-xs hover:border-muted-foreground/35 hover:bg-accent"
+          className="h-12 min-w-0 justify-start gap-0 overflow-hidden rounded-md bg-card p-0 shadow-xs hover:border-muted-foreground/35 hover:bg-accent"
           onClick={onAddProject}
         >
-          <span className="flex h-full w-12 shrink-0 items-center justify-center">
+          <span className="flex h-full w-10 shrink-0 items-center justify-center">
             <FolderPlus className="size-5" />
           </span>
           <span className="min-w-0 truncate pr-3 font-semibold">{addProjectLabel}</span>
