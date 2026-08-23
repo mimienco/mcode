@@ -17,6 +17,7 @@ const MAX_CAPTURED_TERMINALS = 64
 export type WorkspaceDiagnosticsEntry = WorkspaceDiagnosticsRun & {
   ptyId: string
   updatedAt: number
+  commandIdentity?: string
 }
 
 export type WorkspaceDiagnosticsSummary = Omit<WorkspaceDiagnosticsRun, 'tool'> & {
@@ -199,6 +200,7 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   commandMetadataByPtyId.delete(args.ptyId)
   const output = capture?.chunks.slice(capture.headIndex).join('') ?? ''
   const commandAnalysis = metadata ? analyzeWorkspaceDiagnosticCommand(metadata.command) : null
+  const commandIdentity = metadata?.command.trim().replace(/\r\n?/g, '\n')
   const runs = resolveWorkspaceDiagnosticCommandRuns({
     commandAnalysis,
     exitCode: args.exitCode,
@@ -213,6 +215,7 @@ export function completeWorkspaceDiagnosticsCommand(args: {
     (run): WorkspaceDiagnosticsEntry => ({
       ...run,
       ptyId: args.ptyId,
+      ...(run.tool === 'command' && commandIdentity ? { commandIdentity } : {}),
       diagnostics: attachBasePath(run.diagnostics, basePath),
       updatedAt
     })
@@ -220,7 +223,7 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   useWorkspaceDiagnosticsStore.setState((state) => {
     const prior = state.runsByWorktreeId[workspaceIdentity]?.runsByTool ?? {}
     const runsByTool = { ...prior }
-    if (commandAnalysis) {
+    if (commandAnalysis && runsByTool.command?.commandIdentity === commandIdentity) {
       delete runsByTool.command
     }
     const hasUnknownTestRun = entries.some((entry) => entry.tool === 'unknown')

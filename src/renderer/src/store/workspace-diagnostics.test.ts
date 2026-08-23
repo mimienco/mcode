@@ -345,6 +345,39 @@ describe('workspace diagnostics capture', () => {
     expect(run?.runsByTool.command).toBeUndefined()
   })
 
+  it('keeps a generic chain failure after an unrelated check passes', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: 'vitest run && node scripts/check-env.js'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Tests  2 passed (2)\nEnvironment check failed\n'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: 'eslint src'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 0
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run?.runsByTool.eslint).toMatchObject({ status: 'passed' })
+    expect(run?.runsByTool.command).toMatchObject({ status: 'failed' })
+  })
+
   it('retires a generic package-test failure when a concrete runner recovers', () => {
     beginWorkspaceDiagnosticsCommand({
       ptyId: 'pty-tests',
