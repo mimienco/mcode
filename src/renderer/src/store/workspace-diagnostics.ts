@@ -24,7 +24,7 @@ export type WorkspaceDiagnosticsSummary = Omit<WorkspaceDiagnosticsRun, 'tool'> 
   tools: WorkspaceDiagnosticTool[]
   updatedAt: number
   outputPtyId: string | null
-  runsByTool: Partial<Record<WorkspaceDiagnosticTool, WorkspaceDiagnosticsEntry>>
+  runsByTool: Record<string, WorkspaceDiagnosticsEntry | undefined>
 }
 
 type WorkspaceDiagnosticsState = {
@@ -155,7 +155,7 @@ function aggregateRuns(
     .find((entry) => entry.status === 'failed')
   return {
     runsByTool,
-    tools: entries.map((entry) => entry.tool),
+    tools: [...new Set(entries.map((entry) => entry.tool))],
     status: entries.some((entry) => entry.status === 'failed') ? 'failed' : 'passed',
     failed: entries.reduce((sum, entry) => sum + entry.failed, 0),
     passed: entries.reduce((sum, entry) => sum + entry.passed, 0),
@@ -223,8 +223,9 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   useWorkspaceDiagnosticsStore.setState((state) => {
     const prior = state.runsByWorktreeId[workspaceIdentity]?.runsByTool ?? {}
     const runsByTool = { ...prior }
-    if (commandAnalysis && runsByTool.command?.commandIdentity === commandIdentity) {
-      delete runsByTool.command
+    const commandRunKey = commandIdentity ? `command:${commandIdentity}` : null
+    if (commandAnalysis && commandRunKey) {
+      delete runsByTool[commandRunKey]
     }
     const hasUnknownTestRun = entries.some((entry) => entry.tool === 'unknown')
     const hasConcreteTestRun = entries.some((entry) =>
@@ -238,7 +239,11 @@ export function completeWorkspaceDiagnosticsCommand(args: {
       delete runsByTool.unknown
     }
     for (const entry of entries) {
-      runsByTool[entry.tool] = entry
+      const entryKey =
+        entry.tool === 'command' && entry.commandIdentity
+          ? `command:${entry.commandIdentity}`
+          : entry.tool
+      runsByTool[entryKey] = entry
     }
     return {
       runsByWorktreeId: {

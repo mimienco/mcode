@@ -11,6 +11,11 @@ import {
 
 const WORKSPACE_KEY = workspaceDiagnosticsIdentity(undefined, 'wt-1')
 
+function commandRuns() {
+  const summary = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+  return Object.values(summary?.runsByTool ?? {}).filter((entry) => entry?.tool === 'command')
+}
+
 describe('workspace diagnostics capture', () => {
   beforeEach(() => resetWorkspaceDiagnosticsForTest())
 
@@ -279,7 +284,7 @@ describe('workspace diagnostics capture', () => {
     })
 
     const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
-    expect(run?.runsByTool.command).toMatchObject({ status: 'failed', diagnostics: [] })
+    expect(commandRuns()).toEqual([expect.objectContaining({ status: 'failed', diagnostics: [] })])
     expect(run?.runsByTool.eslint).toBeUndefined()
   })
 
@@ -303,7 +308,7 @@ describe('workspace diagnostics capture', () => {
 
     const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
     expect(run?.runsByTool.vitest).toMatchObject({ status: 'passed', passed: 20 })
-    expect(run?.runsByTool.command).toMatchObject({ status: 'failed', diagnostics: [] })
+    expect(commandRuns()).toEqual([expect.objectContaining({ status: 'failed', diagnostics: [] })])
   })
 
   it('clears a generic chain failure after the diagnostic command recovers', () => {
@@ -342,7 +347,7 @@ describe('workspace diagnostics capture', () => {
 
     const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
     expect(run?.runsByTool.vitest).toMatchObject({ status: 'passed', passed: 2 })
-    expect(run?.runsByTool.command).toBeUndefined()
+    expect(commandRuns()).toEqual([])
   })
 
   it('keeps a generic chain failure after an unrelated check passes', () => {
@@ -375,7 +380,37 @@ describe('workspace diagnostics capture', () => {
 
     const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
     expect(run?.runsByTool.eslint).toMatchObject({ status: 'passed' })
-    expect(run?.runsByTool.command).toMatchObject({ status: 'failed' })
+    expect(commandRuns()).toEqual([expect.objectContaining({ status: 'failed' })])
+  })
+
+  it('retains each unresolved pipeline until that same pipeline recovers', () => {
+    const firstCommand = 'vitest run && node scripts/check-env.js'
+    const secondCommand = 'eslint src && node scripts/check-generated.js'
+    for (const command of [firstCommand, secondCommand]) {
+      beginWorkspaceDiagnosticsCommand({ ptyId: 'pty-checks', worktreeId: 'wt-1', command })
+      completeWorkspaceDiagnosticsCommand({
+        ptyId: 'pty-checks',
+        worktreeId: 'wt-1',
+        exitCode: 1
+      })
+    }
+
+    expect(commandRuns()).toHaveLength(2)
+
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: secondCommand
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 0
+    })
+
+    expect(commandRuns()).toEqual([
+      expect.objectContaining({ commandIdentity: firstCommand, status: 'failed' })
+    ])
   })
 
   it('retires a generic package-test failure when a concrete runner recovers', () => {
