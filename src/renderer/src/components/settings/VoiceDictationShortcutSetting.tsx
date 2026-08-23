@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import {
-  findKeybindingConflicts,
+  findKeybindingConflictsForDefinitions,
   formatKeybindingList,
   getEffectiveKeybindingsForAction,
   getKeybindingDefinition,
@@ -23,8 +23,17 @@ import {
 } from './keybinding-override-edits'
 import { ShortcutRecorderButton } from './ShortcutRecorderButton'
 import { translate } from '@/i18n/i18n'
+import { buildPluginCommandKeybindingDefinitions } from '@/lib/plugin-command-keybindings'
+import { useEditablePluginCommands } from '@/store/plugin-panels'
+import {
+  disabledAgentTabActionIds,
+  EMPTY_DISABLED_TUI_AGENTS,
+  groupDefinitions
+} from './shortcut-groups'
 
 const ACTION_ID = 'voice.dictation'
+const CONTROL_ID = 'voice-dictation-shortcut'
+const ERROR_ID = 'voice-dictation-shortcut-error'
 const platform = getShortcutPlatform()
 const definition = getKeybindingDefinition(ACTION_ID)
 if (!definition) {
@@ -41,12 +50,34 @@ export function VoiceDictationShortcutSetting(): React.JSX.Element {
   const keybindingSnapshot = useAppStore((state) => state.keybindingSnapshot)
   const setKeybindingOverride = useAppStore((state) => state.setKeybindingOverride)
   const resetKeybindingOverride = useAppStore((state) => state.resetKeybindingOverride)
+  const disabledTuiAgents = useAppStore(
+    (state) => state.settings?.disabledTuiAgents ?? EMPTY_DISABLED_TUI_AGENTS
+  )
+  const pluginCommands = useEditablePluginCommands()
   const [recording, setRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useMountedRef()
   const effective = getEffectiveKeybindingsForAction(ACTION_ID, platform, keybindings)
   const defaults = getEffectiveKeybindingsForAction(ACTION_ID, platform, {})
   const modified = Object.hasOwn(keybindings, ACTION_ID)
+  const { definitions, definitionsByAction, ignoredConflictActionIds, relevantConflictActionIds } =
+    useMemo(() => {
+      const pluginDefinitions = buildPluginCommandKeybindingDefinitions(pluginCommands)
+      const nextDefinitions = groupDefinitions(disabledTuiAgents, pluginDefinitions).flatMap(
+        (group) => group.items
+      )
+      return {
+        definitions: nextDefinitions,
+        definitionsByAction: new Map(
+          nextDefinitions.map((candidateDefinition) => [
+            candidateDefinition.id,
+            candidateDefinition
+          ])
+        ),
+        ignoredConflictActionIds: disabledAgentTabActionIds(disabledTuiAgents),
+        relevantConflictActionIds: pluginDefinitions.map((pluginDefinition) => pluginDefinition.id)
+      }
+    }, [disabledTuiAgents, pluginCommands])
 
   useEffect(() => {
     window.api.ui.setShortcutRecorderFocused(recording)
@@ -64,13 +95,14 @@ export function VoiceDictationShortcutSetting(): React.JSX.Element {
     const nextOverrides: KeybindingOverrides = matchesDefault
       ? removeBindingOverride(keybindings, ACTION_ID)
       : { ...keybindings, [ACTION_ID]: normalized }
-    const conflict = findKeybindingConflicts(platform, nextOverrides).find((candidate) =>
-      candidate.actionIds.includes(ACTION_ID)
-    )
+    const conflict = findKeybindingConflictsForDefinitions(definitions, platform, nextOverrides, {
+      ignoredActionIds: ignoredConflictActionIds,
+      relevantActionIds: relevantConflictActionIds
+    }).find((candidate) => candidate.actionIds.includes(ACTION_ID))
     if (conflict) {
       const labels = conflict.actionIds
         .filter((actionId) => actionId !== ACTION_ID)
-        .map((actionId) => getKeybindingDefinition(actionId)?.title ?? actionId)
+        .map((actionId) => definitionsByAction.get(actionId)?.title ?? actionId)
         .join(', ')
       setError(`${formatKeybindingList([conflict.binding], platform)} conflicts with ${labels}.`)
       return false
@@ -107,7 +139,7 @@ export function VoiceDictationShortcutSetting(): React.JSX.Element {
   return (
     <div className="flex items-start justify-between gap-4 py-2">
       <div className="min-w-0 space-y-0.5">
-        <Label>
+        <Label htmlFor={CONTROL_ID}>
           {translate('auto.components.settings.VoicePane.dictationShortcut', 'Dictation Shortcut')}
         </Label>
         <p className="text-xs text-muted-foreground">
@@ -117,7 +149,7 @@ export function VoiceDictationShortcutSetting(): React.JSX.Element {
           )}
         </p>
         {error ? (
-          <p className="text-[11px] leading-4 text-destructive" aria-live="polite">
+          <p id={ERROR_ID} className="text-[11px] leading-4 text-destructive" aria-live="polite">
             {error}
           </p>
         ) : null}
@@ -165,6 +197,7 @@ export function VoiceDictationShortcutSetting(): React.JSX.Element {
           </Tooltip>
         ) : null}
         <ShortcutRecorderButton
+          id={CONTROL_ID}
           actionId={ACTION_ID}
           title={actionTitle}
           platform={platform}
@@ -173,6 +206,8 @@ export function VoiceDictationShortcutSetting(): React.JSX.Element {
           bindingIndex={0}
           bindingCount={Math.max(effective.length, 1)}
           recording={recording}
+          ariaInvalid={error !== null}
+          ariaDescribedBy={error ? ERROR_ID : undefined}
           onStartRecording={() => {
             setError(null)
             setRecording(true)

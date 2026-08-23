@@ -1,6 +1,11 @@
 import { useEffect, useRef, type MutableRefObject } from 'react'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { keybindingMatchesAction, type KeybindingOverrides } from '../../../../shared/keybindings'
+import {
+  ModifierDoubleTapDetector,
+  modifierFromKeyEvent,
+  toModifierDoubleTapEvent
+} from '../../../../shared/modifier-double-tap-detector'
 import type { DictationState } from '../../../../shared/speech-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { DictationInsertionTarget } from './dictation-insertion-target'
@@ -113,6 +118,10 @@ export function useHoldDictationGesture({
   stopDictation
 }: HoldDictationGestureOptions): void {
   const releaseMatcherRef = useRef<HoldDictationReleaseMatcher | null>(null)
+  const doubleTapDetectorRef = useRef<ModifierDoubleTapDetector | null>(null)
+  if (!doubleTapDetectorRef.current) {
+    doubleTapDetectorRef.current = new ModifierDoubleTapDetector()
+  }
 
   // Why: hold mode uses renderer-side DOM events instead of the IPC path
   // (before-input-event). Electron suppresses keyUp after preventDefault()
@@ -124,7 +133,28 @@ export function useHoldDictationGesture({
     }
 
     const handleKeyDown = (e: KeyboardEvent): void => {
-      if (keybindingMatchesAction('voice.dictation', e, getShortcutPlatform(), keybindings)) {
+      const releasedModifier = modifierFromKeyEvent(e.code, e.key)
+      const detectedModifier =
+        releasedModifier === null
+          ? null
+          : doubleTapDetectorRef.current?.process(
+              toModifierDoubleTapEvent({
+                type: 'keyDown',
+                code: e.code,
+                key: e.key,
+                shift: e.shiftKey,
+                control: e.ctrlKey,
+                alt: e.altKey,
+                meta: e.metaKey,
+                isAutoRepeat: e.repeat
+              }),
+              Date.now()
+            )
+      if (releasedModifier === null) {
+        doubleTapDetectorRef.current?.reset()
+      }
+      const input = detectedModifier ? { doubleTapModifier: detectedModifier.modifier } : e
+      if (keybindingMatchesAction('voice.dictation', input, getShortcutPlatform(), keybindings)) {
         if (!settings?.voice?.enabled || !settings.voice.sttModel) {
           return
         }
@@ -139,6 +169,18 @@ export function useHoldDictationGesture({
     }
 
     const handleKeyUp = (e: KeyboardEvent): void => {
+      doubleTapDetectorRef.current?.process(
+        toModifierDoubleTapEvent({
+          type: 'keyUp',
+          code: e.code,
+          key: e.key,
+          shift: e.shiftKey,
+          control: e.ctrlKey,
+          alt: e.altKey,
+          meta: e.metaKey
+        }),
+        Date.now()
+      )
       if (!holdGestureActiveRef.current) {
         return
       }
@@ -158,6 +200,7 @@ export function useHoldDictationGesture({
     }
 
     const handleBlur = (): void => {
+      doubleTapDetectorRef.current?.reset()
       if (!holdGestureActiveRef.current) {
         return
       }
@@ -182,6 +225,7 @@ export function useHoldDictationGesture({
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       handleBlur()
+      doubleTapDetectorRef.current?.reset()
       window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('keyup', handleKeyUp, true)
       window.removeEventListener('blur', handleBlur)

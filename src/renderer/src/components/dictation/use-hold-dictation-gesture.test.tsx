@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DictationState } from '../../../../shared/speech-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
+import type { KeybindingOverrides } from '../../../../shared/keybindings'
 import type { DictationInsertionTarget } from './dictation-insertion-target'
 import { useHoldDictationGesture } from './use-hold-dictation-gesture'
 
@@ -18,6 +19,7 @@ let insertionTargetRef: MutableRefObject<DictationInsertionTarget | null>
 let intentionalTargetCancellationRef: MutableRefObject<boolean>
 let startDictation: ReturnType<typeof vi.fn<() => void>>
 let stopDictation: ReturnType<typeof vi.fn<() => void>>
+let keybindings: KeybindingOverrides
 
 function setUserAgent(userAgent: string): void {
   Object.defineProperty(navigator, 'userAgent', {
@@ -42,7 +44,7 @@ function Probe(): null {
     holdGestureActiveRef,
     insertionTargetRef,
     intentionalTargetCancellationRef,
-    keybindings: {},
+    keybindings,
     settings: holdSettings(),
     startDictation,
     stopDictation
@@ -90,6 +92,7 @@ beforeEach(() => {
   intentionalTargetCancellationRef.current = false
   startDictation = vi.fn<() => void>()
   stopDictation = vi.fn<() => void>()
+  keybindings = {}
 })
 
 afterEach(async () => {
@@ -106,6 +109,26 @@ afterEach(async () => {
 })
 
 describe('useHoldDictationGesture', () => {
+  it('starts on a custom modifier double-tap and stops when the second press is released', async () => {
+    keybindings = { 'voice.dictation': ['DoubleTap+Shift'] }
+    await renderProbe()
+
+    act(() => {
+      dispatchKeyDown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true })
+      dispatchKeyUp({ key: 'Shift', code: 'ShiftLeft', shiftKey: false })
+      dispatchKeyDown({ key: 'Shift', code: 'ShiftLeft', shiftKey: true })
+    })
+    dictationStateRef.current = 'listening'
+
+    act(() => {
+      dispatchKeyUp({ key: 'Shift', code: 'ShiftLeft', shiftKey: false })
+    })
+
+    expect(startDictation).toHaveBeenCalledTimes(1)
+    expect(stopDictation).toHaveBeenCalledTimes(1)
+    expect(holdGestureActiveRef.current).toBe(false)
+  })
+
   it('stops when the shortcut key is released after the modifier', async () => {
     await renderProbe()
 

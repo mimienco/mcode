@@ -10,9 +10,10 @@ import { getDefaultVoiceSettings } from '../../../../shared/constants'
 import { handleVoiceDictationToggle, VoicePane } from './VoicePane'
 import { TooltipProvider } from '../ui/tooltip'
 
-const { useAppStoreMock, useShortcutLabelMock } = vi.hoisted(() => ({
+const { useAppStoreMock, useShortcutLabelMock, useEditablePluginCommandsMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
-  useShortcutLabelMock: vi.fn()
+  useShortcutLabelMock: vi.fn(),
+  useEditablePluginCommandsMock: vi.fn()
 }))
 
 vi.mock('@/store', () => ({ useAppStore: useAppStoreMock }))
@@ -20,6 +21,10 @@ vi.mock('@/store', () => ({ useAppStore: useAppStoreMock }))
 vi.mock('@/hooks/useShortcutLabel', () => ({
   useShortcutLabel: useShortcutLabelMock,
   useOptionalShortcutLabel: useShortcutLabelMock
+}))
+
+vi.mock('@/store/plugin-panels', () => ({
+  useEditablePluginCommands: useEditablePluginCommandsMock
 }))
 
 vi.mock('sonner', () => ({
@@ -142,6 +147,8 @@ describe('VoicePane', () => {
   beforeEach(() => {
     useAppStoreMock.mockReset()
     useShortcutLabelMock.mockReset()
+    useEditablePluginCommandsMock.mockReset()
+    useEditablePluginCommandsMock.mockReturnValue([])
   })
 
   it('fetches speech data once across re-renders when voice settings are absent', async () => {
@@ -225,6 +232,89 @@ describe('VoicePane', () => {
 
     expect(setKeybindingOverride).not.toHaveBeenCalled()
     expect(container.textContent).toContain('conflicts with Toggle Sidebar')
+    expect(shortcut?.getAttribute('aria-invalid')).toBe('true')
+    expect(shortcut?.getAttribute('aria-describedby')).toBe('voice-dictation-shortcut-error')
+    root.unmount()
+  })
+
+  it('blocks dictation shortcuts that conflict with an enabled plugin command', async () => {
+    useEditablePluginCommandsMock.mockReturnValue([
+      {
+        id: 'run',
+        title: 'Run Plugin',
+        context: 'global',
+        keybindings: [{ key: 'Mod+Alt+U', when: 'global' }],
+        pluginKey: 'test-plugin',
+        pluginName: 'Test Plugin'
+      }
+    ])
+    const { container, root, setKeybindingOverride } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings: vi.fn()
+    })
+    const shortcut = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Change shortcut for Dictation"]'
+    )
+
+    await act(async () => {
+      shortcut?.click()
+    })
+    await act(async () => {
+      shortcut?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'U',
+          code: 'KeyU',
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true
+        })
+      )
+      await Promise.resolve()
+    })
+
+    expect(setKeybindingOverride).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('conflicts with Run Plugin — Test Plugin')
+    root.unmount()
+  })
+
+  it('blocks the default dictation shortcut when it conflicts with a plugin default', async () => {
+    useEditablePluginCommandsMock.mockReturnValue([
+      {
+        id: 'run',
+        title: 'Run Plugin',
+        context: 'global',
+        keybindings: [{ key: 'Mod+E', when: 'global' }],
+        pluginKey: 'test-plugin',
+        pluginName: 'Test Plugin'
+      }
+    ])
+    const { container, root, setKeybindingOverride } = await renderVoicePane({
+      voiceEnabled: true,
+      markFeatureTipsSeen: vi.fn(),
+      updateSettings: vi.fn()
+    })
+    const shortcut = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Change shortcut for Dictation"]'
+    )
+
+    await act(async () => {
+      shortcut?.click()
+    })
+    await act(async () => {
+      shortcut?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'E',
+          code: 'KeyE',
+          ctrlKey: true,
+          bubbles: true
+        })
+      )
+      await Promise.resolve()
+    })
+
+    expect(setKeybindingOverride).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('conflicts with Run Plugin — Test Plugin')
     root.unmount()
   })
 

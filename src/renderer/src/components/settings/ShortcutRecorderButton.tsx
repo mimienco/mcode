@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { translate } from '@/i18n/i18n'
 
 type ShortcutRecorderButtonProps = {
+  id?: string
   actionId: KeybindingActionId
   title: string
   platform: NodeJS.Platform
@@ -25,6 +26,8 @@ type ShortcutRecorderButtonProps = {
   bindingIndex: number
   bindingCount: number
   recording: boolean
+  ariaInvalid?: boolean
+  ariaDescribedBy?: string
   isAppendSlot?: boolean
   onStartRecording: (actionId: KeybindingActionId, index: number) => void
   onCancelRecording: () => void
@@ -43,6 +46,7 @@ function toDigitRangeKeys(keys: string[]): string[] {
 }
 
 export function ShortcutRecorderButton({
+  id,
   actionId,
   title,
   platform,
@@ -51,6 +55,8 @@ export function ShortcutRecorderButton({
   bindingIndex,
   bindingCount,
   recording,
+  ariaInvalid,
+  ariaDescribedBy,
   isAppendSlot = false,
   onStartRecording,
   onCancelRecording,
@@ -188,10 +194,13 @@ export function ShortcutRecorderButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <button
+          id={id}
           ref={recordButtonRef}
           type="button"
           aria-label={recorderLabel}
           aria-pressed={recording}
+          aria-invalid={ariaInvalid || undefined}
+          aria-describedby={ariaDescribedBy}
           data-shortcut-recorder=""
           data-shortcut-recorder-active={recording ? '' : undefined}
           onClick={() => {
