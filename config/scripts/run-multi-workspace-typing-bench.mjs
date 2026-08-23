@@ -51,7 +51,8 @@ const child = spawn(
     '--workers=1',
     ...passthroughArgs
   ],
-  { stdio: 'inherit', env }
+  // Why: Node >=18.20 refuses .cmd/.bat spawns without an explicit shell (EINVAL).
+  { stdio: 'inherit', env, shell: process.platform === 'win32' }
 )
 
 child.on('exit', (code, signal) => {
