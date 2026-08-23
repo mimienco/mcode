@@ -218,6 +218,7 @@ export function WorktreeCardHeader({
         {!affiliateListMode && !titleRenaming ? (
           <WorktreeDiagnosticsBadge
             worktreeId={worktree.id}
+            hostId={worktree.hostId}
             onPointerDown={stopQuickActionPointerPropagation}
           />
         ) : null}

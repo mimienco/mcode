@@ -10,6 +10,7 @@ describe('WorkspaceDiagnosticsList', () => {
         run={{
           tools: ['vitest'],
           runsByTool: {},
+          outputPtyId: 'pty-tests',
           status: 'failed',
           failed: 1,
           passed: 19,
@@ -50,6 +51,7 @@ describe('WorkspaceDiagnosticsList', () => {
         run={{
           tools: ['vitest'],
           runsByTool: {},
+          outputPtyId: 'pty-tests',
           status: 'failed',
           failed: 0,
           passed: 2,
@@ -59,11 +61,13 @@ describe('WorkspaceDiagnosticsList', () => {
         }}
         onClear={() => {}}
         onOpenDiagnostic={() => {}}
+        onShowOutput={() => {}}
       />
     )
 
     expect(markup).toContain('Check failed')
     expect(markup).toContain('without a source location')
+    expect(markup).toContain('Show output')
     expect(markup).not.toContain('All 2 tests passed')
   })
 })

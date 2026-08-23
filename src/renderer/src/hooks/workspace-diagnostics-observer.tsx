@@ -5,10 +5,13 @@ import {
   type TerminalCommandFinishedEventDetail
 } from '@/hooks/terminal-command-finished-event'
 import { subscribeTerminalOutputObserver } from '@/lib/terminal-output-observers'
+import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { useAppStore } from '@/store'
 import {
   captureWorkspaceTerminalOutput,
-  completeWorkspaceDiagnosticsCommand
+  completeWorkspaceDiagnosticsCommand,
+  pruneWorkspaceDiagnostics,
+  workspaceDiagnosticsIdentity
 } from '@/store/workspace-diagnostics'
 
 type TerminalOwnershipState = {
@@ -77,23 +80,50 @@ export function WorkspaceDiagnosticsObserver(): null {
     const unsubscribeOutput = subscribeTerminalOutputObserver(({ ptyId, data }) => {
       const worktreeId = findCachedWorktreeIdForPty(useAppStore.getState(), ptyId)
       if (worktreeId) {
-        captureWorkspaceTerminalOutput({ ptyId, worktreeId, data })
+        const state = useAppStore.getState()
+        captureWorkspaceTerminalOutput({
+          ptyId,
+          worktreeId,
+          hostId: getExecutionHostIdForWorktree(state, worktreeId),
+          data
+        })
       }
     })
     const handleCommandFinished = (event: Event): void => {
       const detail = (event as CustomEvent<TerminalCommandFinishedEventDetail>).detail
       if (detail?.worktreeId && detail.ptyId) {
+        const state = useAppStore.getState()
         completeWorkspaceDiagnosticsCommand({
           ptyId: detail.ptyId,
           worktreeId: detail.worktreeId,
+          hostId: getExecutionHostIdForWorktree(state, detail.worktreeId),
           ...(detail.cwd ? { cwd: detail.cwd } : {}),
           exitCode: detail.exitCode
         })
       }
     }
+    let priorWorktreesByRepo = useAppStore.getState().worktreesByRepo
+    const unsubscribeWorktrees = useAppStore.subscribe((state) => {
+      if (state.worktreesByRepo === priorWorktreesByRepo) {
+        return
+      }
+      priorWorktreesByRepo = state.worktreesByRepo
+      const validIdentities = new Set(
+        state
+          .allWorktrees()
+          .map((worktree) =>
+            workspaceDiagnosticsIdentity(
+              worktree.hostId ?? getExecutionHostIdForWorktree(state, worktree.id),
+              worktree.id
+            )
+          )
+      )
+      pruneWorkspaceDiagnostics(validIdentities)
+    })
     window.addEventListener(MCODE_TERMINAL_COMMAND_FINISHED_EVENT, handleCommandFinished)
     return () => {
       unsubscribeOutput()
+      unsubscribeWorktrees()
       window.removeEventListener(MCODE_TERMINAL_COMMAND_FINISHED_EVENT, handleCommandFinished)
     }
   }, [])

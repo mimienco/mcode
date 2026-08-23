@@ -6,11 +6,15 @@ import { translate } from '@/i18n/i18n'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { joinPath } from '@/lib/path'
 import { resolveTerminalFileLinkText } from '@/lib/terminal-links'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import {
+  getExecutionHostIdForWorktree,
+  getRuntimeEnvironmentIdForWorktree
+} from '@/lib/worktree-runtime-owner'
 import { useAppStore } from '@/store'
 import { useActiveWorktree } from '@/store/selectors'
 import {
   useWorkspaceDiagnosticsStore,
+  workspaceDiagnosticsIdentity,
   type WorkspaceDiagnosticsSummary
 } from '@/store/workspace-diagnostics'
 import type {
@@ -18,6 +22,8 @@ import type {
   WorkspaceDiagnosticTool
 } from '@/lib/workspace-diagnostics-parser'
 import { openDetectedFilePath } from '../terminal-pane/terminal-file-open-routing'
+import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
+import { resolveTerminalTabPtyOwnership } from '@/lib/terminal-tab-for-pty-id'
 
 function toolLabel(tool: WorkspaceDiagnosticTool): string {
   const labels: Record<WorkspaceDiagnosticTool, string> = {
@@ -62,11 +68,13 @@ function diagnosticLocationLabel(diagnostic: WorkspaceDiagnostic): string {
 export function WorkspaceDiagnosticsList({
   run,
   onClear,
-  onOpenDiagnostic
+  onOpenDiagnostic,
+  onShowOutput
 }: {
   run: WorkspaceDiagnosticsSummary
   onClear: () => void
   onOpenDiagnostic: (diagnostic: WorkspaceDiagnostic) => void
+  onShowOutput?: () => void
 }): React.JSX.Element {
   const warningCount = run.diagnostics.filter((item) => item.severity === 'warning').length
   const groups = groupDiagnosticsByFile(run.diagnostics)
@@ -82,7 +90,11 @@ export function WorkspaceDiagnosticsList({
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+          <div
+            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <span className="font-semibold text-foreground">
               {run.failed > 0
                 ? translate(
@@ -166,6 +178,17 @@ export function WorkspaceDiagnosticsList({
                   'The latest observed check completed without errors.'
                 )}
           </p>
+          {run.status === 'failed' && onShowOutput ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={onShowOutput}
+            >
+              {translate('auto.components.right.sidebar.problems.showOutput', 'Show output')}
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto py-1">
@@ -192,7 +215,7 @@ export function WorkspaceDiagnosticsList({
                     <span className="block truncate text-xs font-medium text-foreground">
                       {diagnostic.title}
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                       {diagnostic.message}
                     </span>
                     <span className="mt-1 block font-mono text-[10px] text-muted-foreground/80 group-hover:text-foreground/70">
@@ -222,8 +245,12 @@ function resolveDiagnosticFilePath(filePath: string, worktreePath: string): stri
 
 export default function WorkspaceProblemsPanel(): React.JSX.Element {
   const worktree = useActiveWorktree()
+  const activeHostId = useAppStore((state) => getExecutionHostIdForWorktree(state, worktree?.id))
+  const workspaceIdentity = worktree
+    ? workspaceDiagnosticsIdentity(worktree.hostId ?? activeHostId, worktree.id)
+    : null
   const run = useWorkspaceDiagnosticsStore((state) =>
-    worktree ? (state.runsByWorktreeId[worktree.id] ?? null) : null
+    workspaceIdentity ? (state.runsByWorktreeId[workspaceIdentity] ?? null) : null
   )
   const clearWorktree = useWorkspaceDiagnosticsStore((state) => state.clearWorktree)
 
@@ -254,6 +281,26 @@ export default function WorkspaceProblemsPanel(): React.JSX.Element {
     [worktree]
   )
 
+  const showOutput = useCallback((): void => {
+    if (!worktree || !run?.outputPtyId) {
+      return
+    }
+    const state = useAppStore.getState()
+    const ownership = resolveTerminalTabPtyOwnership(state, worktree.id, run.outputPtyId)
+    if (ownership.kind !== 'owned') {
+      return
+    }
+    const layout = state.terminalLayoutsByTabId[ownership.tabId]
+    const leafId = Object.entries(layout?.ptyIdsByLeafId ?? {}).find(
+      ([, ptyId]) => ptyId === run.outputPtyId
+    )?.[0]
+    state.setRightSidebarOpen(false)
+    activateTabAndFocusPane(ownership.tabId, leafId ?? layout?.activeLeafId ?? null, {
+      flashFocusedPane: true,
+      scrollToBottomIfOutputSinceLastView: true
+    })
+  }, [run?.outputPtyId, worktree])
+
   if (!worktree || !run) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
@@ -274,8 +321,9 @@ export default function WorkspaceProblemsPanel(): React.JSX.Element {
   return (
     <WorkspaceDiagnosticsList
       run={run}
-      onClear={() => clearWorktree(worktree.id)}
+      onClear={() => clearWorktree(worktree.id, worktree.hostId ?? activeHostId)}
       onOpenDiagnostic={openDiagnostic}
+      onShowOutput={run.outputPtyId ? showOutput : undefined}
     />
   )
 }

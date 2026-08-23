@@ -20,18 +20,18 @@ export type {
   WorkspaceDiagnosticTool
 } from './workspace-diagnostics-parser-core'
 
-export function detectWorkspaceDiagnosticTool(output: string): WorkspaceDiagnosticTool | null {
-  const clean = cleanDiagnosticsOutput(output)
-  if (/\bvitest\b/i.test(clean) || /^\s*Tests\s+.+\|/m.test(clean)) {
+export function detectWorkspaceDiagnosticTool(command: string): WorkspaceDiagnosticTool | null {
+  const clean = cleanDiagnosticsOutput(command).trim()
+  if (/\bvitest\b/i.test(clean)) {
     return 'vitest'
   }
-  if (/\bjest\b/i.test(clean) || /^\s*Tests:\s+.+\btotal\b/im.test(clean)) {
+  if (/\bjest\b/i.test(clean)) {
     return 'jest'
   }
-  if (/\bpytest\b/i.test(clean) || /^=+\s+.+\s+in\s+[\d.]+s?\s*=*$/im.test(clean)) {
+  if (/\bpytest\b/i.test(clean)) {
     return 'pytest'
   }
-  if (/\b(?:tsc|typescript)\b/i.test(clean) || /\bTS\d+:/.test(clean)) {
+  if (/\b(?:tsc|typescript)\b/i.test(clean)) {
     return 'typescript'
   }
   if (/\beslint\b/i.test(clean)) {
@@ -53,13 +53,20 @@ export function parseWorkspaceDiagnosticsOutput(
   output: string,
   exitCode: number | null
 ): WorkspaceDiagnosticsRun | null {
+  return parseWorkspaceDiagnosticsRunsOutput(output, exitCode)[0] ?? null
+}
+
+export function parseWorkspaceDiagnosticsRunsOutput(
+  output: string,
+  exitCode: number | null
+): WorkspaceDiagnosticsRun[] {
   const lines = cleanDiagnosticsOutput(output).split('\n')
-  return (
-    parsePytestDiagnostics(lines, exitCode) ??
-    parseJestDiagnostics(lines, exitCode) ??
-    parseTypeScriptDiagnostics(lines, exitCode) ??
-    parseRuffDiagnostics(lines) ??
-    parseEslintDiagnostics(lines, exitCode) ??
+  return [
+    parsePytestDiagnostics(lines, exitCode),
+    parseJestDiagnostics(lines, exitCode),
+    parseTypeScriptDiagnostics(lines, exitCode),
+    parseRuffDiagnostics(lines),
+    parseEslintDiagnostics(lines, exitCode),
     parseVitestDiagnostics(lines, exitCode)
-  )
+  ].filter((run): run is WorkspaceDiagnosticsRun => run !== null)
 }

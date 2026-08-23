@@ -12,6 +12,7 @@ import { blocksCodexPaneInput } from '../codex-restart-notice-state'
 import { resolveLiveAgentStatusConnectionRouting } from '@/lib/agent-status-connection-ownership'
 import { scheduleRuntimeGraphSync } from '@/runtime/sync-runtime-graph'
 import { useAppStore } from '@/store'
+import { beginWorkspaceDiagnosticsCommand } from '@/store/workspace-diagnostics'
 import { getWorktreeMapFromState } from '@/store/selectors'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -1410,11 +1411,22 @@ export function connectPanePty(
   }
   const rememberCommandInferredPaneAgent = (): void => {
     const commandLine = pendingShellCommandLine.trim()
+    const ptyId = transport.getPtyId()
+    const commandCwd = deps.getCwd?.() ?? deps.cwd
+    const state = useAppStore.getState()
+    if (commandLine && ptyId) {
+      beginWorkspaceDiagnosticsCommand({
+        ptyId,
+        worktreeId: deps.worktreeId,
+        hostId: getExecutionHostIdForWorktree(state, deps.worktreeId),
+        command: commandLine,
+        ...(commandCwd ? { cwd: commandCwd } : {})
+      })
+    }
     resetPendingShellCommandLine()
     const candidateAgent = commandLine
       ? (recognizeAgentProcessFromCommandLine(commandLine)?.agent ?? null)
       : null
-    const state = useAppStore.getState()
     const registeredLaunchAgent = state.agentLaunchConfigByPaneKey[cacheKey]?.identity.agentType
     // Why: input inside a live TUI can spell another agent command; process or
     // pane-scoped launch ownership is stronger than typed shell inference.

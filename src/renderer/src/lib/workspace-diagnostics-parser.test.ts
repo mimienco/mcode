@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseWorkspaceDiagnosticsOutput } from './workspace-diagnostics-parser'
+import {
+  parseWorkspaceDiagnosticsOutput,
+  parseWorkspaceDiagnosticsRunsOutput
+} from './workspace-diagnostics-parser'
 
 describe('parseWorkspaceDiagnosticsOutput', () => {
   it('turns Vitest failures and their source frames into clickable test diagnostics', () => {
@@ -129,6 +132,24 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
     expect(run?.diagnostics[0]?.title).toBe('test_token[expired token]')
   })
 
+  it('turns pytest collection errors into source-linked diagnostics', () => {
+    const run = parseWorkspaceDiagnosticsOutput(
+      [
+        'ERROR collecting tests/test_config.py',
+        'tests/test_config.py:7: in <module>',
+        '=== 1 error in 0.12s ==='
+      ].join('\n'),
+      2
+    )
+
+    expect(run).toMatchObject({ tool: 'pytest', status: 'failed', failed: 1 })
+    expect(run?.diagnostics[0]).toMatchObject({
+      filePath: 'tests/test_config.py',
+      line: 7,
+      title: 'Collection error'
+    })
+  })
+
   it('collects TypeScript compiler errors even when the command has no summary', () => {
     const run = parseWorkspaceDiagnosticsOutput(
       [
@@ -218,5 +239,18 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
     expect(
       parseWorkspaceDiagnosticsOutput('================ 12 passed in 0.18s ================', 0)
     ).toMatchObject({ tool: 'pytest', status: 'passed', failed: 0, passed: 12, total: 12 })
+  })
+
+  it('returns every adapter represented in a combined check command', () => {
+    const runs = parseWorkspaceDiagnosticsRunsOutput(
+      [
+        'src/domain/order.ts:27:9 - error TS2322: Type mismatch.',
+        'src/ui/order.ts',
+        '  18:5  error  Unexpected any  @typescript-eslint/no-explicit-any'
+      ].join('\n'),
+      1
+    )
+
+    expect(runs.map((run) => run.tool)).toEqual(['typescript', 'eslint'])
   })
 })

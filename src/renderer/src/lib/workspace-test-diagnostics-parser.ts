@@ -13,6 +13,8 @@ const JEST_FRAME_WITH_CONTEXT = /^\s*at\s+.*?\((.+?):(\d+):(\d+)\)\s*$/
 const JEST_FRAME_DIRECT = /^\s*at\s+(.+?):(\d+):(\d+)\s*$/
 const JEST_TESTS = /^\s*Tests:\s+(.+)$/i
 const PYTEST_FAILURE = /^FAILED\s+(.+?)::(.+?)\s+-\s+(.+)$/
+const PYTEST_COLLECTION_ERROR = /^ERROR collecting\s+(.+?)(?:\s+-\s+(.+))?$/
+const PYTEST_TEST_ERROR = /^ERROR\s+(.+?)::(.+?)(?:\s+-\s+(.+))?$/
 const PYTEST_LOCATION = /^(.+?):(\d+):\s*(.+)$/
 const PYTEST_SUMMARY = /={2,}\s*(.+?)\s+in\s+[\d.]+s?\s*=*\s*$/i
 
@@ -33,12 +35,7 @@ export function parsePytestDiagnostics(
   })
   const consumedLocations = new Set<number>()
   const diagnostics: WorkspaceDiagnostic[] = []
-  for (const line of lines) {
-    const failure = line.match(PYTEST_FAILURE)
-    if (!failure) {
-      continue
-    }
-    const filePath = failure[1].trim()
+  const addDiagnostic = (filePath: string, title: string, message: string): void => {
     const locationIndex = locations.findIndex(
       (candidate, index) => !consumedLocations.has(index) && candidate.filePath === filePath
     )
@@ -53,11 +50,32 @@ export function parsePytestDiagnostics(
         filePath,
         line: location?.line ?? 1,
         column: null,
-        title: failure[2].trim(),
-        message: failure[3].trim(),
+        title,
+        message,
         code: null
       })
     )
+  }
+  for (const line of lines) {
+    const failure = line.match(PYTEST_FAILURE)
+    if (failure) {
+      addDiagnostic(failure[1].trim(), failure[2].trim(), failure[3].trim())
+      continue
+    }
+    const collectionError = line.match(PYTEST_COLLECTION_ERROR)
+    if (collectionError) {
+      const filePath = collectionError[1].trim()
+      addDiagnostic(filePath, 'Collection error', collectionError[2]?.trim() || 'Collection failed')
+      continue
+    }
+    const testError = line.match(PYTEST_TEST_ERROR)
+    if (testError) {
+      addDiagnostic(
+        testError[1].trim(),
+        testError[2].trim(),
+        testError[3]?.trim() || 'Test setup or teardown failed'
+      )
+    }
   }
   const failed =
     countDiagnosticsSummaryValue(summary, 'failed') +
