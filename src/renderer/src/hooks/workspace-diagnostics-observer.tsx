@@ -51,10 +51,7 @@ function buildTerminalOwnershipIndex(state: TerminalOwnershipState): Map<string,
   return worktreeIdByPtyId
 }
 
-function findCachedWorktreeIdForPty(
-  state: TerminalOwnershipState,
-  ptyId: string
-): string | null {
+function findCachedWorktreeIdForPty(state: TerminalOwnershipState, ptyId: string): string | null {
   if (
     !ownershipCache ||
     ownershipCache.ptyIdsByTabId !== state.ptyIdsByTabId ||
@@ -71,10 +68,7 @@ function findCachedWorktreeIdForPty(
   return ownershipCache.worktreeIdByPtyId.get(ptyId) ?? null
 }
 
-export function findWorktreeIdForPty(
-  state: TerminalOwnershipState,
-  ptyId: string
-): string | null {
+export function findWorktreeIdForPty(state: TerminalOwnershipState, ptyId: string): string | null {
   return buildTerminalOwnershipIndex(state).get(ptyId) ?? null
 }
 
@@ -88,9 +82,11 @@ export function WorkspaceDiagnosticsObserver(): null {
     })
     const handleCommandFinished = (event: Event): void => {
       const detail = (event as CustomEvent<TerminalCommandFinishedEventDetail>).detail
-      if (detail?.worktreeId) {
+      if (detail?.worktreeId && detail.ptyId) {
         completeWorkspaceDiagnosticsCommand({
+          ptyId: detail.ptyId,
           worktreeId: detail.worktreeId,
+          ...(detail.cwd ? { cwd: detail.cwd } : {}),
           exitCode: detail.exitCode
         })
       }

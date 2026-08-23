@@ -1355,6 +1355,7 @@ export function useTerminalPaneLifecycle({
         )
         const panePtyBinding = connectPanePty(pane, manager, {
           ...ptyDeps,
+          getCwd: () => getPaneLinkCwd(pane.id),
           ...(onQueuedStartupSpawned ? { onQueuedStartupSpawned } : {}),
           // Why: spread order matters — spawnHints.cwd (source pane) must override ptyDeps.cwd (worktree root) so splits boot in the live cwd.
           ...(spawnHints?.cwd ? { cwd: spawnHints.cwd } : {}),

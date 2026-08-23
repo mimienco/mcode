@@ -63,6 +63,24 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
     })
   })
 
+  it('uses one workspace test frame per Jest failure and accepts skipped summaries', () => {
+    const run = parseWorkspaceDiagnosticsOutput(
+      [
+        '  ● user service › rejects duplicate email',
+        '    duplicate email',
+        '      at validate (src/user/validate.ts:12:3)',
+        '      at src/user/user.test.ts:81:13',
+        '      at run (node_modules/jest/index.js:4:2)',
+        'Tests: 1 failed, 2 skipped, 8 passed, 11 total'
+      ].join('\n'),
+      1
+    )
+
+    expect(run).toMatchObject({ tool: 'jest', failed: 1, passed: 8, total: 11 })
+    expect(run?.diagnostics).toHaveLength(1)
+    expect(run?.diagnostics[0]).toMatchObject({ filePath: 'src/user/user.test.ts', line: 81 })
+  })
+
   it('parses pytest short summaries into one failure per test', () => {
     const run = parseWorkspaceDiagnosticsOutput(
       [
@@ -76,7 +94,13 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
       1
     )
 
-    expect(run).toMatchObject({ tool: 'pytest', status: 'failed', failed: 1, passed: 11, total: 12 })
+    expect(run).toMatchObject({
+      tool: 'pytest',
+      status: 'failed',
+      failed: 1,
+      passed: 11,
+      total: 12
+    })
     expect(run?.diagnostics).toEqual([
       expect.objectContaining({
         filePath: 'tests/test_auth.py',
@@ -86,6 +110,23 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
         message: 'AssertionError: token accepted'
       })
     ])
+  })
+
+  it('handles pytest summary extras, parameter IDs with spaces, and repeated files', () => {
+    const run = parseWorkspaceDiagnosticsOutput(
+      [
+        'tests/test_auth.py:14: AssertionError',
+        'tests/test_auth.py:29: AssertionError',
+        'FAILED tests/test_auth.py::test_token[expired token] - AssertionError: first',
+        'FAILED tests/test_auth.py::test_token[fresh token] - AssertionError: second',
+        '=== 2 failed, 11 passed, 1 skipped, 2 warnings in 0.42s ==='
+      ].join('\n'),
+      1
+    )
+
+    expect(run).toMatchObject({ tool: 'pytest', failed: 2, passed: 11, total: 13 })
+    expect(run?.diagnostics.map((diagnostic) => diagnostic.line)).toEqual([14, 29])
+    expect(run?.diagnostics[0]?.title).toBe('test_token[expired token]')
   })
 
   it('collects TypeScript compiler errors even when the command has no summary', () => {
@@ -102,6 +143,20 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
       expect.objectContaining({ line: 27, column: 9, severity: 'error', code: 'TS2322' }),
       expect.objectContaining({ line: 44, column: 3, severity: 'warning', code: 'TS6133' })
     ])
+  })
+
+  it('accepts TypeScript pretty terminal locations', () => {
+    const run = parseWorkspaceDiagnosticsOutput(
+      "src/domain/order.ts:27:9 - error TS2322: Type 'string' is not assignable.",
+      2
+    )
+
+    expect(run?.diagnostics[0]).toMatchObject({
+      filePath: 'src/domain/order.ts',
+      line: 27,
+      column: 9,
+      code: 'TS2322'
+    })
   })
 
   it('normalizes ESLint and Ruff locations into lint diagnostics', () => {
@@ -129,6 +184,22 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
     })
     expect(ruff).toMatchObject({ tool: 'ruff', failed: 1, total: 1 })
     expect(ruff?.diagnostics[0]).toMatchObject({
+      filePath: 'src/api/session.py',
+      line: 12,
+      column: 5,
+      code: 'F401'
+    })
+  })
+
+  it('accepts Ruff full diagnostics with a following source location', () => {
+    const run = parseWorkspaceDiagnosticsOutput(
+      ['F401 [*] `typing.Any` imported but unused', ' --> src/api/session.py:12:5', '  |'].join(
+        '\n'
+      ),
+      1
+    )
+
+    expect(run?.diagnostics[0]).toMatchObject({
       filePath: 'src/api/session.py',
       line: 12,
       column: 5,

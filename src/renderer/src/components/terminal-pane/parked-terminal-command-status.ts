@@ -157,7 +157,18 @@ export function createParkedTerminalCommandStatusPolicy(options: {
       }
       // Why: the finished command may have moved HEAD or the index (an agent running
       // `git checkout` in a parked worktree); nudge git UI now instead of waiting for a poll.
-      dispatchTerminalCommandFinishedEvent(worktreeId, bestEffortExitCode)
+      const state = useAppStore.getState()
+      const tab = (state.tabsByWorktree[worktreeId] ?? []).find((entry) => entry.id === tabId)
+      const worktreePath =
+        typeof state.allWorktrees === 'function'
+          ? state.allWorktrees().find((entry) => entry.id === worktreeId)?.path
+          : undefined
+      dispatchTerminalCommandFinishedEvent(
+        worktreeId,
+        ptyId,
+        tab?.startupCwd ?? worktreePath,
+        bestEffortExitCode
+      )
       // Why: drop the same-turn status row only for SSH PTYs — exact parity with the mounted
       // path, whose foreground tracker refuses SSH ids and drops un-probed. Local PTYs need
       // pty-connection's process-confirm ladder to tell a leaked nested-shell 133;D from a
@@ -165,7 +176,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
       if (parseAppSshPtyId(ptyId) === null) {
         return
       }
-      dropCommandFinishedStatusIfSameTurn(useAppStore.getState().agentStatusByPaneKey[paneKey])
+      dropCommandFinishedStatusIfSameTurn(state.agentStatusByPaneKey[paneKey])
     },
 
     // Port of pty-connection's seedCommandCodeOutputWorkingStatus (store-level only).

@@ -8,7 +8,8 @@ describe('WorkspaceDiagnosticsList', () => {
     const markup = renderToStaticMarkup(
       <WorkspaceDiagnosticsList
         run={{
-          tool: 'vitest',
+          tools: ['vitest'],
+          runsByTool: {},
           status: 'failed',
           failed: 1,
           passed: 19,
@@ -37,6 +38,9 @@ describe('WorkspaceDiagnosticsList', () => {
     expect(markup).toContain('19 passed')
     expect(markup).toContain('cart totals &gt; applies discounts')
     expect(markup).toContain('Line 142:7')
+    expect(markup).toContain(
+      'cart totals &gt; applies discounts. expected 12 to be 10. src/cart/cart.test.ts, Line 142:7'
+    )
     expect(markup).toContain('<button')
   })
 
@@ -44,7 +48,8 @@ describe('WorkspaceDiagnosticsList', () => {
     const markup = renderToStaticMarkup(
       <WorkspaceDiagnosticsList
         run={{
-          tool: 'vitest',
+          tools: ['vitest'],
+          runsByTool: {},
           status: 'failed',
           failed: 0,
           passed: 2,

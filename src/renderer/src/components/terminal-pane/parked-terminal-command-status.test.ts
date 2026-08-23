@@ -366,7 +366,12 @@ describe('createParkedTerminalCommandStatusPolicy', () => {
     ssh.dispose()
 
     expect(dispatchTerminalCommandFinishedEvent).toHaveBeenCalledTimes(2)
-    expect(dispatchTerminalCommandFinishedEvent).toHaveBeenCalledWith(WORKTREE_ID, 0)
+    expect(dispatchTerminalCommandFinishedEvent).toHaveBeenCalledWith(
+      WORKTREE_ID,
+      expect.any(String),
+      undefined,
+      0
+    )
   })
 
   it('drops a same-turn status row on command finished for SSH PTYs only', async () => {

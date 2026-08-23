@@ -21,6 +21,8 @@ export type PtyConnectionDeps = {
   tabId: string
   worktreeId: string
   cwd?: string
+  /** Latest shell-reported cwd for resolving diagnostic paths from this pane. */
+  getCwd?: () => string
   startup?: {
     command: string
     /** Renderer-delivered startup input for callers that need xterm paste

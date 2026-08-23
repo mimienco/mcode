@@ -2195,7 +2195,12 @@ export function connectPanePty(
     const shouldDeferStatusDrop = paneForegroundAgentTracker.onCommandFinished()
     // Why: the finished command may have moved HEAD or the index (e.g.
     // `git checkout`); nudge git UI now instead of waiting for a poll.
-    dispatchTerminalCommandFinishedEvent(deps.worktreeId, bestEffortExitCode)
+    dispatchTerminalCommandFinishedEvent(
+      deps.worktreeId,
+      transport.getPtyId(),
+      deps.getCwd?.() ?? deps.cwd,
+      bestEffortExitCode
+    )
     const state = useAppStore.getState()
     const entry = state.agentStatusByPaneKey[cacheKey]
     const inferenceResult = flushPendingInterruptInference()

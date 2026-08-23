@@ -11,13 +11,16 @@ import { useAppStore } from '@/store'
 import { useActiveWorktree } from '@/store/selectors'
 import {
   useWorkspaceDiagnosticsStore,
-  type WorkspaceDiagnosticsEntry
+  type WorkspaceDiagnosticsSummary
 } from '@/store/workspace-diagnostics'
-import type { WorkspaceDiagnostic } from '@/lib/workspace-diagnostics-parser'
+import type {
+  WorkspaceDiagnostic,
+  WorkspaceDiagnosticTool
+} from '@/lib/workspace-diagnostics-parser'
 import { openDetectedFilePath } from '../terminal-pane/terminal-file-open-routing'
 
-function toolLabel(tool: WorkspaceDiagnosticsEntry['tool']): string {
-  const labels: Record<WorkspaceDiagnosticsEntry['tool'], string> = {
+function toolLabel(tool: WorkspaceDiagnosticTool): string {
+  const labels: Record<WorkspaceDiagnosticTool, string> = {
     vitest: 'Vitest',
     jest: 'Jest',
     pytest: 'pytest',
@@ -44,12 +47,24 @@ function groupDiagnosticsByFile(
   return Array.from(groups.entries())
 }
 
+function diagnosticLocationLabel(diagnostic: WorkspaceDiagnostic): string {
+  return diagnostic.column !== null
+    ? translate(
+        'auto.components.right.sidebar.problems.lineColumnLocation',
+        'Line {{value0}}:{{value1}}',
+        { value0: diagnostic.line, value1: diagnostic.column }
+      )
+    : translate('auto.components.right.sidebar.problems.lineLocation', 'Line {{value0}}', {
+        value0: diagnostic.line
+      })
+}
+
 export function WorkspaceDiagnosticsList({
   run,
   onClear,
   onOpenDiagnostic
 }: {
-  run: WorkspaceDiagnosticsEntry
+  run: WorkspaceDiagnosticsSummary
   onClear: () => void
   onOpenDiagnostic: (diagnostic: WorkspaceDiagnostic) => void
 }): React.JSX.Element {
@@ -61,46 +76,62 @@ export function WorkspaceDiagnosticsList({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-11 items-center gap-2 border-b border-border px-3">
         <StatusIcon
-          className={run.status === 'passed' ? 'size-4 text-emerald-500' : 'size-4 text-destructive'}
+          className={
+            run.status === 'passed' ? 'size-4 text-status-success' : 'size-4 text-destructive'
+          }
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2 text-xs">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
             <span className="font-semibold text-foreground">
               {run.failed > 0
-                ? translate('auto.components.right.sidebar.problems.failedCount', '{{value0}} failed', {
-                    value0: run.failed
-                  })
+                ? translate(
+                    'auto.components.right.sidebar.problems.failedCount',
+                    '{{value0}} failed',
+                    {
+                      value0: run.failed
+                    }
+                  )
                 : run.status === 'failed'
-                  ? translate(
-                      'auto.components.right.sidebar.problems.checkFailed',
-                      'Check failed'
-                    )
-                : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')}
+                  ? translate('auto.components.right.sidebar.problems.checkFailed', 'Check failed')
+                  : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')}
             </span>
             {run.passed > 0 ? (
               <span className="text-muted-foreground">
-                {translate('auto.components.right.sidebar.problems.passedCount', '{{value0}} passed', {
-                  value0: run.passed
-                })}
+                {translate(
+                  'auto.components.right.sidebar.problems.passedCount',
+                  '{{value0}} passed',
+                  {
+                    value0: run.passed
+                  }
+                )}
               </span>
             ) : null}
             {warningCount > 0 ? (
               <span className="text-muted-foreground">
-                {translate('auto.components.right.sidebar.problems.warningCount', '{{value0}} warnings', {
-                  value0: warningCount
-                })}
+                {translate(
+                  'auto.components.right.sidebar.problems.warningCount',
+                  '{{value0}} warnings',
+                  {
+                    value0: warningCount
+                  }
+                )}
               </span>
             ) : null}
           </div>
-          <div className="text-[11px] text-muted-foreground">{toolLabel(run.tool)}</div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {run.tools.map(toolLabel).join(' · ')}
+          </div>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
           onClick={onClear}
-          aria-label={translate('auto.components.right.sidebar.problems.clear', 'Clear diagnostics')}
+          aria-label={translate(
+            'auto.components.right.sidebar.problems.clear',
+            'Clear diagnostics'
+          )}
         >
           <Trash2 className="size-3.5" />
         </Button>
@@ -111,18 +142,18 @@ export function WorkspaceDiagnosticsList({
           {run.status === 'failed' ? (
             <AlertCircle className="mb-3 size-7 text-destructive" aria-hidden="true" />
           ) : (
-            <CheckCircle2 className="mb-3 size-7 text-emerald-500" aria-hidden="true" />
+            <CheckCircle2 className="mb-3 size-7 text-status-success" aria-hidden="true" />
           )}
           <p className="text-sm font-medium text-foreground">
             {run.status === 'failed'
               ? translate('auto.components.right.sidebar.problems.checkFailed', 'Check failed')
               : run.total > 0
-              ? translate(
-                  'auto.components.right.sidebar.problems.allPassed',
-                  'All {{value0}} tests passed',
-                  { value0: run.total }
-                )
-              : translate('auto.components.right.sidebar.problems.healthy', 'No problems found')}
+                ? translate(
+                    'auto.components.right.sidebar.problems.allPassed',
+                    'All {{value0}} tests passed',
+                    { value0: run.total }
+                  )
+                : translate('auto.components.right.sidebar.problems.healthy', 'No problems found')}
           </p>
           <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
             {run.status === 'failed'
@@ -150,11 +181,7 @@ export function WorkspaceDiagnosticsList({
                   type="button"
                   className="group flex w-full items-start gap-2 px-3 py-2 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                   onClick={() => onOpenDiagnostic(diagnostic)}
-                  aria-label={`${diagnostic.title}, ${filePath}, ${translate(
-                    'auto.components.right.sidebar.problems.lineLocation',
-                    'Line {{value0}}',
-                    { value0: diagnostic.line }
-                  )}`}
+                  aria-label={`${diagnostic.title}. ${diagnostic.message}. ${filePath}, ${diagnosticLocationLabel(diagnostic)}`}
                 >
                   {diagnostic.severity === 'warning' ? (
                     <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
@@ -169,17 +196,7 @@ export function WorkspaceDiagnosticsList({
                       {diagnostic.message}
                     </span>
                     <span className="mt-1 block font-mono text-[10px] text-muted-foreground/80 group-hover:text-foreground/70">
-                      {diagnostic.column
-                        ? translate(
-                            'auto.components.right.sidebar.problems.lineColumnLocation',
-                            'Line {{value0}}:{{value1}}',
-                            { value0: diagnostic.line, value1: diagnostic.column }
-                          )
-                        : translate(
-                            'auto.components.right.sidebar.problems.lineLocation',
-                            'Line {{value0}}',
-                            { value0: diagnostic.line }
-                          )}
+                      {diagnosticLocationLabel(diagnostic)}
                     </span>
                   </span>
                 </button>
@@ -223,7 +240,7 @@ export default function WorkspaceProblemsPanel(): React.JSX.Element {
           ? localRuntime.runtime.distro
           : undefined
       openDetectedFilePath(
-        resolveDiagnosticFilePath(diagnostic.filePath, worktree.path),
+        resolveDiagnosticFilePath(diagnostic.filePath, diagnostic.basePath ?? worktree.path),
         diagnostic.line,
         diagnostic.column,
         {

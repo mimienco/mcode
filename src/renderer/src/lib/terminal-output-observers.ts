@@ -21,4 +21,3 @@ export function publishTerminalOutput(observation: TerminalOutputObservation): v
     }
   }
 }
-
