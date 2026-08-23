@@ -353,6 +353,7 @@ const DIRECT_SSH_PANE_RETRY_SETTLEMENT_TIMEOUT_MS = 31_000
 const REMOTE_PTY_ID_PREFIX = 'remote:'
 const PTY_CONNECT_DIAG_LIMIT = 200
 const MANUAL_AGENT_COMMAND_MAX_CHARS = 4096
+const SHELL_COMMAND_HISTORY_MAX_ENTRIES = 50
 const STARTUP_DRAFT_PASTE_QUIET_MS = 1500
 // Why: the notice deliberately omits the rejected path — saved cwds can
 // contain private repo/user names; the terminal itself shows where it opened.
@@ -1401,6 +1402,8 @@ export function connectPanePty(
   let commandInferredPaneAgent: TuiAgent | null = null
   let pendingShellCommandLine = ''
   let pendingShellCommandCursor = 0
+  const submittedShellCommandHistory: string[] = []
+  let submittedShellCommandHistoryIndex = 0
   let commandInferredPaneAgentGeneration = 0
   let shellCommandInferenceSuspendedUntilCommandEnd = false
   let startAcceptedInferredCommand = (_agent: TuiAgent): void => {}
@@ -1408,6 +1411,7 @@ export function connectPanePty(
   const resetPendingShellCommandLine = (): void => {
     pendingShellCommandLine = ''
     pendingShellCommandCursor = 0
+    submittedShellCommandHistoryIndex = submittedShellCommandHistory.length
   }
   const rememberCommandInferredPaneAgent = (): void => {
     const commandLine = pendingShellCommandLine.trim()
@@ -1422,6 +1426,12 @@ export function connectPanePty(
         command: commandLine,
         ...(commandCwd ? { cwd: commandCwd } : {})
       })
+    }
+    if (commandLine && submittedShellCommandHistory.at(-1) !== commandLine) {
+      submittedShellCommandHistory.push(commandLine)
+      if (submittedShellCommandHistory.length > SHELL_COMMAND_HISTORY_MAX_ENTRIES) {
+        submittedShellCommandHistory.shift()
+      }
     }
     resetPendingShellCommandLine()
     const candidateAgent = commandLine
@@ -1536,6 +1546,18 @@ export function connectPanePty(
       pendingShellCommandCursor = pendingShellCommandLine.length
     } else if (final === '~' && params === '3') {
       deletePendingShellCommandCharacterAtCursor()
+    } else if (final === 'A' && params === '' && submittedShellCommandHistory.length > 0) {
+      submittedShellCommandHistoryIndex = Math.max(0, submittedShellCommandHistoryIndex - 1)
+      pendingShellCommandLine = submittedShellCommandHistory[submittedShellCommandHistoryIndex]!
+      pendingShellCommandCursor = pendingShellCommandLine.length
+    } else if (final === 'B' && params === '' && submittedShellCommandHistoryIndex >= 0) {
+      submittedShellCommandHistoryIndex = Math.min(
+        submittedShellCommandHistory.length,
+        submittedShellCommandHistoryIndex + 1
+      )
+      pendingShellCommandLine =
+        submittedShellCommandHistory[submittedShellCommandHistoryIndex] ?? ''
+      pendingShellCommandCursor = pendingShellCommandLine.length
     } else if (final === '~' && (params === '200' || params === '201')) {
       // Bracketed paste wrappers are terminal framing, not shell command text.
     } else {
@@ -2211,7 +2233,8 @@ export function connectPanePty(
       deps.worktreeId,
       transport.getPtyId(),
       deps.getCwd?.() ?? deps.cwd,
-      bestEffortExitCode
+      bestEffortExitCode,
+      true
     )
     const state = useAppStore.getState()
     const entry = state.agentStatusByPaneKey[cacheKey]

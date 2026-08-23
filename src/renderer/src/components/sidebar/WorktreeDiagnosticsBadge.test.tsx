@@ -28,4 +28,13 @@ describe('WorktreeDiagnosticsBadge', () => {
     expect(markup).toContain('Check failed')
     expect(markup).toContain('>!<')
   })
+
+  it('uses singular copy for one failure', () => {
+    const markup = renderToStaticMarkup(
+      <WorktreeDiagnosticsBadgeView failed={1} onOpen={() => {}} />
+    )
+
+    expect(markup).toContain('1 failed check')
+    expect(markup).not.toContain('1 failed checks')
+  })
 })

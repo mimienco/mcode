@@ -5,6 +5,8 @@ export type TerminalCommandFinishedEventDetail = {
   /** Exact pane identity; omitted only by legacy/test event producers. */
   ptyId?: string | null
   cwd?: string
+  /** True only when a mounted pane reported its shell's current directory. */
+  cwdIsLive?: boolean
   // OSC 133;D may omit the command's exit code.
   exitCode: number | null
 }
@@ -15,7 +17,8 @@ export function dispatchTerminalCommandFinishedEvent(
   worktreeId: string,
   ptyId: string | null,
   cwd: string | undefined,
-  exitCode: number | null
+  exitCode: number | null,
+  cwdIsLive = false
 ): void {
   // Why: unit tests and non-DOM renderer shims may expose only the preload API.
   if (typeof window.dispatchEvent !== 'function') {
@@ -24,7 +27,7 @@ export function dispatchTerminalCommandFinishedEvent(
 
   window.dispatchEvent(
     new CustomEvent<TerminalCommandFinishedEventDetail>(MCODE_TERMINAL_COMMAND_FINISHED_EVENT, {
-      detail: { worktreeId, ptyId, ...(cwd ? { cwd } : {}), exitCode }
+      detail: { worktreeId, ptyId, ...(cwd ? { cwd, cwdIsLive } : {}), exitCode }
     })
   )
 }

@@ -25,6 +25,8 @@ import { openDetectedFilePath } from '../terminal-pane/terminal-file-open-routin
 import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
 import { resolveTerminalTabPtyOwnership } from '@/lib/terminal-tab-for-pty-id'
 
+const NO_OUTPUT_PTYS = new Set<string>()
+
 function toolLabel(tool: WorkspaceDiagnosticTool): string {
   const labels: Record<WorkspaceDiagnosticTool, string> = {
     vitest: 'Vitest',
@@ -65,19 +67,56 @@ function diagnosticLocationLabel(diagnostic: WorkspaceDiagnostic): string {
       })
 }
 
+function diagnosticsStatusLabel(run: WorkspaceDiagnosticsSummary): string {
+  if (run.failed > 0) {
+    return translate('auto.components.right.sidebar.problems.failedCount', '{{value0}} failed', {
+      value0: run.failed
+    })
+  }
+  return run.status === 'failed'
+    ? translate('auto.components.right.sidebar.problems.checkFailed', 'Check failed')
+    : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')
+}
+
+function locationlessFailedOutputs(
+  run: WorkspaceDiagnosticsSummary
+): { ptyId: string; tool: WorkspaceDiagnosticTool | null }[] {
+  const outputs = new Map<string, WorkspaceDiagnosticTool | null>()
+  for (const entry of Object.values(run.runsByTool)) {
+    if (entry?.status === 'failed' && entry.diagnostics.length === 0) {
+      outputs.set(entry.ptyId, entry.tool)
+    }
+  }
+  if (
+    outputs.size === 0 &&
+    run.status === 'failed' &&
+    run.diagnostics.length === 0 &&
+    run.outputPtyId
+  ) {
+    outputs.set(run.outputPtyId, null)
+  }
+  return [...outputs].map(([ptyId, tool]) => ({ ptyId, tool }))
+}
+
 export function WorkspaceDiagnosticsList({
   run,
   onClear,
   onOpenDiagnostic,
-  onShowOutput
+  onShowOutput,
+  availableOutputPtyIds = NO_OUTPUT_PTYS
 }: {
   run: WorkspaceDiagnosticsSummary
   onClear: () => void
   onOpenDiagnostic: (diagnostic: WorkspaceDiagnostic) => void
-  onShowOutput?: () => void
+  onShowOutput?: (ptyId: string) => void
+  availableOutputPtyIds?: ReadonlySet<string>
 }): React.JSX.Element {
   const warningCount = run.diagnostics.filter((item) => item.severity === 'warning').length
   const groups = groupDiagnosticsByFile(run.diagnostics)
+  const locationlessOutputs = locationlessFailedOutputs(run)
+  const availableLocationlessOutputs = locationlessOutputs.filter(({ ptyId }) =>
+    availableOutputPtyIds.has(ptyId)
+  )
   const StatusIcon = run.status === 'passed' ? CheckCircle2 : AlertCircle
 
   return (
@@ -90,24 +129,8 @@ export function WorkspaceDiagnosticsList({
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
-          <div
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <span className="font-semibold text-foreground">
-              {run.failed > 0
-                ? translate(
-                    'auto.components.right.sidebar.problems.failedCount',
-                    '{{value0}} failed',
-                    {
-                      value0: run.failed
-                    }
-                  )
-                : run.status === 'failed'
-                  ? translate('auto.components.right.sidebar.problems.checkFailed', 'Check failed')
-                  : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')}
-            </span>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+            <span className="font-semibold text-foreground">{diagnosticsStatusLabel(run)}</span>
             {run.passed > 0 ? (
               <span className="text-muted-foreground">
                 {translate(
@@ -178,20 +201,53 @@ export function WorkspaceDiagnosticsList({
                   'The latest observed check completed without errors.'
                 )}
           </p>
-          {run.status === 'failed' && onShowOutput ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              onClick={onShowOutput}
-            >
-              {translate('auto.components.right.sidebar.problems.showOutput', 'Show output')}
-            </Button>
-          ) : null}
+          {onShowOutput
+            ? availableLocationlessOutputs.map(({ ptyId, tool }) => (
+                <Button
+                  key={ptyId}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => onShowOutput(ptyId)}
+                  aria-label={tool ? `Show ${toolLabel(tool)} output` : undefined}
+                >
+                  {translate('auto.components.right.sidebar.problems.showOutput', 'Show output')}
+                </Button>
+              ))
+            : null}
         </div>
       ) : (
         <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto py-1">
+          {locationlessOutputs.length > 0 ? (
+            <div className="mx-2 mb-1 rounded border border-destructive/25 bg-destructive/5 px-2.5 py-2">
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                {translate(
+                  'auto.components.right.sidebar.problems.noSourceLocation',
+                  'The check exited unsuccessfully without a source location.'
+                )}
+              </p>
+              {onShowOutput && availableLocationlessOutputs.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {availableLocationlessOutputs.map(({ ptyId, tool }) => (
+                    <Button
+                      key={ptyId}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onShowOutput(ptyId)}
+                      aria-label={tool ? `Show ${toolLabel(tool)} output` : undefined}
+                    >
+                      {translate(
+                        'auto.components.right.sidebar.problems.showOutput',
+                        'Show output'
+                      )}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {groups.map(([filePath, diagnostics]) => (
             <section key={filePath} aria-label={filePath}>
               <div className="sticky top-0 z-[1] flex items-center gap-2 border-y border-border/70 bg-sidebar px-3 py-1.5 text-[11px] font-medium text-muted-foreground first:border-t-0">
@@ -253,6 +309,18 @@ export default function WorkspaceProblemsPanel(): React.JSX.Element {
     workspaceIdentity ? (state.runsByWorktreeId[workspaceIdentity] ?? null) : null
   )
   const clearWorktree = useWorkspaceDiagnosticsStore((state) => state.clearWorktree)
+  const outputPtyIds = run ? locationlessFailedOutputs(run).map(({ ptyId }) => ptyId) : []
+  const availableOutputPtyIdsKey = useAppStore((state) => {
+    if (!worktree) {
+      return ''
+    }
+    return outputPtyIds
+      .filter((ptyId) => resolveTerminalTabPtyOwnership(state, worktree.id, ptyId).kind === 'owned')
+      .join('\u0000')
+  })
+  const availableOutputPtyIds = new Set(
+    availableOutputPtyIdsKey ? availableOutputPtyIdsKey.split('\u0000') : []
+  )
 
   const openDiagnostic = useCallback(
     (diagnostic: WorkspaceDiagnostic): void => {
@@ -281,49 +349,66 @@ export default function WorkspaceProblemsPanel(): React.JSX.Element {
     [worktree]
   )
 
-  const showOutput = useCallback((): void => {
-    if (!worktree || !run?.outputPtyId) {
-      return
-    }
-    const state = useAppStore.getState()
-    const ownership = resolveTerminalTabPtyOwnership(state, worktree.id, run.outputPtyId)
-    if (ownership.kind !== 'owned') {
-      return
-    }
-    const layout = state.terminalLayoutsByTabId[ownership.tabId]
-    const leafId = Object.entries(layout?.ptyIdsByLeafId ?? {}).find(
-      ([, ptyId]) => ptyId === run.outputPtyId
-    )?.[0]
-    state.setRightSidebarOpen(false)
-    activateTabAndFocusPane(ownership.tabId, leafId ?? layout?.activeLeafId ?? null, {
-      flashFocusedPane: true,
-      scrollToBottomIfOutputSinceLastView: true
-    })
-  }, [run?.outputPtyId, worktree])
+  const showOutput = useCallback(
+    (ptyId: string): void => {
+      if (!worktree) {
+        return
+      }
+      const state = useAppStore.getState()
+      const ownership = resolveTerminalTabPtyOwnership(state, worktree.id, ptyId)
+      if (ownership.kind !== 'owned') {
+        return
+      }
+      const layout = state.terminalLayoutsByTabId[ownership.tabId]
+      const leafId = Object.entries(layout?.ptyIdsByLeafId ?? {}).find(
+        ([, candidatePtyId]) => candidatePtyId === ptyId
+      )?.[0]
+      state.setRightSidebarOpen(false)
+      activateTabAndFocusPane(ownership.tabId, leafId ?? layout?.activeLeafId ?? null, {
+        flashFocusedPane: true,
+        scrollToBottomIfOutputSinceLastView: true
+      })
+    },
+    [worktree]
+  )
+
+  const liveStatus = run ? diagnosticsStatusLabel(run) : ''
+  const liveRegion = (
+    <span className="sr-only" aria-live="polite" aria-atomic="true">
+      {liveStatus}
+    </span>
+  )
 
   if (!worktree || !run) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
-        <CircleAlert className="mb-3 size-7 text-muted-foreground/60" aria-hidden="true" />
-        <p className="text-sm font-medium text-foreground">
-          {translate('auto.components.right.sidebar.problems.emptyTitle', 'No diagnostics yet')}
-        </p>
-        <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
-          {translate(
-            'auto.components.right.sidebar.problems.emptyDescription',
-            'Run tests, typecheck, or lint in a terminal. Failures will appear here automatically.'
-          )}
-        </p>
-      </div>
+      <>
+        {liveRegion}
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+          <CircleAlert className="mb-3 size-7 text-muted-foreground/60" aria-hidden="true" />
+          <p className="text-sm font-medium text-foreground">
+            {translate('auto.components.right.sidebar.problems.emptyTitle', 'No diagnostics yet')}
+          </p>
+          <p className="mt-1 max-w-64 text-xs leading-relaxed text-muted-foreground">
+            {translate(
+              'auto.components.right.sidebar.problems.emptyDescription',
+              'Run tests, typecheck, or lint in a terminal. Failures will appear here automatically.'
+            )}
+          </p>
+        </div>
+      </>
     )
   }
 
   return (
-    <WorkspaceDiagnosticsList
-      run={run}
-      onClear={() => clearWorktree(worktree.id, worktree.hostId ?? activeHostId)}
-      onOpenDiagnostic={openDiagnostic}
-      onShowOutput={run.outputPtyId ? showOutput : undefined}
-    />
+    <>
+      {liveRegion}
+      <WorkspaceDiagnosticsList
+        run={run}
+        onClear={() => clearWorktree(worktree.id, worktree.hostId ?? activeHostId)}
+        onOpenDiagnostic={openDiagnostic}
+        onShowOutput={showOutput}
+        availableOutputPtyIds={availableOutputPtyIds}
+      />
+    </>
   )
 }

@@ -159,4 +159,81 @@ describe('workspace diagnostics capture', () => {
       ]
     ).toBeUndefined()
   })
+
+  it('surfaces a package test command that exits before the runner prints a summary', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      command: 'pnpm test'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      data: 'Error: failed to load test configuration\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    expect(useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]).toMatchObject({
+      tools: ['unknown'],
+      status: 'failed',
+      failed: 1,
+      outputPtyId: 'pty-tests'
+    })
+  })
+
+  it('prefers a mounted pane live cwd after a compound cd command', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      command: 'cd packages/api && pnpm test',
+      cwd: '/repo'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      data:
+        'FAIL src/api.test.ts > api > rejects invalid input\nError: rejected\n' +
+        ' ❯ src/api.test.ts:8:2\nTests  1 failed (1)\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      cwd: '/repo/packages/api',
+      cwdIsLive: true,
+      exitCode: 1
+    })
+
+    expect(
+      useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]?.diagnostics[0]
+    ).toMatchObject({ basePath: '/repo/packages/api' })
+  })
+
+  it('adds a locationless result for an unresolved failing step in a combined command', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: 'vitest run && eslint src'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Tests  20 passed (20)\nESLint: failed to load configuration\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 2
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run?.runsByTool.vitest).toMatchObject({ status: 'passed', passed: 20 })
+    expect(run?.runsByTool.eslint).toMatchObject({ status: 'failed', failed: 1, diagnostics: [] })
+  })
 })

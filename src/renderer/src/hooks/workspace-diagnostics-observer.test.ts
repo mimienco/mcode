@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { findWorktreeIdForPty } from './workspace-diagnostics-observer'
+import {
+  collectWorkspaceDiagnosticsIdentities,
+  findWorktreeIdForPty
+} from './workspace-diagnostics-observer'
 
 describe('findWorktreeIdForPty', () => {
   it('resolves tab-level, split-pane, and remote runtime PTY ownership', () => {
@@ -24,5 +27,26 @@ describe('findWorktreeIdForPty', () => {
     expect(findWorktreeIdForPty(state, 'pty-split')).toBe('wt-split')
     expect(findWorktreeIdForPty(state, 'remote:env-1@@terminal-1')).toBe('wt-remote')
     expect(findWorktreeIdForPty(state, 'missing')).toBeNull()
+  })
+})
+
+describe('collectWorkspaceDiagnosticsIdentities', () => {
+  it('keeps repository, folder, and detected-only workspace diagnostics valid', () => {
+    const identities = collectWorkspaceDiagnosticsIdentities(
+      {
+        worktrees: [{ id: 'repo-worktree', hostId: 'local' }],
+        folderWorkspaces: [{ id: 'folder-workspace', executionHostId: 'runtime:folder' }],
+        detectedWorktreesByRepo: {
+          repo: { worktrees: [{ id: 'detected-worktree', hostId: 'runtime:detected' }] }
+        }
+      },
+      () => 'local'
+    )
+
+    expect([...identities]).toEqual([
+      'local|repo-worktree',
+      'runtime:folder|folder:folder-workspace',
+      'runtime:detected|detected-worktree'
+    ])
   })
 })

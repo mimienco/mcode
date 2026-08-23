@@ -20,7 +20,7 @@ const PYTEST_SUMMARY = /={2,}\s*(.+?)\s+in\s+[\d.]+s?\s*=*\s*$/i
 
 export function parsePytestDiagnostics(
   lines: readonly string[],
-  exitCode: number | null
+  _exitCode: number | null
 ): WorkspaceDiagnosticsRun | null {
   const summaryLine = lines.find(
     (line) => PYTEST_SUMMARY.test(line) && /\b(?:failed|passed|errors?)\b/i.test(line)
@@ -83,7 +83,7 @@ export function parsePytestDiagnostics(
   const passed = countDiagnosticsSummaryValue(summary, 'passed')
   return {
     tool: 'pytest',
-    status: failed > 0 || (exitCode !== null && exitCode !== 0) ? 'failed' : 'passed',
+    status: failed > 0 ? 'failed' : 'passed',
     failed,
     passed,
     total: failed + passed,
@@ -103,7 +103,7 @@ function selectJestFrame(frames: readonly JestFrame[]): JestFrame | undefined {
 
 export function parseJestDiagnostics(
   lines: readonly string[],
-  exitCode: number | null
+  _exitCode: number | null
 ): WorkspaceDiagnosticsRun | null {
   const summaryLine = lines.find((line) => JEST_TESTS.test(line))
   if (!summaryLine) {
@@ -162,7 +162,7 @@ export function parseJestDiagnostics(
   const total = countDiagnosticsSummaryValue(summary, 'total') || failed + passed
   return {
     tool: 'jest',
-    status: failed > 0 || (exitCode !== null && exitCode !== 0) ? 'failed' : 'passed',
+    status: failed > 0 ? 'failed' : 'passed',
     failed,
     passed,
     total,
@@ -219,7 +219,7 @@ export function parseVitestDiagnostics(
   const passed = summary?.passed ?? 0
   return {
     tool: 'vitest',
-    status: failed > 0 || (exitCode !== null && exitCode !== 0) ? 'failed' : 'passed',
+    status: failed > 0 || (!summary && exitCode !== null && exitCode !== 0) ? 'failed' : 'passed',
     failed,
     passed,
     total: failed + passed,

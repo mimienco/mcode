@@ -14,7 +14,7 @@ const SOURCE_FILE_PATH = /\.[A-Za-z0-9_+-]+$/
 
 export function parseTypeScriptDiagnostics(
   lines: readonly string[],
-  exitCode: number | null
+  _exitCode: number | null
 ): WorkspaceDiagnosticsRun | null {
   const diagnostics = lines.flatMap((line): WorkspaceDiagnostic[] => {
     const match =
@@ -41,7 +41,7 @@ export function parseTypeScriptDiagnostics(
   const failed = diagnostics.filter((item) => item.severity === 'error').length
   return {
     tool: 'typescript',
-    status: failed > 0 || (exitCode !== null && exitCode !== 0) ? 'failed' : 'passed',
+    status: failed > 0 ? 'failed' : 'passed',
     failed,
     passed: 0,
     total: diagnostics.length,
@@ -106,7 +106,7 @@ export function parseRuffDiagnostics(lines: readonly string[]): WorkspaceDiagnos
 
 export function parseEslintDiagnostics(
   lines: readonly string[],
-  exitCode: number | null
+  _exitCode: number | null
 ): WorkspaceDiagnosticsRun | null {
   const diagnostics: WorkspaceDiagnostic[] = []
   let filePath = ''
@@ -139,7 +139,7 @@ export function parseEslintDiagnostics(
   const failed = diagnostics.filter((item) => item.severity === 'error').length
   return {
     tool: 'eslint',
-    status: failed > 0 || (exitCode !== null && exitCode !== 0) ? 'failed' : 'passed',
+    status: failed > 0 ? 'failed' : 'passed',
     failed,
     passed: 0,
     total: diagnostics.length,

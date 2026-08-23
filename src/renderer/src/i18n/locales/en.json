@@ -4646,6 +4646,7 @@
       "sidebar": {
         "worktreeDiagnostics": {
           "checkFailed": "Check failed",
+          "failedCheck": "{{value0}} failed check",
           "failedChecks": "{{value0}} failed checks",
           "openProblems": "{{value0}}. Open Problems."
         },

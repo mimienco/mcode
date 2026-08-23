@@ -53,13 +53,19 @@ export function WorktreeDiagnosticsBadgeView({
   onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void
 }): React.JSX.Element {
   const label =
-    failed > 0
+    failed === 1
       ? translate(
-          'auto.components.sidebar.worktreeDiagnostics.failedChecks',
-          '{{value0}} failed checks',
+          'auto.components.sidebar.worktreeDiagnostics.failedCheck',
+          '{{value0}} failed check',
           { value0: failed }
         )
-      : translate('auto.components.sidebar.worktreeDiagnostics.checkFailed', 'Check failed')
+      : failed > 1
+        ? translate(
+            'auto.components.sidebar.worktreeDiagnostics.failedChecks',
+            '{{value0}} failed checks',
+            { value0: failed }
+          )
+        : translate('auto.components.sidebar.worktreeDiagnostics.checkFailed', 'Check failed')
   return (
     <Tooltip>
       <TooltipTrigger asChild>

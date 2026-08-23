@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  detectWorkspaceDiagnosticTool,
   parseWorkspaceDiagnosticsOutput,
   parseWorkspaceDiagnosticsRunsOutput
 } from './workspace-diagnostics-parser'
@@ -252,5 +253,32 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
     )
 
     expect(runs.map((run) => run.tool)).toEqual(['typescript', 'eslint'])
+  })
+
+  it('does not apply a later combined-command failure to a passing test summary', () => {
+    const runs = parseWorkspaceDiagnosticsRunsOutput(
+      [
+        'Tests  20 passed (20)',
+        'src/ui/order.ts',
+        '  18:5  error  Unexpected any  @typescript-eslint/no-explicit-any'
+      ].join('\n'),
+      1
+    )
+
+    expect(runs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tool: 'vitest', status: 'passed', failed: 0 }),
+        expect.objectContaining({ tool: 'eslint', status: 'failed', failed: 1 })
+      ])
+    )
+  })
+
+  it('detects only invoked checks and recognizes package test scripts', () => {
+    expect(detectWorkspaceDiagnosticTool('pnpm test')).toBe('unknown')
+    expect(detectWorkspaceDiagnosticTool('npm run test:unit -- --watch=false')).toBe('unknown')
+    expect(detectWorkspaceDiagnosticTool('pnpm exec vitest run')).toBe('vitest')
+    expect(detectWorkspaceDiagnosticTool('eslint --config vitest.config.ts src')).toBe('eslint')
+    expect(detectWorkspaceDiagnosticTool('rg eslint')).toBeNull()
+    expect(detectWorkspaceDiagnosticTool('npm install eslint')).toBeNull()
   })
 })

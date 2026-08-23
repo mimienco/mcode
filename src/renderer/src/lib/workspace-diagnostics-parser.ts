@@ -20,31 +20,87 @@ export type {
   WorkspaceDiagnosticTool
 } from './workspace-diagnostics-parser-core'
 
+function commandTokens(segment: string): string[] {
+  return (
+    segment
+      .match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+/g)
+      ?.map((token) => token.replace(/^(?:"|')|(?:"|')$/g, '')) ?? []
+  )
+}
+
+function commandName(token: string): string {
+  return token
+    .replace(/\\/g, '/')
+    .split('/')
+    .at(-1)!
+    .replace(/\.(?:cmd|exe|ps1)$/i, '')
+    .toLowerCase()
+}
+
+function skipCommandPrefix(tokens: readonly string[]): number {
+  let index = 0
+  if (tokens[index] === '&') {
+    index += 1
+  }
+  if (commandName(tokens[index] ?? '') === 'sudo') {
+    index += 1
+  }
+  if (commandName(tokens[index] ?? '') === 'env') {
+    index += 1
+  }
+  while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index] ?? '')) {
+    index += 1
+  }
+  return index
+}
+
+function directTool(command: string): WorkspaceDiagnosticTool | null {
+  const tokens = commandTokens(command)
+  let index = skipCommandPrefix(tokens)
+  let executable = commandName(tokens[index] ?? '')
+  if (['npx', 'bunx'].includes(executable)) {
+    index += 1
+    executable = commandName(tokens[index] ?? '')
+  } else if (['pnpm', 'npm', 'yarn', 'bun'].includes(executable)) {
+    const action = (tokens[index + 1] ?? '').toLowerCase()
+    if (['exec', 'dlx', 'x'].includes(action)) {
+      index += 2
+      executable = commandName(tokens[index] ?? '')
+    } else {
+      const scriptIndex = action === 'run' ? index + 2 : index + 1
+      const script = (tokens[scriptIndex] ?? '').toLowerCase()
+      if (/^(?:test)(?::|$)/.test(script)) {
+        return 'unknown'
+      }
+      if (/^(?:typecheck|type-check|check:types)(?::|$)/.test(script)) {
+        return 'typescript'
+      }
+      if (/^lint(?::|$)/.test(script)) {
+        return 'eslint'
+      }
+      return null
+    }
+  }
+
+  const tools: Record<string, WorkspaceDiagnosticTool> = {
+    vitest: 'vitest',
+    jest: 'jest',
+    pytest: 'pytest',
+    tsc: 'typescript',
+    typescript: 'typescript',
+    eslint: 'eslint',
+    ruff: 'ruff'
+  }
+  return tools[executable] ?? null
+}
+
 export function detectWorkspaceDiagnosticTool(command: string): WorkspaceDiagnosticTool | null {
-  const clean = cleanDiagnosticsOutput(command).trim()
-  if (/\bvitest\b/i.test(clean)) {
-    return 'vitest'
-  }
-  if (/\bjest\b/i.test(clean)) {
-    return 'jest'
-  }
-  if (/\bpytest\b/i.test(clean)) {
-    return 'pytest'
-  }
-  if (/\b(?:tsc|typescript)\b/i.test(clean)) {
-    return 'typescript'
-  }
-  if (/\beslint\b/i.test(clean)) {
-    return 'eslint'
-  }
-  if (/\bruff\b/i.test(clean)) {
-    return 'ruff'
-  }
-  if (/\b(?:pnpm|npm(?:\s+run)?|yarn|bun)\s+(?:run\s+)?typecheck\b/i.test(clean)) {
-    return 'typescript'
-  }
-  if (/\b(?:pnpm|npm(?:\s+run)?|yarn|bun)\s+(?:run\s+)?lint\b/i.test(clean)) {
-    return 'eslint'
+  const segments = cleanDiagnosticsOutput(command).split(/\s*(?:&&|\|\||;|\r?\n)\s*/)
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const tool = directTool(segments[index] ?? '')
+    if (tool) {
+      return tool
+    }
   }
   return null
 }

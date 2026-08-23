@@ -179,6 +179,16 @@ function synthesizeRun(
   }
 }
 
+function toolHintIsRepresented(
+  toolHint: WorkspaceDiagnosticTool,
+  runs: readonly WorkspaceDiagnosticsRun[]
+): boolean {
+  if (toolHint === 'unknown') {
+    return runs.some((run) => ['vitest', 'jest', 'pytest'].includes(run.tool))
+  }
+  return runs.some((run) => run.tool === toolHint)
+}
+
 function attachBasePath(
   diagnostics: readonly WorkspaceDiagnostic[],
   basePath: string | undefined
@@ -194,6 +204,7 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   worktreeId: string
   hostId?: ExecutionHostId
   cwd?: string
+  cwdIsLive?: boolean
   exitCode: number | null
   now?: number
 }): WorkspaceDiagnosticsEntry[] {
@@ -213,13 +224,26 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   const output = capture?.chunks.slice(capture.headIndex).join('') ?? ''
   const toolHint = metadata ? detectWorkspaceDiagnosticTool(metadata.command) : null
   const parsedRuns = parseWorkspaceDiagnosticsRunsOutput(output, args.exitCode)
+  const unresolvedToolRun =
+    toolHint &&
+    args.exitCode !== null &&
+    args.exitCode !== 0 &&
+    !toolHintIsRepresented(toolHint, parsedRuns)
+      ? synthesizeRun(toolHint, args.exitCode)
+      : null
   const runs =
-    parsedRuns.length > 0 ? parsedRuns : toolHint ? [synthesizeRun(toolHint, args.exitCode)] : []
+    parsedRuns.length > 0
+      ? unresolvedToolRun
+        ? [...parsedRuns, unresolvedToolRun]
+        : parsedRuns
+      : toolHint
+        ? [synthesizeRun(toolHint, args.exitCode)]
+        : []
   if (runs.length === 0) {
     return []
   }
   const updatedAt = args.now ?? Date.now()
-  const basePath = metadata?.cwd ?? args.cwd
+  const basePath = args.cwdIsLive && args.cwd ? args.cwd : (metadata?.cwd ?? args.cwd)
   const entries = runs.map(
     (run): WorkspaceDiagnosticsEntry => ({
       ...run,

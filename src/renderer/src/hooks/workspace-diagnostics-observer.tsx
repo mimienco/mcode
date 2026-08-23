@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import type { ExecutionHostId } from '../../../shared/execution-host'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 
 import {
   MCODE_TERMINAL_COMMAND_FINISHED_EVENT,
@@ -28,6 +30,34 @@ type TerminalOwnershipCache = {
   tabsByWorktree: TerminalOwnershipState['tabsByWorktree']
   terminalLayoutsByTabId: TerminalOwnershipState['terminalLayoutsByTabId']
   worktreeIdByPtyId: Map<string, string>
+}
+
+type DiagnosticsWorkspace = { id: string; hostId?: ExecutionHostId }
+type DiagnosticsFolderWorkspace = { id: string; executionHostId?: ExecutionHostId | null }
+
+export function collectWorkspaceDiagnosticsIdentities(
+  catalog: {
+    worktrees: readonly DiagnosticsWorkspace[]
+    folderWorkspaces: readonly DiagnosticsFolderWorkspace[]
+    detectedWorktreesByRepo: Readonly<
+      Record<string, { worktrees: readonly DiagnosticsWorkspace[] } | undefined>
+    >
+  },
+  resolveHostId: (worktreeId: string) => ExecutionHostId
+): Set<string> {
+  const workspaces = [
+    ...catalog.worktrees,
+    ...catalog.folderWorkspaces.map((workspace) => ({
+      id: folderWorkspaceKey(workspace.id),
+      hostId: workspace.executionHostId ?? undefined
+    })),
+    ...Object.values(catalog.detectedWorktreesByRepo).flatMap((entry) => entry?.worktrees ?? [])
+  ]
+  return new Set(
+    workspaces.map((worktree) =>
+      workspaceDiagnosticsIdentity(worktree.hostId ?? resolveHostId(worktree.id), worktree.id)
+    )
+  )
 }
 
 let ownershipCache: TerminalOwnershipCache | null = null
@@ -98,25 +128,32 @@ export function WorkspaceDiagnosticsObserver(): null {
           worktreeId: detail.worktreeId,
           hostId: getExecutionHostIdForWorktree(state, detail.worktreeId),
           ...(detail.cwd ? { cwd: detail.cwd } : {}),
+          cwdIsLive: detail.cwdIsLive === true,
           exitCode: detail.exitCode
         })
       }
     }
     let priorWorktreesByRepo = useAppStore.getState().worktreesByRepo
+    let priorFolderWorkspaces = useAppStore.getState().folderWorkspaces
+    let priorDetectedWorktreesByRepo = useAppStore.getState().detectedWorktreesByRepo
     const unsubscribeWorktrees = useAppStore.subscribe((state) => {
-      if (state.worktreesByRepo === priorWorktreesByRepo) {
+      if (
+        state.worktreesByRepo === priorWorktreesByRepo &&
+        state.folderWorkspaces === priorFolderWorkspaces &&
+        state.detectedWorktreesByRepo === priorDetectedWorktreesByRepo
+      ) {
         return
       }
       priorWorktreesByRepo = state.worktreesByRepo
-      const validIdentities = new Set(
-        state
-          .allWorktrees()
-          .map((worktree) =>
-            workspaceDiagnosticsIdentity(
-              worktree.hostId ?? getExecutionHostIdForWorktree(state, worktree.id),
-              worktree.id
-            )
-          )
+      priorFolderWorkspaces = state.folderWorkspaces
+      priorDetectedWorktreesByRepo = state.detectedWorktreesByRepo
+      const validIdentities = collectWorkspaceDiagnosticsIdentities(
+        {
+          worktrees: state.allWorktrees(),
+          folderWorkspaces: state.folderWorkspaces,
+          detectedWorktreesByRepo: state.detectedWorktreesByRepo
+        },
+        (worktreeId) => getExecutionHostIdForWorktree(state, worktreeId)
       )
       pruneWorkspaceDiagnostics(validIdentities)
     })
