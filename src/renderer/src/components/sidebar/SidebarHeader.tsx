@@ -1,5 +1,5 @@
 import React from 'react'
-import { FolderPlus, Loader2, MessageSquarePlus, Plus } from 'lucide-react'
+import { FolderPlus, Plus } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -7,7 +7,6 @@ import SidebarWorkspaceOptionsMenu from './SidebarWorkspaceOptionsMenu'
 import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { openWorkspaceCreationComposerWithTourHandoff } from '../contextual-tours/workspace-creation-tour-handoff'
 import { translate } from '@/i18n/i18n'
-import { useQuickChatCreation } from '@/hooks/useQuickChatCreation'
 
 type SidebarHeaderProps = {
   onWorkspaceBoardMenuOpenChange: (open: boolean) => void
@@ -20,7 +19,6 @@ const SidebarHeader = React.memo(function SidebarHeader({
   const newWorktreeShortcutLabel = useShortcutLabel('workspace.create')
   const groupBy = useAppStore((s) => s.groupBy)
   const sidebarTitle = groupBy === 'repo' ? 'Projects' : 'Workspaces'
-  const { createQuickChat, creating, available: quickChatAvailable } = useQuickChatCreation()
 
   return (
     <div className="mt-2 flex h-8 items-center justify-between px-2 gap-2">
@@ -33,32 +31,6 @@ const SidebarHeader = React.memo(function SidebarHeader({
         </span>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        {quickChatAvailable ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                disabled={creating}
-                onClick={createQuickChat}
-                aria-label={translate(
-                  'auto.components.sidebar.SidebarHeader.newChat',
-                  'New chat without a project'
-                )}
-              >
-                {creating ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <MessageSquarePlus className="size-3.5" strokeWidth={2.25} />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {translate('auto.components.sidebar.SidebarHeader.newChatShort', 'New chat')}
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
-
         <SidebarWorkspaceOptionsMenu
           preserveWorkspaceBoardOpen
           onMenuOpenChange={onWorkspaceBoardMenuOpenChange}

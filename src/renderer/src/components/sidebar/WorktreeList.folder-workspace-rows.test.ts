@@ -208,7 +208,23 @@ describe('WorktreeList lineage child card renderer', () => {
 
     expect(quickChatMarkup).toContain('Chats')
     expect(quickChatMarkup).toContain('data-repo-header-collapse-affordance=""')
+    expect(quickChatMarkup).toContain('aria-label="New chat without a project"')
     expect(quickChatCard).toContain('data-card-variant="quick-chat"')
+  })
+
+  it('keeps chat creation in the empty Chats section', async () => {
+    setFolderWorkspaceFixtureState()
+    mockStore.state = {
+      ...mockStore.state,
+      activeWorktreeId: null,
+      folderWorkspaces: [],
+      projectGroups: []
+    }
+
+    const markup = await renderWorktreeListMarkup()
+
+    expect(markup).toContain('id="worktree-list-option-quick-chats"')
+    expect(markup).toContain('aria-label="New chat without a project"')
   })
 
   it('uses comparable new-card worktree geometry for experimental folder workspace rows', async () => {

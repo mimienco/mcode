@@ -237,6 +237,21 @@ describe('activating a folder workspace whose last terminal was closed', () => {
     expect(useAppStore.getState().tabsByWorktree[FOLDER_KEY]).toEqual([])
   })
 
+  it('records an explicit empty terminal state when the first surface is intentionally blank', () => {
+    seedEmptiedFolderWorkspaceOnTwoHosts()
+    useAppStore.setState({ tabsByWorktree: {} })
+
+    const result = activateAndRevealFolderWorkspace(FOLDER_ID, {
+      executionHostId: 'local',
+      providesInitialSurface: true
+    })
+
+    expect(result).not.toBe(false)
+    expect(result === false ? null : result.primaryTabId).toBeNull()
+    expect(Object.hasOwn(useAppStore.getState().tabsByWorktree, FOLDER_KEY)).toBe(true)
+    expect(useAppStore.getState().tabsByWorktree[FOLDER_KEY]).toEqual([])
+  })
+
   // Why: this asserts the row is re-seeded, NOT that the tab lands on the requested host.
   // getFolderWorkspaceConnectionId is host-blind (folder-workspace-connection.ts:68 takes the
   // first id match), so the created tab resolves local even here. That defect is pre-existing —

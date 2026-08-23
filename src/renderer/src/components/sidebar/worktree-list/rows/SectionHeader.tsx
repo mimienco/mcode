@@ -39,6 +39,7 @@ import {
 } from './header-event-guards'
 import type { WorktreeSidebarHeaderDrag } from '../drag/use-header-drag'
 import { getWorktreeOptionId } from './option-dom'
+import { QuickChatsCreateButton } from './QuickChatsCreateButton'
 
 export type SectionHeaderRowContext = {
   groupBy: WorktreeGroupBy
@@ -344,7 +345,15 @@ export function renderWorktreeSectionHeaderRow(args: {
           </div>
         </div>
 
-        <ProjectHeaderActions>
+        <ProjectHeaderActions
+          className={
+            isQuickChatsHeader
+              ? 'can-hover:pointer-events-auto can-hover:opacity-100 can-hover:bg-transparent can-hover:pl-0'
+              : undefined
+          }
+        >
+          {isQuickChatsHeader ? <QuickChatsCreateButton /> : null}
+
           {showHeaderCollapseAffordance ? (
             <div
               className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"

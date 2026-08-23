@@ -119,6 +119,7 @@ function noticeRows(args: {
     [],
     args.grouping ?? TWIN_GROUPING,
     [],
+    {},
     HOST_LABELS
   )
   return rows.filter((row) => row.type === 'new-external-worktrees-inbox')

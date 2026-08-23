@@ -142,6 +142,7 @@ describe('buildRows with pinned worktrees', () => {
       [],
       { projects: [project], projectHostSetups: [projectHostSetups[0]!, runtimeSetup] },
       [],
+      {},
       new Map([
         ['local', LOCAL_HOST_LABEL],
         ['runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3', 'dev box']
@@ -202,6 +203,7 @@ describe('buildRows with pinned worktrees', () => {
       [],
       undefined,
       [],
+      {},
       new Map([
         ['runtime:env-a', 'Remote Mac'],
         ['runtime:env-b', 'Build Linux']

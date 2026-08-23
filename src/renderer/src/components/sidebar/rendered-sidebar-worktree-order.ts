@@ -79,6 +79,7 @@ export function computeRenderedSidebarWorktrees(
       visibleHostIdSet,
       defaultHostId
     ),
+    {},
     // Why no hostLabelById: it only feeds display-only host context labels, never row order.
     undefined,
     defaultHostId,

@@ -31,6 +31,7 @@ import type { IssueCommandLaunch } from '@/lib/worktree-setup-issue-command-queu
 import { ensureWorktreeHasInitialTerminal } from '@/lib/worktree-initial-terminal-seeding'
 import { ensureWebRuntimeWorktreeTerminalAfterWake } from '@/lib/web-runtime-worktree-terminal-after-wake'
 import { applyWorktreeNavViewEntry } from '@/lib/worktree-nav-view-history-replay'
+import { isQuickChatWorkspace } from '../../../shared/quick-chat-workspaces'
 
 /**
  * Shared activation sequence used by the worktree palette and add-repo/worktree dialogs.
@@ -85,6 +86,9 @@ export function activateAndRevealFolderWorkspace(
   if (!folderWorkspace) {
     return false
   }
+  const preservesEmptySurface =
+    opts?.providesInitialSurface === true ||
+    (isQuickChatWorkspace(folderWorkspace) && opts?.startup === undefined)
   const runtimeEnvironmentId =
     opts && 'runtimeEnvironmentId' in opts
       ? (opts.runtimeEnvironmentId ?? null)
@@ -113,9 +117,18 @@ export function activateAndRevealFolderWorkspace(
     state.setActiveView('terminal')
   }
 
+  const workspaceKey = folderWorkspaceKey(folderWorkspaceId)
+  if (preservesEmptySurface && !Object.hasOwn(state.tabsByWorktree, workspaceKey)) {
+    // Why: a missing terminal row means "never initialized" and Terminal.tsx
+    // auto-seeds a shell. Callers that intentionally own the first surface need
+    // an explicit empty row so the workspace can remain blank until the user acts.
+    useAppStore.setState((current) => ({
+      tabsByWorktree: { ...current.tabsByWorktree, [workspaceKey]: [] }
+    }))
+  }
+
   state.setActiveFolderWorkspace(folderWorkspaceId, opts?.executionHostId)
 
-  const workspaceKey = folderWorkspaceKey(folderWorkspaceId)
   state.markWorktreeVisited(workspaceKey)
   if (!state.isNavigatingHistory) {
     state.recordWorktreeVisit(workspaceKey)
@@ -124,7 +137,7 @@ export function activateAndRevealFolderWorkspace(
   const primaryTabId = ensureFolderWorkspaceInitialTerminal(
     folderWorkspace,
     opts?.startup,
-    opts?.providesInitialSurface
+    preservesEmptySurface
   )
 
   if (opts?.sidebarRevealBehavior) {

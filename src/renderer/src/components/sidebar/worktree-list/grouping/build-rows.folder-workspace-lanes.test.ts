@@ -51,6 +51,7 @@ function buildSidebarRows(options: {
   projectGroups?: readonly ProjectGroup[]
   worktrees?: (typeof worktree)[]
   collapsedGroups?: Set<string>
+  includeEmptyQuickChatsSection?: boolean
 }): Row[] {
   const worktrees = options.worktrees ?? [worktree]
   return buildRows(
@@ -72,7 +73,8 @@ function buildSidebarRows(options: {
     new Map(),
     [],
     undefined,
-    options.folderWorkspaces ?? [makeFolderWorkspace()]
+    options.folderWorkspaces ?? [makeFolderWorkspace()],
+    { includeEmptyQuickChatsSection: options.includeEmptyQuickChatsSection }
   )
 }
 
@@ -141,6 +143,23 @@ describe('quick chat section', () => {
       collapsedGroups: new Set([QUICK_CHATS_GROUP_KEY])
     })
     expect(folderRows(rows)).toHaveLength(0)
+  })
+
+  it('keeps the empty Chats section available for creating the first chat', () => {
+    const rows = buildSidebarRows({
+      groupBy: 'repo',
+      worktrees: [],
+      projectGroups: [],
+      folderWorkspaces: [],
+      includeEmptyQuickChatsSection: true
+    })
+
+    expect(rows[0]).toMatchObject({
+      type: 'header',
+      key: QUICK_CHATS_GROUP_KEY,
+      label: 'Chats',
+      count: 0
+    })
   })
 })
 

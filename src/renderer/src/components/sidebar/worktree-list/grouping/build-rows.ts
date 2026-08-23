@@ -54,6 +54,10 @@ import {
   isQuickChatWorkspace
 } from '../../../../../../shared/quick-chat-workspaces'
 
+type BuildRowsOptions = {
+  includeEmptyQuickChatsSection?: boolean
+}
+
 export function buildRows(
   groupBy: WorktreeGroupBy,
   worktrees: Worktree[],
@@ -77,6 +81,7 @@ export function buildRows(
   pendingCreations: readonly PendingCreationRef[] = [],
   projectGrouping?: ProjectGroupingModel,
   folderWorkspaces: readonly FolderWorkspace[] = [],
+  options: BuildRowsOptions = {},
   hostLabelById?: ReadonlyMap<string, string>,
   defaultHostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID,
   pinnedDisplayPolicy: PinnedWorktreeDisplayPolicy = getPinnedWorktreeDisplayPolicy(settings)
@@ -106,7 +111,7 @@ export function buildRows(
     pendingByRepo.set(creation.repoId, list)
   }
 
-  if (quickChatFolderWorkspaces.length > 0) {
+  if (quickChatFolderWorkspaces.length > 0 || options.includeEmptyQuickChatsSection === true) {
     result.push({
       type: 'header',
       key: QUICK_CHATS_GROUP_KEY,

@@ -62,6 +62,16 @@ afterEach(() => {
 })
 
 describe('SidebarHeader', () => {
+  it('keeps chat creation out of the Projects toolbar', () => {
+    act(() => {
+      root.render(<SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} />)
+    })
+
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="New chat without a project"]')
+    ).toBeNull()
+  })
+
   it('keeps New workspace clickable with zero projects, since the composer adds the first one', () => {
     act(() => {
       root.render(<SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} />)
