@@ -17,28 +17,19 @@ import {
   workspaceDiagnosticsIdentity,
   type WorkspaceDiagnosticsSummary
 } from '@/store/workspace-diagnostics'
-import type {
-  WorkspaceDiagnostic,
-  WorkspaceDiagnosticTool
-} from '@/lib/workspace-diagnostics-parser'
+import type { WorkspaceDiagnostic } from '@/lib/workspace-diagnostics-parser'
 import { openDetectedFilePath } from '../terminal-pane/terminal-file-open-routing'
 import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
 import { resolveTerminalTabPtyOwnership } from '@/lib/terminal-tab-for-pty-id'
+import {
+  locationlessFailedOutputs,
+  showWorkspaceOutputLabel,
+  workspaceDiagnosticToolLabel,
+  workspaceDiagnosticsLiveStatus,
+  workspaceDiagnosticsStatusLabel
+} from './workspace-problems-panel-model'
 
 const NO_OUTPUT_PTYS = new Set<string>()
-
-function toolLabel(tool: WorkspaceDiagnosticTool): string {
-  const labels: Record<WorkspaceDiagnosticTool, string> = {
-    vitest: 'Vitest',
-    jest: 'Jest',
-    pytest: 'pytest',
-    typescript: 'TypeScript',
-    eslint: 'ESLint',
-    ruff: 'Ruff',
-    unknown: translate('auto.components.right.sidebar.problems.unknownTool', 'Diagnostics')
-  }
-  return labels[tool]
-}
 
 function groupDiagnosticsByFile(
   diagnostics: readonly WorkspaceDiagnostic[]
@@ -65,37 +56,6 @@ function diagnosticLocationLabel(diagnostic: WorkspaceDiagnostic): string {
     : translate('auto.components.right.sidebar.problems.lineLocation', 'Line {{value0}}', {
         value0: diagnostic.line
       })
-}
-
-function diagnosticsStatusLabel(run: WorkspaceDiagnosticsSummary): string {
-  if (run.failed > 0) {
-    return translate('auto.components.right.sidebar.problems.failedCount', '{{value0}} failed', {
-      value0: run.failed
-    })
-  }
-  return run.status === 'failed'
-    ? translate('auto.components.right.sidebar.problems.checkFailed', 'Check failed')
-    : translate('auto.components.right.sidebar.problems.noFailures', 'No failures')
-}
-
-function locationlessFailedOutputs(
-  run: WorkspaceDiagnosticsSummary
-): { ptyId: string; tool: WorkspaceDiagnosticTool | null }[] {
-  const outputs = new Map<string, WorkspaceDiagnosticTool | null>()
-  for (const entry of Object.values(run.runsByTool)) {
-    if (entry?.status === 'failed' && entry.diagnostics.length === 0) {
-      outputs.set(entry.ptyId, entry.tool)
-    }
-  }
-  if (
-    outputs.size === 0 &&
-    run.status === 'failed' &&
-    run.diagnostics.length === 0 &&
-    run.outputPtyId
-  ) {
-    outputs.set(run.outputPtyId, null)
-  }
-  return [...outputs].map(([ptyId, tool]) => ({ ptyId, tool }))
 }
 
 export function WorkspaceDiagnosticsList({
@@ -130,7 +90,9 @@ export function WorkspaceDiagnosticsList({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
-            <span className="font-semibold text-foreground">{diagnosticsStatusLabel(run)}</span>
+            <span className="font-semibold text-foreground">
+              {workspaceDiagnosticsStatusLabel(run)}
+            </span>
             {run.passed > 0 ? (
               <span className="text-muted-foreground">
                 {translate(
@@ -155,7 +117,7 @@ export function WorkspaceDiagnosticsList({
             ) : null}
           </div>
           <div className="truncate text-[11px] text-muted-foreground">
-            {run.tools.map(toolLabel).join(' · ')}
+            {run.tools.map(workspaceDiagnosticToolLabel).join(' · ')}
           </div>
         </div>
         <Button
@@ -210,9 +172,8 @@ export function WorkspaceDiagnosticsList({
                   size="sm"
                   className="mt-3"
                   onClick={() => onShowOutput(ptyId)}
-                  aria-label={tool ? `Show ${toolLabel(tool)} output` : undefined}
                 >
-                  {translate('auto.components.right.sidebar.problems.showOutput', 'Show output')}
+                  {showWorkspaceOutputLabel(tool)}
                 </Button>
               ))
             : null}
@@ -236,12 +197,8 @@ export function WorkspaceDiagnosticsList({
                       variant="outline"
                       size="sm"
                       onClick={() => onShowOutput(ptyId)}
-                      aria-label={tool ? `Show ${toolLabel(tool)} output` : undefined}
                     >
-                      {translate(
-                        'auto.components.right.sidebar.problems.showOutput',
-                        'Show output'
-                      )}
+                      {showWorkspaceOutputLabel(tool)}
                     </Button>
                   ))}
                 </div>
@@ -372,7 +329,7 @@ export default function WorkspaceProblemsPanel(): React.JSX.Element {
     [worktree]
   )
 
-  const liveStatus = run ? diagnosticsStatusLabel(run) : ''
+  const liveStatus = run ? workspaceDiagnosticsLiveStatus(run) : ''
   const liveRegion = (
     <span className="sr-only" aria-live="polite" aria-atomic="true">
       {liveStatus}

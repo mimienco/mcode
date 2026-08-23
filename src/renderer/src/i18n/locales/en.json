@@ -12209,6 +12209,7 @@
             "noSourceLocation": "The check exited unsuccessfully without a source location.",
             "passedCount": "{{value0}} passed",
             "showOutput": "Show output",
+            "showToolOutput": "Show {{value0}} output",
             "unknownTool": "Diagnostics",
             "warningCount": "{{value0}} warnings"
           },

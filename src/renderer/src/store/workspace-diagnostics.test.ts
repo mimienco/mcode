@@ -236,4 +236,60 @@ describe('workspace diagnostics capture', () => {
     expect(run?.runsByTool.vitest).toMatchObject({ status: 'passed', passed: 20 })
     expect(run?.runsByTool.eslint).toMatchObject({ status: 'failed', failed: 1, diagnostics: [] })
   })
+
+  it('does not report a later && step when an earlier parsed step failed', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: 'vitest run && eslint src'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Tests  1 failed (1)\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run?.runsByTool.vitest).toMatchObject({ status: 'failed', failed: 1 })
+    expect(run?.runsByTool.eslint).toBeUndefined()
+  })
+
+  it('retires a generic package-test failure when a concrete runner recovers', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      command: 'pnpm test'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      command: 'pnpm test'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      data: 'Tests  4 passed (4)\n'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-tests',
+      worktreeId: 'wt-1',
+      exitCode: 0
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run).toMatchObject({ status: 'passed', tools: ['vitest'], passed: 4 })
+    expect(run?.runsByTool.unknown).toBeUndefined()
+  })
 })

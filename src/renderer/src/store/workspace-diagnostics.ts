@@ -228,6 +228,7 @@ export function completeWorkspaceDiagnosticsCommand(args: {
     toolHint &&
     args.exitCode !== null &&
     args.exitCode !== 0 &&
+    !parsedRuns.some((run) => run.status === 'failed') &&
     !toolHintIsRepresented(toolHint, parsedRuns)
       ? synthesizeRun(toolHint, args.exitCode)
       : null
@@ -255,6 +256,17 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   useWorkspaceDiagnosticsStore.setState((state) => {
     const prior = state.runsByWorktreeId[workspaceIdentity]?.runsByTool ?? {}
     const runsByTool = { ...prior }
+    const hasUnknownTestRun = entries.some((entry) => entry.tool === 'unknown')
+    const hasConcreteTestRun = entries.some((entry) =>
+      ['vitest', 'jest', 'pytest'].includes(entry.tool)
+    )
+    if (hasUnknownTestRun) {
+      delete runsByTool.vitest
+      delete runsByTool.jest
+      delete runsByTool.pytest
+    } else if (hasConcreteTestRun) {
+      delete runsByTool.unknown
+    }
     for (const entry of entries) {
       runsByTool[entry.tool] = entry
     }

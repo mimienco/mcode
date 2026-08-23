@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { WorkspaceDiagnosticsList } from './WorkspaceProblemsPanel'
+import { workspaceDiagnosticsLiveStatus } from './workspace-problems-panel-model'
 
 describe('WorkspaceDiagnosticsList', () => {
   it('shows objective failure counts and exposes source locations as buttons', () => {
@@ -165,5 +166,80 @@ describe('WorkspaceDiagnosticsList', () => {
 
     expect(markup).toContain('without a source location')
     expect(markup).not.toContain('Show output')
+  })
+
+  it('offers output when only some failures in a tool have source locations', () => {
+    const diagnostic = {
+      id: 'located-failure',
+      kind: 'test' as const,
+      severity: 'error' as const,
+      filePath: 'src/cart.test.ts',
+      line: 8,
+      column: 2,
+      title: 'cart fails',
+      message: 'wrong total',
+      code: null
+    }
+    const markup = renderToStaticMarkup(
+      <WorkspaceDiagnosticsList
+        run={{
+          tools: ['vitest'],
+          runsByTool: {
+            vitest: {
+              tool: 'vitest',
+              ptyId: 'pty-tests',
+              status: 'failed',
+              failed: 2,
+              passed: 3,
+              total: 5,
+              diagnostics: [diagnostic],
+              updatedAt: 1
+            }
+          },
+          outputPtyId: 'pty-tests',
+          status: 'failed',
+          failed: 2,
+          passed: 3,
+          total: 5,
+          diagnostics: [diagnostic],
+          updatedAt: 1
+        }}
+        onClear={() => {}}
+        onOpenDiagnostic={() => {}}
+        onShowOutput={() => {}}
+        availableOutputPtyIds={new Set(['pty-tests'])}
+      />
+    )
+
+    expect(markup).toContain('Show Vitest output')
+    expect(markup).toContain('cart fails')
+  })
+
+  it('announces successful and warning count changes', () => {
+    expect(
+      workspaceDiagnosticsLiveStatus({
+        tools: ['typescript'],
+        runsByTool: {},
+        outputPtyId: null,
+        status: 'passed',
+        failed: 0,
+        passed: 12,
+        total: 13,
+        diagnostics: [
+          {
+            id: 'warning',
+            kind: 'compiler',
+            severity: 'warning',
+            filePath: 'src/cart.ts',
+            line: 1,
+            column: 1,
+            title: 'TS6133',
+            message: 'Unused value',
+            code: 'TS6133'
+          }
+        ],
+        updatedAt: 1
+      })
+    ).toBe('No failures. 12 passed. 1 warnings')
   })
 })
