@@ -67,6 +67,7 @@ function setFolderWorkspaceFixtureState(
     createdFrom?: ProjectGroup['createdFrom']
     experimentalNewWorktreeCardStyle?: boolean
     nestedGroup?: boolean
+    quickChat?: boolean
   } = {}
 ): void {
   const parentGroup: ProjectGroup | null = options.nestedGroup
@@ -93,9 +94,13 @@ function setFolderWorkspaceFixtureState(
     isCollapsed: false,
     color: null,
     createdAt: 1,
-    updatedAt: 1
+    updatedAt: 1,
+    ...(options.quickChat ? { purpose: 'quick-chats' as const } : {})
   }
-  const folderWorkspace = makeFolderWorkspace(group.id)
+  const folderWorkspace = makeFolderWorkspace(
+    group.id,
+    options.quickChat ? { kind: 'quick-chat' } : {}
+  )
 
   mockStore.state = {
     ...makeFolderWorkspacePathStatusMockState(),
@@ -185,6 +190,25 @@ describe('WorktreeList lineage child card renderer', () => {
         surfaceInset: getPaddingLeft(surfaceOpeningTag)
       })
     ).toBe(20)
+  })
+
+  it('applies standalone-chat presentation only to actual quick chats', async () => {
+    setFolderWorkspaceFixtureState()
+    const projectMarkup = await renderWorktreeListMarkup()
+    const projectCard = getCardOpeningTag(projectMarkup, folderWorkspaceKey('folder-workspace-1'))
+
+    expect(projectCard).toContain('data-card-variant="standard"')
+
+    setFolderWorkspaceFixtureState({ quickChat: true })
+    const quickChatMarkup = await renderWorktreeListMarkup()
+    const quickChatCard = getCardOpeningTag(
+      quickChatMarkup,
+      folderWorkspaceKey('folder-workspace-1')
+    )
+
+    expect(quickChatMarkup).toContain('Chats')
+    expect(quickChatMarkup).toContain('data-repo-header-collapse-affordance=""')
+    expect(quickChatCard).toContain('data-card-variant="quick-chat"')
   })
 
   it('uses comparable new-card worktree geometry for experimental folder workspace rows', async () => {

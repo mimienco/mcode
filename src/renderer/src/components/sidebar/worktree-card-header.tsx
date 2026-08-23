@@ -1,5 +1,5 @@
 import React from 'react'
-import { AlertCircle, Server, ServerOff, Star, Trash2 } from 'lucide-react'
+import { Server, ServerOff, Star, Trash2, TriangleAlert } from 'lucide-react'
 
 import { RepoIconGlyph } from '@/components/repo/repo-icon'
 import { Badge } from '@/components/ui/badge'
@@ -188,7 +188,8 @@ export function WorktreeCardHeader({
         {typeof worktree.firstAgentMessageRenameError === 'string' &&
         worktree.firstAgentMessageRenameError.length > 0 &&
         !titleRenaming ? (
-          // Why: the error can be raw agent CLI output, so the badge opens a dialog rather than a tooltip.
+          // Why: naming failure is secondary state. Keep raw CLI output in the
+          // dialog without turning the workspace title row into a red alarm.
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -197,14 +198,14 @@ export function WorktreeCardHeader({
                 onPointerDown={stopQuickActionPointerPropagation}
                 onClick={handleOpenRenameErrorDialog}
                 onDoubleClick={handleOpenRenameErrorDialog}
-                className="h-4 shrink-0 gap-0.5 rounded !px-0.5 text-[10px] font-medium leading-none text-destructive border border-destructive/40 bg-destructive/10 hover:bg-destructive/15 hover:text-destructive has-[>svg]:!px-0.5"
+                size="icon-xs"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
                 aria-label={translate(
                   'auto.components.sidebar.WorktreeCard.02e19349f4',
                   'Auto-rename failed: view error'
                 )}
               >
-                <AlertCircle className="size-2.5" />
-                {translate('auto.components.sidebar.WorktreeCard.74522ee457', 'rename failed')}
+                <TriangleAlert className="size-3" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={8}>

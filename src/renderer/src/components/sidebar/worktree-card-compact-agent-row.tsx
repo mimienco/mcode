@@ -12,6 +12,7 @@ import { formatAgentToolPreview } from '@/lib/agent-row-tool-preview'
 import { useAgentRowConversationName } from '@/components/dashboard/use-agent-row-conversation-name'
 import { lastEnteredDoneAt } from '@/components/dashboard/agent-finished-timestamp'
 import CacheTimer, { usePromptCacheCountdownForPane } from './CacheTimer'
+import { humanizeOpaqueSidebarLabel } from './opaque-technical-identifier'
 
 function formatShortTimeAgo(ts: number, now: number): string {
   const delta = now - ts
@@ -34,7 +35,9 @@ function getCompactAgentPrimary(
   conversationName: string | null
 ): string {
   const prompt = conversationName ?? getAgentRowPrimaryText(agent.entry)
-  return prompt || agentStateLabel(getAgentDotState(agent))
+  return prompt
+    ? humanizeOpaqueSidebarLabel(prompt, formatAgentTypeLabel(agent.agentType))
+    : agentStateLabel(getAgentDotState(agent))
 }
 
 function getCompactAgentSecondary(agent: DashboardAgentRowData): string {

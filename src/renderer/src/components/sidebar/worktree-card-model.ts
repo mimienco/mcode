@@ -11,6 +11,8 @@ export type WorktreeRenameRequest = {
 
 export type ActiveSurfaceVariant = 'primary' | 'secondary'
 
+export type WorktreeCardVariant = 'standard' | 'quick-chat'
+
 export type WorktreeCardProps = {
   worktree: Worktree
   repo: Repo | undefined
@@ -52,6 +54,7 @@ export type WorktreeCardProps = {
   nativeDragEnabled?: boolean
   affiliateListMode?: boolean
   statusPrDisplay?: WorktreeCardPrDisplay | null
+  cardVariant?: WorktreeCardVariant
 }
 
 type DefaultedWorktreeCardProp =

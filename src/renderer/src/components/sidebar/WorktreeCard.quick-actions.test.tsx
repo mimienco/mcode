@@ -228,6 +228,35 @@ describe('WorktreeCard quick actions', () => {
     expect(markup).toContain('data-worktree-card-meta-row=""')
   })
 
+  it('hides the generated quick-chat folder identity from the card', () => {
+    settings = { experimentalNewWorktreeCardStyle: true }
+    worktreeCardProperties = ['status', 'branch']
+    projectGroups = [{ id: 'quick-chat-group', purpose: 'quick-chats' }]
+    const generatedId = '9689e8d2-5dd1-4c0f-a8a6-b8224a242f10'
+
+    const markup = renderToStaticMarkup(
+      <WorktreeCard
+        worktree={makeWorktree({
+          id: `folder:${generatedId}`,
+          repoId: 'folder-workspace:quick-chat-group',
+          displayName: 'New chat',
+          branch: '',
+          path: `/tmp/chats/${generatedId}`,
+          firstAgentMessageRenameError: 'raw agent output'
+        })}
+        repo={undefined}
+        isActive
+        cardVariant="quick-chat"
+      />
+    )
+
+    expect(markup).toContain('data-worktree-card-kind="quick-chat"')
+    expect(markup).not.toContain(`>${generatedId}</span>`)
+    expect(markup).not.toContain('data-worktree-card-meta-row=""')
+    expect(markup).toContain('aria-label="Auto-rename failed: view error"')
+    expect(markup).not.toContain('>rename failed<')
+  })
+
   it('does not render a branch icon for synthetic folder workspace path identity', () => {
     settings = { compactWorktreeCards: true, experimentalNewWorktreeCardStyle: true }
     worktreeCardProperties = ['status', 'branch']
@@ -267,7 +296,7 @@ describe('WorktreeCard quick actions', () => {
     expect(markup).not.toContain('This worktree will be renamed from the first agent message')
   })
 
-  it('renders the failed first-agent rename title badge', () => {
+  it('renders a quiet failed first-agent rename detail affordance', () => {
     const markup = renderToStaticMarkup(
       <WorktreeCard
         worktree={makeWorktree({ firstAgentMessageRenameError: 'model could not name this' })}
@@ -277,7 +306,8 @@ describe('WorktreeCard quick actions', () => {
     )
 
     expect(markup).toContain('aria-label="Auto-rename failed: view error"')
-    expect(markup).toContain('rename failed')
+    expect(markup).toContain('Auto-name failed. Click to see details.')
+    expect(markup).not.toContain('>rename failed<')
   })
 
   it('renders the failed first-agent rename title badge when rename is also pending', () => {
@@ -293,7 +323,7 @@ describe('WorktreeCard quick actions', () => {
     )
 
     expect(markup).toContain('aria-label="Auto-rename failed: view error"')
-    expect(markup).toContain('rename failed')
+    expect(markup).not.toContain('>rename failed<')
     expect(markup).not.toContain('rename pending')
   })
 

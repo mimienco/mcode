@@ -11,6 +11,7 @@ import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-
 import type { FolderWorkspacePathStatus } from '../../../../../../shared/folder-workspace-path-status'
 import { isConfirmedStaleFolderPathStatus } from '../../../../../../shared/folder-workspace-path-status'
 import { folderWorkspaceToWorktree } from '../../../../../../shared/folder-workspace-worktree'
+import { isQuickChatWorkspace } from '../../../../../../shared/quick-chat-workspaces'
 import WorktreeCard from '../../WorktreeCard'
 import type { WorktreeGroupBy } from '../grouping/row-types'
 import { getVirtualRowTransform } from '../viewport/virtual-rows'
@@ -122,6 +123,7 @@ export function renderFolderWorkspaceVirtualRow(args: {
           onSelectionGesture={(event) => ctx.onSelectionGesture(event, folderWorktree)}
           onContextMenuSelect={ctx.onContextMenuSelect}
           statusPrDisplay={folderPrDisplay}
+          cardVariant={isQuickChatWorkspace(row.folderWorkspace) ? 'quick-chat' : 'standard'}
         />
         <div className="pointer-events-auto absolute right-3 top-1.5">
           <FolderPathStatusIndicator status={pathStatus} />

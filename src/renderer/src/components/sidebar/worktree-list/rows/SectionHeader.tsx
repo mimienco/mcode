@@ -13,7 +13,7 @@ import type {
   WorkspaceStatusDefinition
 } from '../../../../../../shared/worktree/types'
 import type { GroupHeaderRow, WorktreeGroupBy } from '../grouping/row-types'
-import { PINNED_GROUP_KEY } from '../grouping/group-keys'
+import { PINNED_GROUP_KEY, QUICK_CHATS_GROUP_KEY } from '../grouping/group-keys'
 import { getWorkspaceStatusFromGroupKey } from '../../workspace-status'
 import { getVirtualRowTransform } from '../viewport/virtual-rows'
 import { resolveProjectGroupHeaderColor } from '../../project-header-color'
@@ -135,6 +135,7 @@ export function renderWorktreeSectionHeaderRow(args: {
       ? getWorkspaceStatusFromGroupKey(row.key, ctx.workspaceStatuses)
       : null
   const isPinnedHeader = row.key === PINNED_GROUP_KEY
+  const isQuickChatsHeader = row.key === QUICK_CHATS_GROUP_KEY
   const repoHeaderColor = resolveProjectGroupHeaderColor({
     groupBy: ctx.groupBy,
     headerKey: row.key,
@@ -164,10 +165,15 @@ export function renderWorktreeSectionHeaderRow(args: {
       })
     : null
   const isHeaderCollapsed = ctx.collapsedGroups.has(row.key)
-  // Why: repo/project/status/pinned share compact section chrome; flat "All" stays a simple label.
+  // Why: navigational sections with children expose their collapsed state;
+  // flat "All" stays a simple label.
   const showHeaderCollapseAffordance =
     row.count > 0 &&
-    (isRepoHeader || isProjectGroupHeader || headerWorkspaceStatus !== null || isPinnedHeader)
+    (isRepoHeader ||
+      isProjectGroupHeader ||
+      headerWorkspaceStatus !== null ||
+      isPinnedHeader ||
+      isQuickChatsHeader)
   return (
     <div
       key={vItem.key}
@@ -327,6 +333,11 @@ export function renderWorktreeSectionHeaderRow(args: {
               <div className="min-w-0 truncate text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground">
                 {row.label}
               </div>
+              {isQuickChatsHeader ? (
+                <span className="readout shrink-0 text-[10px] text-muted-foreground">
+                  {row.count}
+                </span>
+              ) : null}
               <RepoForkIndicator upstream={row.repo?.upstream} />
               <FolderPathStatusIndicator status={projectGroupPathStatus} />
             </div>
@@ -347,7 +358,10 @@ export function renderWorktreeSectionHeaderRow(args: {
               }}
             >
               <ChevronDown
-                className={cn('size-3.5 transition-transform', isHeaderCollapsed && '-rotate-90')}
+                className={cn(
+                  'size-3.5 transition-transform motion-reduce:transition-none',
+                  isHeaderCollapsed && '-rotate-90'
+                )}
               />
             </div>
           ) : null}

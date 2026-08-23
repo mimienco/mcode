@@ -86,6 +86,7 @@ export function createWorktreeCardModuleMock(): Record<string, unknown> {
       isActive,
       contentIndent,
       flushSurface,
+      cardVariant,
       renameRowKey,
       lineageChildCount,
       lineageCollapsed,
@@ -96,6 +97,7 @@ export function createWorktreeCardModuleMock(): Record<string, unknown> {
       isActive?: boolean
       contentIndent?: number
       flushSurface?: boolean
+      cardVariant?: 'standard' | 'quick-chat'
       renameRowKey?: string
       lineageChildCount?: number
       lineageCollapsed?: boolean
@@ -131,6 +133,7 @@ export function createWorktreeCardModuleMock(): Record<string, unknown> {
           'data-worktree-card-active': isActive ? 'true' : undefined,
           'data-content-indent': contentIndent,
           'data-flush-surface': flushSurface ? 'true' : undefined,
+          'data-card-variant': cardVariant,
           'data-begin-editing': beginEditing ? 'true' : undefined,
           'data-lineage-child-count': lineageChildCount,
           'data-lineage-collapsed':

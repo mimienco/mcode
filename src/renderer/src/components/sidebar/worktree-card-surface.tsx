@@ -22,6 +22,7 @@ export function WorktreeCardSurface({ card }: { card: WorktreeCardController }):
     isMultiSelected,
     revealHighlight,
     revealHighlightTone,
+    cardVariant,
     flushSurface,
     isLineageDropTarget,
     nativeDragEnabled,
@@ -101,7 +102,9 @@ export function WorktreeCardSurface({ card }: { card: WorktreeCardController }):
         }
         onOpenLinearIssueInMCode={linearIssue?.url ? handleOpenLinearIssueInMCode : undefined}
         onOpenReviewInMCode={
-          hoverReview?.url && hoverReview.provider === 'github' ? handleOpenReviewInMCode : undefined
+          hoverReview?.url && hoverReview.provider === 'github'
+            ? handleOpenReviewInMCode
+            : undefined
         }
         onOpenAutomation={affiliateListMode ? undefined : handleOpenAutomation}
         onOpenAutomationRun={affiliateListMode ? undefined : handleOpenAutomationRun}
@@ -133,6 +136,11 @@ export function WorktreeCardSurface({ card }: { card: WorktreeCardController }):
               ? 'border border-worktree-sidebar-ring/35 bg-worktree-sidebar-accent/70 ring-1 ring-worktree-sidebar-ring/30'
               : 'border border-transparent worktree-sidebar-card-hover',
         isActiveSurface && isMultiSelected && 'ring-1 ring-worktree-sidebar-ring/35',
+        cardVariant === 'quick-chat' &&
+          isActiveSurface && [
+            '!border-transparent !shadow-none',
+            "before:pointer-events-none before:absolute before:inset-y-2 before:left-0 before:w-px before:rounded-full before:bg-worktree-sidebar-ring before:content-['']"
+          ],
         revealHighlight && [
           'scroll-to-current-workspace-reveal-highlight',
           revealHighlightTone === 'ai' && 'scroll-to-current-workspace-reveal-highlight--ai'
@@ -145,6 +153,7 @@ export function WorktreeCardSurface({ card }: { card: WorktreeCardController }):
         isRuntimeDisconnected && !isDeleting && 'opacity-60'
       )}
       data-worktree-card-surface="true"
+      data-worktree-card-kind={cardVariant === 'quick-chat' ? 'quick-chat' : undefined}
       data-worktree-card-active={isActiveSurface ? activeSurfaceVariant : undefined}
       onClick={handleClick}
       onDoubleClick={affiliateListMode ? undefined : handleDoubleClick}

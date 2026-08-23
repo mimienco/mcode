@@ -22,6 +22,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     affiliateListMode,
     flushSurface,
     contentIndent,
+    cardVariant,
     newCardStyle,
     compactCards,
     isFolder,
@@ -29,7 +30,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     branch,
     identityDisplay,
     folderMetaRowContent,
-    showIdentityInNewCard,
+    showIdentityInNewCard: configuredShowIdentityInNewCard,
     conflictOperation,
     cardProps,
     cacheStartedAt,
@@ -69,6 +70,10 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
 
   // Why: pinned trees mix repos, so the repo icon shows regardless of groupBy's hideRepoBadge.
   const showPinnedRepoIcon = inPinnedSection && !!repo
+  const isQuickChat = cardVariant === 'quick-chat'
+  // Quick chats live under an explicit Chats section, so their generated folder
+  // path is implementation detail rather than useful navigation metadata.
+  const showIdentityInNewCard = !isQuickChat && configuredShowIdentityInNewCard
   // Why: new card style retired the Compact/Detailed switch; repo identity uses the compact chip, not a lower pill.
   const showRepoIdentityInTitle = newCardStyle || compactCards
   const showInlineRepoBadge =
@@ -96,7 +101,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
   const hasDetailedMetaRowContent = Boolean(
     (showRepoBadgeInMetaRow && repo) ||
     showHostContextBadge ||
-    folderMetaRowContent ||
+    (!isQuickChat && folderMetaRowContent) ||
     showBranch ||
     showIdentityInNewCard ||
     showDetachedHeadInMetaRow ||
@@ -231,7 +236,9 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
         onEditIssue={affiliateListMode ? undefined : handleEditIssue}
         onEditComment={affiliateListMode ? undefined : handleEditComment}
         onOpenGitHubIssueInMCode={
-          metaIssue && 'url' in metaIssue && metaIssue.url ? handleOpenGitHubIssueInMCode : undefined
+          metaIssue && 'url' in metaIssue && metaIssue.url
+            ? handleOpenGitHubIssueInMCode
+            : undefined
         }
         onOpenLinearIssueInMCode={linearIssue?.url ? handleOpenLinearIssueInMCode : undefined}
         onOpenReviewInMCode={
