@@ -29,6 +29,7 @@ import {
   createRemoteTerminalStreamWatchdog,
   type RemoteTerminalStreamWatchdog
 } from './remote-terminal-stream-watchdog'
+import { publishTerminalOutput } from '@/lib/terminal-output-observers'
 
 type RuntimeEnvironmentSubscriptionHandle = {
   unsubscribe: () => void
@@ -813,6 +814,10 @@ class RemoteRuntimeTerminalMultiplexer {
           stream.expectedSeq = seq
           stream.commandProbeBaselineSeq = undefined
         }
+        publishTerminalOutput({
+          ptyId: `remote:${this.environmentId}@@${stream.terminal}`,
+          data
+        })
         stream.callbacks.onData(data, {
           seq,
           rawLength,

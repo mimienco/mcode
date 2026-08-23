@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Plug, Files, GitBranch, ListChecks, Workflow } from 'lucide-react'
+import { Plug, Files, GitBranch, ListChecks, Workflow, CircleAlert } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { useRepoById } from '@/store/selectors'
 import { isFolderRepo } from '../../../../shared/repo-kind'
@@ -16,6 +16,7 @@ import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { translate } from '@/i18n/i18n'
 import { AgentSessionHistoryIcon } from './agent-session-history-icon'
 import type { ActivityBarItem } from './activity-bar-buttons'
+import { useWorkspaceDiagnosticsStore } from '@/store/workspace-diagnostics'
 
 export type RightSidebarActivityItems = {
   visibleItems: ActivityBarItem[]
@@ -35,6 +36,9 @@ export function useRightSidebarActivityItems({
   const checksShortcut = useShortcutLabel('sidebar.checks.toggle')
   const portsShortcut = useShortcutLabel('sidebar.ports.toggle')
   const activeWorktreeId = useAppStore((s) => (rightSidebarOpen ? s.activeWorktreeId : null))
+  const problemsRun = useWorkspaceDiagnosticsStore((state) =>
+    activeWorktreeId ? (state.runsByWorktreeId[activeWorktreeId] ?? null) : null
+  )
   // Why: source control and checks are meaningless for non-git folders.
   // Hide those tabs so the activity bar only shows relevant actions.
   const activeWorktree = useAppStore((s) =>
@@ -91,6 +95,13 @@ export function useRightSidebarActivityItems({
         folderOnly: true
       },
       {
+        id: 'problems',
+        icon: CircleAlert,
+        title: translate('auto.components.right.sidebar.index.problems', 'Problems'),
+        shortcut: '',
+        statusIndicator: problemsRun?.status === 'failed' ? 'failure' : undefined
+      },
+      {
         id: 'source-control',
         icon: GitBranch,
         title: translate('auto.components.right.sidebar.index.0314901467', 'Source Control'),
@@ -119,6 +130,7 @@ export function useRightSidebarActivityItems({
       checksShortcut,
       explorerShortcut,
       pluginPanelErrors,
+      problemsRun?.status,
       visiblePluginPanels,
       portsShortcut,
       sourceControlShortcut

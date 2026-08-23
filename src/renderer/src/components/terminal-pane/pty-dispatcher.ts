@@ -32,6 +32,7 @@ import {
   ptyReplayHandlers
 } from './pty-shutdown-data-suspension'
 import { markCommittedPtyShutdowns } from './pty-shutdown-exit-deferral'
+import { publishTerminalOutput } from '@/lib/terminal-output-observers'
 
 export {
   ptyDataHandlers,
@@ -142,6 +143,8 @@ function handleDispatchedPtyData(payload: {
   }
   const chars = payload.rawLength ?? payload.data.length
   const dispatch = (): void => {
+    // Why first: the handler can synchronously publish OSC 133 completion.
+    publishTerminalOutput({ ptyId: payload.id, data: payload.data })
     if (isPtyDataHandlerShutdownPending(payload.id)) {
       // Why: teardown output is speculative until the owner verifies sleep; retain it so a failed attempt resumes without losing terminal data.
       bufferPtyShutdownData(payload.id, payload.data, meta)
