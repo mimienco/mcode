@@ -59,6 +59,7 @@ import { registerMobileHandlers } from './ipc/mobile'
 import { initTelemetry, shutdownTelemetry, trackAppOpenedOnce, track } from './telemetry/client'
 import { classifyError } from './telemetry/classify-error'
 import { recordManagedHookInstallFailure } from './agent-hooks/install-telemetry'
+import { createAutomationRunCompletionNotifier } from './automations/run-completion-notifier'
 import {
   indexPersistedPaneKeyPtyIds,
   isLocalExecutionHost,
@@ -176,6 +177,7 @@ import {
   startWindowsDesktopBeforeShellPathReady,
   type WindowsDesktopStartupServices
 } from './startup/windows-desktop-shell-path-startup'
+import { configureShellPathCacheFile } from './startup/shell-path-hydration-cache'
 import {
   acquireSingleInstanceLock,
   logSingleInstanceLockBypass,
@@ -681,6 +683,9 @@ if (app.isPackaged && process.platform !== 'win32') {
 configureDevUserDataPath(is.dev)
 configureMCodeUserDataPathEnv()
 installServeSupervisorDisconnectQuit(isServeMode)
+// Why: the login-shell PATH probe takes seconds and blocks agent/chat session creation;
+// persisting the last good hydration lets the next launch serve it instantly (hydrate-shell-path.ts).
+configureShellPathCacheFile(join(app.getPath('userData'), 'shell-path-hydration.json'))
 
 // Why: just past createMainWindow's 10s ready-to-show fallback, so a window revealed that way still gets its tray icon.
 const TRAY_CREATE_FALLBACK_MS = 12_000
@@ -2179,19 +2184,33 @@ function shouldSuppressCodexAutoApprovalSyntheticTitleFromHook(args: {
       agent: 'codex',
       agentArgs: args.launchConfig.agentArgs,
       agentEnv: args.launchConfig.agentEnv
-    }) === 'yolo'
+    }) === 'bypass'
   )
 }
 
 void app.whenReady().then(async () => {
   logStartupMilestone('app-ready')
-  installMainThreadHangWatchdog({ userDataPath: getCanonicalUserDataPath() })
+  installMainThreadHangWatchdog({
+    userDataPath: getCanonicalUserDataPath(),
+    onObservation: (observation) => {
+      recordDurableCrashBreadcrumb(
+        observation.type === 'hang-detected'
+          ? 'main_thread_unresponsive'
+          : 'main_thread_responsive',
+        {
+          unresponsiveMs: Math.round(observation.unresponsiveMs),
+          workerObservedAt: Math.round(observation.observedAt)
+        }
+      )
+    }
+  })
   const hangDetection = consumeHangDetectionMarker(
     hangDetectionMarkerPath(getCanonicalUserDataPath())
   )
   if (hangDetection) {
     recordDurableCrashBreadcrumb('main_thread_hang_detected', {
       unresponsiveMs: hangDetection.unresponsiveMs,
+      detectedAt: hangDetection.detectedAt,
       previousPid: hangDetection.parentPid,
       selfRecovered: hangDetection.selfRecovered
     })
@@ -2679,6 +2698,7 @@ void app.whenReady().then(async () => {
   automations = new AutomationService(store, {
     claudeUsage,
     codexUsage,
+    notifyRunCompleted: createAutomationRunCompletionNotifier(store, runtimeService),
     // Why: desktop clients mirror remote-host automations, but only a server process should execute remote_host_service-owned schedules.
     allowRemoteHostScheduling: isServeMode,
     headlessDispatcher: isServeMode
