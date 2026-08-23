@@ -6,6 +6,7 @@ import {
   type DashboardSnapshot
 } from '../../../../shared/dashboard-snapshot'
 import { dashboardBucketForDotState } from '../dashboard/dashboard-card-bucket'
+import { dashboardCardOrchestration } from '../dashboard/dashboard-card-orchestration'
 
 export type DashboardAgentStatusPatchResult = {
   matched: boolean
@@ -72,7 +73,10 @@ export function patchDashboardSnapshotFromAgentStatus(
           ? event.interactivePrompt || undefined
           : card.askSummary
         : undefined,
-    subagents: patchedSubagents(card, event)
+    subagents: patchedSubagents(card, event),
+    orchestration: event.orchestration
+      ? (dashboardCardOrchestration(event.orchestration) ?? card.orchestration)
+      : card.orchestration
   }
   const cards = snapshot.cards.slice()
   cards[index] = nextCard

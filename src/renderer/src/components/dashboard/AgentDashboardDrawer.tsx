@@ -70,7 +70,7 @@ function AgentDashboardDrawerBody({
   return (
     <AgentKanbanBoard
       snapshot={snapshot}
-      initialView="board"
+      initialView="mission"
       // Why: bg-transparent lets the sheet's worktree-sidebar surface through
       // so the board reads as the same companion panel as the workspace board.
       containerClassName="h-full w-full bg-transparent"
@@ -228,7 +228,9 @@ export function AgentDashboardDrawer({
         onPointerDownOutside={guardSidebarInteraction}
         onInteractOutside={guardSidebarInteraction}
       >
-        <SheetTitle className="sr-only">{translate('dashboardPopout.title', 'Agents')}</SheetTitle>
+        <SheetTitle className="sr-only">
+          {translate('dashboardPopout.mission.title', 'Mission Control')}
+        </SheetTitle>
         {/* Radix unmounts SheetContent while closed, so the live snapshot
             derivation in the body stays off the closed path. */}
         <div ref={boardRef} className="flex min-h-0 flex-1 flex-col">

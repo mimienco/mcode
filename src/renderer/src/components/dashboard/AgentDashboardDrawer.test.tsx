@@ -91,7 +91,7 @@ describe('AgentDashboardDrawer', () => {
     expect(mocks.boardProps).toBeNull()
 
     act(() => useAppStore.setState({ agentDashboardDrawerOpen: true }))
-    expect(mocks.boardProps?.initialView).toBe('board')
+    expect(mocks.boardProps?.initialView).toBe('mission')
     expect(mocks.boardProps?.workspaceContextMenusEnabled).toBeUndefined()
     const onOpenMap = mocks.boardProps?.onOpenMap
     expect(onOpenMap).toBeTypeOf('function')

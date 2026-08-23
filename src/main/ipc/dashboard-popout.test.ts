@@ -133,6 +133,11 @@ describe('registerDashboardPopoutHandlers', () => {
       getKeybindings: expect.any(Function)
     })
 
+    handlers.get('dashboardPopout:open')!({ sender: mainSender } as never, 'mission')
+    expect(createPopoutMock).toHaveBeenLastCalledWith(store, 'mission', {
+      getKeybindings: expect.any(Function)
+    })
+
     createPopoutMock.mockClear()
     handlers.get('dashboardPopout:open')!({ sender: mainSender } as never, 'invalid')
     expect(createPopoutMock).not.toHaveBeenCalled()

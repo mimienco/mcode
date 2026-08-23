@@ -725,7 +725,10 @@ describe('buildDashboardSnapshot', () => {
           [PANE_KEY]: {
             taskId: 'task-1',
             dispatchId: 'dispatch-1',
-            taskTitle: 'Batched orchestration task'
+            dispatchStatus: 'dispatched',
+            taskTitle: 'Batched orchestration task',
+            displayName: 'Migration worker',
+            orchestrationRunId: 'run-1'
           }
         }
       }),
@@ -734,6 +737,14 @@ describe('buildDashboardSnapshot', () => {
 
     expect(snapshot.cards).toHaveLength(1)
     expect(snapshot.cards[0].task).toBe('Batched orchestration task')
+    expect(snapshot.cards[0].orchestration).toEqual({
+      taskId: 'task-1',
+      dispatchId: 'dispatch-1',
+      dispatchStatus: 'dispatched',
+      taskTitle: 'Batched orchestration task',
+      displayName: 'Migration worker',
+      orchestrationRunId: 'run-1'
+    })
   })
 
   it('releases stale batch references when production moves from multi to singleton to zero', () => {

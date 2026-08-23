@@ -46,7 +46,19 @@ function snapshot(cards: DashboardCard[] = [card()]): DashboardSnapshot {
 describe('patchDashboardSnapshotFromAgentStatus', () => {
   it('patches one known card without rebuilding the dashboard topology', () => {
     const original = snapshot([card(), card({ paneKey: 'tab-2:leaf-2' })])
-    const result = patchDashboardSnapshotFromAgentStatus(original, event())
+    const result = patchDashboardSnapshotFromAgentStatus(
+      original,
+      event({
+        orchestration: {
+          taskId: 'task-1',
+          dispatchId: 'dispatch-1',
+          dispatchStatus: 'dispatched',
+          taskTitle: 'Choose migration plan',
+          displayName: 'Migration worker',
+          orchestrationRunId: 'run-1'
+        }
+      })
+    )
 
     expect(result.matched).toBe(true)
     expect(result.snapshot.cards[0]).toMatchObject({
@@ -57,7 +69,15 @@ describe('patchDashboardSnapshotFromAgentStatus', () => {
       askSummary: '{"question":"Continue?"}',
       stateChangedAt: 250,
       statusUpdatedAt: 300,
-      unseen: true
+      unseen: true,
+      orchestration: {
+        taskId: 'task-1',
+        dispatchId: 'dispatch-1',
+        dispatchStatus: 'dispatched',
+        taskTitle: 'Choose migration plan',
+        displayName: 'Migration worker',
+        orchestrationRunId: 'run-1'
+      }
     })
     expect(result.snapshot.cards[1]).toBe(original.cards[1])
   })

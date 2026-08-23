@@ -1,4 +1,4 @@
-import type { AgentType } from './agent-status-types'
+import type { AgentStatusOrchestrationContext, AgentType } from './agent-status-types'
 import type { ExecutionHostId } from './execution-host'
 import type { RepoIcon } from './repo-icon'
 import type { TuiAgent } from './tui-agent'
@@ -20,6 +20,13 @@ export const DASHBOARD_BUCKET_ORDER: readonly DashboardBucket[] = [
   'done',
   'idle'
 ]
+
+export const DASHBOARD_VIEWS = ['mission', 'board', 'map'] as const
+export type DashboardView = (typeof DASHBOARD_VIEWS)[number]
+
+export function isDashboardView(value: unknown): value is DashboardView {
+  return typeof value === 'string' && (DASHBOARD_VIEWS as readonly string[]).includes(value)
+}
 
 /** Max length of a card's display labels. The producer truncates to this and
  *  the main-process validator enforces it, so an unbounded name (a long
@@ -53,6 +60,19 @@ export type DashboardCardSubagent = {
   name: string
   dotState: DashboardCardDotState
 }
+
+/** Small, display-only orchestration receipt used by Mission Control. It omits
+ * coordinator routing handles because a dashboard card already owns the exact
+ * pane route and the pop-out must not mutate orchestration state. */
+export type DashboardCardOrchestration = Pick<
+  AgentStatusOrchestrationContext,
+  | 'taskId'
+  | 'dispatchId'
+  | 'dispatchStatus'
+  | 'taskTitle'
+  | 'displayName'
+  | 'orchestrationRunId'
+>
 
 export type DashboardCardHostKind = 'local' | 'ssh' | 'wsl' | 'remote'
 export type DashboardCardWorkspaceKind = 'worktree' | 'folder'
@@ -116,6 +136,8 @@ export type DashboardCard = {
   hasReview?: boolean
   review?: DashboardCardReview
   subagents?: DashboardCardSubagent[]
+  /** Runtime linkage for grouping visible dispatch attempts into missions/tasks. */
+  orchestration?: DashboardCardOrchestration
   /** "Started … ago" display. */
   startedAt: number
   /** When the agent last entered `done`, or null if it never finished. Drives

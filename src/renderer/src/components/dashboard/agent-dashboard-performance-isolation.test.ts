@@ -31,7 +31,7 @@ describe('agent dashboard performance isolation', () => {
     expect(board).toContain("import('./AgentDashboardMapView')")
     expect(board).not.toMatch(/from ['"].\/(?:AgentMap|useAgentMap|agent-map-)/)
     expect(toolbar).not.toMatch(/from ['"].\/(?:AgentMap|useAgentMap|agent-map-)/)
-    expect(drawer).toContain('initialView="board"')
+    expect(drawer).toContain('initialView="mission"')
     expect(drawer).toContain("openPopout?.('map')")
     expect(drawer).toContain('onOpenMap={handleOpenMap}')
   })

@@ -190,7 +190,7 @@ describe('createOrFocusDashboardPopout', () => {
 
     expect(instances).toHaveLength(1)
     const opts = instances[0].options
-    expect(opts.title).toBe('MCode Agent Dashboard')
+    expect(opts.title).toBe('MCode Mission Control')
     expect(opts.minWidth).toBe(480)
     expect(opts.minHeight).toBe(360)
     // Native frame: neither a custom titleBarStyle nor frame:false is set.
@@ -222,28 +222,28 @@ describe('createOrFocusDashboardPopout', () => {
   })
 
   it('loads the prod file entry with the requested view', () => {
-    createOrFocusDashboardPopout(makeStore() as never, 'kanban')
+    createOrFocusDashboardPopout(makeStore() as never, 'board')
     const win = instances[0]
     expect(win.loadURL).not.toHaveBeenCalled()
     expect(win.loadFile).toHaveBeenCalledTimes(1)
     const [file, options] = win.loadFile.mock.calls[0]
     expect(String(file)).toMatch(/renderer[\\/]popout\.html$/)
-    expect(options).toEqual({ search: 'view=kanban' })
+    expect(options).toEqual({ search: 'view=board' })
   })
 
   it('opens on the current dashboard view by default', () => {
     createOrFocusDashboardPopout(makeStore() as never)
 
-    expect(instances[0].loadFile.mock.calls[0][1]).toEqual({ search: 'view=board' })
+    expect(instances[0].loadFile.mock.calls[0][1]).toEqual({ search: 'view=mission' })
   })
 
   it('loads the dev server URL with the requested view when in dev', () => {
     isMock.dev = true
     vi.stubEnv('ELECTRON_RENDERER_URL', RENDERER_URL)
-    createOrFocusDashboardPopout(makeStore() as never, 'kanban')
+    createOrFocusDashboardPopout(makeStore() as never, 'map')
     const win = instances[0]
     expect(win.loadFile).not.toHaveBeenCalled()
-    expect(win.loadURL).toHaveBeenCalledWith(`${RENDERER_URL}/popout.html?view=kanban`)
+    expect(win.loadURL).toHaveBeenCalledWith(`${RENDERER_URL}/popout.html?view=map`)
   })
 
   it('focuses the existing window instead of creating a second one', () => {

@@ -13,12 +13,13 @@ import {
   type KeybindingInput,
   type KeybindingOverrides
 } from '../../shared/keybindings'
+import type { DashboardView } from '../../shared/dashboard-snapshot'
 
 const MIN_WIDTH = 480
 const MIN_HEIGHT = 360
 const DEFAULT_WIDTH = 960
 const DEFAULT_HEIGHT = 720
-const DEFAULT_VIEW = 'board'
+const DEFAULT_VIEW: DashboardView = 'mission'
 const DASHBOARD_POPOUT_PARTITION = 'mcode-dashboard-popout'
 
 // Why: singleton — the dashboard is a companion surface, so a second "Pop Out"
@@ -98,7 +99,7 @@ function broadcastPopoutOpenChanged(open: boolean): void {
   }
 }
 
-function loadDashboardPopout(window: BrowserWindow, view: string): void {
+function loadDashboardPopout(window: BrowserWindow, view: DashboardView): void {
   const search = `view=${encodeURIComponent(view)}`
   // Why: mirror loadMainWindow's dev/prod branch — the dev server serves the
   // second HTML entry, prod loads the emitted file.
@@ -138,7 +139,7 @@ function resolveRestoredBounds(store: Store | null): {
  */
 export function createOrFocusDashboardPopout(
   store: Store | null,
-  view?: string,
+  view?: DashboardView,
   options: { getKeybindings?: () => KeybindingOverrides | undefined } = {}
 ): BrowserWindow {
   if (dashboardPopoutWindow && !dashboardPopoutWindow.isDestroyed()) {
@@ -162,7 +163,7 @@ export function createOrFocusDashboardPopout(
     ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    title: 'MCode Agent Dashboard',
+    title: 'MCode Mission Control',
     show: false,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',

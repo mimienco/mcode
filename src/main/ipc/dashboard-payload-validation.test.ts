@@ -53,6 +53,14 @@ const SNAPSHOT = {
       hasReview: true,
       review: { number: 11012, state: 'open' },
       subagents: [{ id: 'child-1', name: 'Review loop', dotState: 'working' }],
+      orchestration: {
+        taskId: 'task-1',
+        dispatchId: 'dispatch-1',
+        dispatchStatus: 'dispatched',
+        taskTitle: 'Review dashboard mission',
+        displayName: 'Dashboard reviewer',
+        orchestrationRunId: 'run-1'
+      },
       startedAt: 1_699_999_000_000,
       finishedAt: null,
       stateChangedAt: 1_699_999_500_000,
@@ -167,6 +175,42 @@ describe('dashboard payload validation', () => {
       isDashboardSnapshot({
         ...SNAPSHOT,
         cards: [{ ...SNAPSHOT.cards[0], parentPaneKey: 'x'.repeat(4_097) }]
+      })
+    ).toBe(false)
+    expect(
+      isDashboardSnapshot({
+        ...SNAPSHOT,
+        cards: [
+          {
+            ...SNAPSHOT.cards[0],
+            orchestration: { ...SNAPSHOT.cards[0].orchestration, dispatchStatus: 'running' }
+          }
+        ]
+      })
+    ).toBe(false)
+    expect(
+      isDashboardSnapshot({
+        ...SNAPSHOT,
+        cards: [
+          {
+            ...SNAPSHOT.cards[0],
+            orchestration: { ...SNAPSHOT.cards[0].orchestration, taskId: 'x'.repeat(4_097) }
+          }
+        ]
+      })
+    ).toBe(false)
+    expect(
+      isDashboardSnapshot({
+        ...SNAPSHOT,
+        cards: [
+          {
+            ...SNAPSHOT.cards[0],
+            orchestration: {
+              ...SNAPSHOT.cards[0].orchestration,
+              unexpectedPayload: 'x'.repeat(100_000)
+            }
+          }
+        ]
       })
     ).toBe(false)
   })
@@ -350,6 +394,20 @@ describe('dashboard payload validation', () => {
     it('drops only the offending card and keeps the rest of the board', () => {
       const good = SNAPSHOT.cards[0]
       const bad = { ...good, paneKey: 'tab-2:leaf-2', conversationName: 'x'.repeat(1_025) }
+
+      const admitted = admitDashboardSnapshot({ ...SNAPSHOT, cards: [good, bad] })
+
+      expect(admitted?.droppedCardCount).toBe(1)
+      expect(admitted?.snapshot.cards.map((card) => card.paneKey)).toEqual(['tab-1:leaf-1'])
+    })
+
+    it('drops only the card with malformed orchestration metadata', () => {
+      const good = SNAPSHOT.cards[0]
+      const bad = {
+        ...good,
+        paneKey: 'tab-2:leaf-2',
+        orchestration: { ...good.orchestration, dispatchStatus: 'running' }
+      }
 
       const admitted = admitDashboardSnapshot({ ...SNAPSHOT, cards: [good, bad] })
 

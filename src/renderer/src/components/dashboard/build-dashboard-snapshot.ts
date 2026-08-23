@@ -30,6 +30,7 @@ import {
   releaseRuntimeAgentOrchestrationBatchCache,
   selectRuntimeAgentOrchestrationBatch
 } from '../sidebar/worktree-agent-orchestration-batch'
+import { dashboardCardOrchestration } from './dashboard-card-orchestration'
 import {
   selectLivePtyIdsForWorktree,
   selectRuntimePaneTitlesForWorktree
@@ -269,6 +270,9 @@ export function buildDashboardSnapshot(
         hasReview: context ? context.hasReview || context.review !== undefined : undefined,
         review: context?.review,
         subagents: subagentsByParentPaneKey?.get(row.paneKey),
+        ...(includeCardDetails && row.entry.orchestration
+          ? { orchestration: dashboardCardOrchestration(row.entry.orchestration) }
+          : {}),
         lastUserMessage: isTitleDerived ? undefined : nonEmpty(row.entry.prompt),
         lastAgentMessage: isTitleDerived ? undefined : nonEmpty(row.entry.lastAssistantMessage),
         startedAt: row.startedAt,

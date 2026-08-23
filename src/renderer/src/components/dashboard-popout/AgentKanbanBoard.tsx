@@ -1,12 +1,13 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Columns3, Orbit, XIcon } from 'lucide-react'
+import { Columns3, ListChecks, Orbit, XIcon } from 'lucide-react'
 import {
   DASHBOARD_BUCKET_ORDER,
   type DashboardBucket,
   type DashboardCard,
   type DashboardSleepWorkspaceArgs,
   type DashboardSnapshot,
-  type DashboardSpawnAgentArgs
+  type DashboardSpawnAgentArgs,
+  type DashboardView
 } from '../../../../shared/dashboard-snapshot'
 import type { RepoIcon } from '../../../../shared/repo-icon'
 import { cn } from '@/lib/utils'
@@ -24,8 +25,9 @@ import './agent-board-transitions.css'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
+import { MissionControlView } from './MissionControlView'
 
-export type AgentDashboardView = 'map' | 'board'
+export type AgentDashboardView = DashboardView
 
 const AgentDashboardMapView = lazyWithRetry(
   () =>
@@ -306,7 +308,9 @@ export function AgentKanbanBoard({
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
           <h1 className="text-[13px] font-semibold">
-            {translate('dashboardPopout.title', 'Agents')}
+            {view === 'mission'
+              ? translate('dashboardPopout.mission.title', 'Mission Control')
+              : translate('dashboardPopout.title', 'Agents')}
           </h1>
           <span className="text-[11px] text-muted-foreground">
             {translate('dashboardPopout.total', '{{count}} total', {
@@ -318,6 +322,17 @@ export function AgentKanbanBoard({
             role="group"
             aria-label={translate('dashboardPopout.view.label', 'Dashboard view')}
           >
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              aria-pressed={view === 'mission'}
+              className={cn('h-6 gap-1 px-2', view === 'mission' && 'bg-accent')}
+              onClick={() => handleViewChange('mission')}
+            >
+              <ListChecks className="size-3" />
+              {translate('dashboardPopout.view.mission', 'Mission Control')}
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -357,7 +372,7 @@ export function AgentKanbanBoard({
             </div>
           ) : null}
         </div>
-        {view !== 'board' ? (
+        {view === 'map' ? (
           <Suspense fallback={null}>
             <AgentDashboardMapView
               snapshot={snapshot}
@@ -390,24 +405,32 @@ export function AgentKanbanBoard({
               onFiltersChange={setFilters}
               searchInputRef={searchInputRef}
             />
-            <div className="scrollbar-sleek flex min-h-0 flex-1 overflow-x-auto p-3">
-              {/* Auto margins center the capped board and collapse during horizontal overflow. */}
-              <div className="mx-auto flex w-full max-w-[1280px] gap-3">
-                {visibleBuckets.map((bucket) => (
-                  <KanbanColumn
-                    key={bucket}
-                    bucket={bucket}
-                    cards={grouped[bucket]}
-                    repoIconsByRepoId={snapshot.repoIconsByRepoId}
-                    now={now}
-                    onOpenTerminal={handleOpenTerminal}
-                  />
-                ))}
+            {view === 'mission' ? (
+              <MissionControlView
+                cards={filteredCards}
+                onOpenTerminal={handleOpenTerminal}
+                onOpenAgentMap={() => handleViewChange('map')}
+              />
+            ) : (
+              <div className="scrollbar-sleek flex min-h-0 flex-1 overflow-x-auto p-3">
+                {/* Auto margins center the capped board and collapse during horizontal overflow. */}
+                <div className="mx-auto flex w-full max-w-[1280px] gap-3">
+                  {visibleBuckets.map((bucket) => (
+                    <KanbanColumn
+                      key={bucket}
+                      bucket={bucket}
+                      cards={grouped[bucket]}
+                      repoIconsByRepoId={snapshot.repoIconsByRepoId}
+                      now={now}
+                      onOpenTerminal={handleOpenTerminal}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
-        {view === 'board' ? (
+        {view !== 'map' ? (
           <AgentTerminalDialog
             card={dialogCard}
             onOpenChange={handleDialogOpenChange}

@@ -413,6 +413,40 @@ describe('AgentKanbanBoard', () => {
     expect(screen.getByText('3 total')).toBeTruthy()
   })
 
+  it('opens an exact decision agent from Mission Control', () => {
+    const pending = card({
+      paneKey: 'decision-agent',
+      bucket: 'attention',
+      dotState: 'blocked',
+      askSummary: 'Approve the rollout?',
+      orchestration: {
+        taskId: 'task-1',
+        dispatchId: 'dispatch-1',
+        dispatchStatus: 'dispatched',
+        taskTitle: 'Roll out Mission Control',
+        orchestrationRunId: 'run-1'
+      }
+    })
+
+    render(
+      <AgentKanbanBoard
+        snapshot={{ generatedAt: 1, cards: [pending] }}
+        initialView="mission"
+        onAckAgent={ackAgent}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Mission Control' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Review decision: Approve the rollout?' }))
+
+    expect(ackAgent).toHaveBeenCalledWith('decision-agent')
+    expect(screen.getByTestId('terminal-dialog')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('terminal-dialog')).toHaveAttribute('data-pty-id', 'p1')
+  })
+
   it('leaves every column border neutral now that cards carry the state color', () => {
     renderBoard([card({ bucket: 'attention' })])
     for (const column of document.querySelectorAll('section')) {

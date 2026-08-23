@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron'
 import type { Store } from '../persistence'
 import type { KeybindingService } from '../keybindings/keybinding-service'
-import type { DashboardSnapshot } from '../../shared/dashboard-snapshot'
+import { isDashboardView, type DashboardSnapshot } from '../../shared/dashboard-snapshot'
 import {
   createOrFocusDashboardPopout,
   closeDashboardPopout,
@@ -60,7 +60,7 @@ export function registerDashboardPopoutHandlers(
     if (!isTrustedUIRenderer(event.sender) || !isDashboardEnabled(store)) {
       return
     }
-    if (view !== undefined && view !== 'board' && view !== 'map') {
+    if (view !== undefined && !isDashboardView(view)) {
       return
     }
     createOrFocusDashboardPopout(store, view, {

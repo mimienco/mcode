@@ -19,6 +19,12 @@ import {
   isDashboardWorkspaceList
 } from './dashboard-workspace-payload-validation'
 import { isDashboardFilterOptions } from './dashboard-filter-payload-validation'
+import { isDashboardOrchestration } from './dashboard-orchestration-payload-validation'
+import {
+  isDashboardBoundedString as isBoundedString,
+  isOptionalDashboardBoundedString as isOptionalBoundedString,
+  MAX_DASHBOARD_ID_LENGTH as MAX_ID_LENGTH
+} from './dashboard-payload-bounds'
 export { isDashboardSpawnAgentArgs } from './dashboard-agent-launch-validation'
 
 const MAX_DASHBOARD_CARDS = 1_000
@@ -32,7 +38,6 @@ const imageIconValidity = new BoundedMap<string, boolean>({
   maxBytes: MAX_CACHED_ICON_SRC_BYTES,
   sizeOf: (_valid, key) => key.length * 2
 })
-const MAX_ID_LENGTH = 4_096
 const MAX_LABEL_LENGTH = DASHBOARD_MAX_LABEL_LENGTH
 const DASHBOARD_BUCKETS = new Set(['attention', 'working', 'done', 'idle'])
 const DASHBOARD_DOT_STATES = new Set(['working', 'blocked', 'waiting', 'done', 'idle'])
@@ -54,14 +59,6 @@ const DASHBOARD_HOST_PLATFORMS = new Set([
 ])
 const WINDOWS_SHIFT_ENTER_ENCODINGS = new Set(['alt-enter', 'csi-u'])
 const WINDOWS_INPUT_RECORD_PASTE_NEWLINES = new Set(['alt-enter', 'csi-u'])
-
-function isBoundedString(value: unknown, maxLength: number, allowEmpty = false): value is string {
-  return typeof value === 'string' && value.length <= maxLength && (allowEmpty || value.length > 0)
-}
-
-function isOptionalBoundedString(value: unknown, maxLength: number): boolean {
-  return value === undefined || isBoundedString(value, maxLength, true)
-}
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -283,6 +280,7 @@ function isDashboardCard(value: unknown): boolean {
     (card.hasReview === undefined || typeof card.hasReview === 'boolean') &&
     isDashboardReview(card.review) &&
     isDashboardSubagents(card.subagents) &&
+    isDashboardOrchestration(card.orchestration) &&
     isFiniteNumber(card.startedAt) &&
     (card.finishedAt === null || isFiniteNumber(card.finishedAt)) &&
     isFiniteNumber(card.stateChangedAt) &&
