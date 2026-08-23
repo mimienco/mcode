@@ -12207,6 +12207,7 @@
             "noFailures": "No failures",
             "noSourceLocation": "The check exited unsuccessfully without a source location.",
             "passedCount": "{{value0}} passed",
+            "showOutput": "Show output",
             "unknownTool": "Diagnostics",
             "warningCount": "{{value0}} warnings"
           },
