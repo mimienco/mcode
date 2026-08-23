@@ -292,4 +292,51 @@ describe('workspace diagnostics capture', () => {
     expect(run).toMatchObject({ status: 'passed', tools: ['vitest'], passed: 4 })
     expect(run?.runsByTool.unknown).toBeUndefined()
   })
+
+  it('keeps a represented check failed when its own process exits nonzero', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-lint',
+      worktreeId: 'wt-1',
+      command: 'eslint --max-warnings=0 src'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-lint',
+      worktreeId: 'wt-1',
+      data: 'src/a.ts\n  2:1  warning  Avoid this  demo/rule\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-lint',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    expect(useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]).toMatchObject({
+      status: 'failed',
+      failed: 1,
+      outputPtyId: 'pty-lint'
+    })
+  })
+
+  it.each(['vitest run; eslint src', 'vitest run || eslint src'])(
+    'keeps an unparsed later failure after an earlier parsed failure for %s',
+    (command) => {
+      beginWorkspaceDiagnosticsCommand({ ptyId: 'pty-checks', worktreeId: 'wt-1', command })
+      captureWorkspaceTerminalOutput({
+        ptyId: 'pty-checks',
+        worktreeId: 'wt-1',
+        data: 'Tests  1 failed (1)\nESLint: failed to load configuration\n'
+      })
+
+      completeWorkspaceDiagnosticsCommand({
+        ptyId: 'pty-checks',
+        worktreeId: 'wt-1',
+        exitCode: 2
+      })
+
+      const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+      expect(run?.runsByTool.vitest).toMatchObject({ status: 'failed' })
+      expect(run?.runsByTool.eslint).toMatchObject({ status: 'failed', diagnostics: [] })
+    }
+  )
 })

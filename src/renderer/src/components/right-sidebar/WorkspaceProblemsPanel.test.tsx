@@ -240,6 +240,6 @@ describe('WorkspaceDiagnosticsList', () => {
         ],
         updatedAt: 1
       })
-    ).toBe('No failures. 12 passed. 1 warnings')
+    ).toBe('No failures. 12 passed. 1 warning')
   })
 })

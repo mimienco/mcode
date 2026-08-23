@@ -26,7 +26,8 @@ import {
   showWorkspaceOutputLabel,
   workspaceDiagnosticToolLabel,
   workspaceDiagnosticsLiveStatus,
-  workspaceDiagnosticsStatusLabel
+  workspaceDiagnosticsStatusLabel,
+  workspaceDiagnosticsWarningLabel
 } from './workspace-problems-panel-model'
 
 const NO_OUTPUT_PTYS = new Set<string>()
@@ -106,13 +107,7 @@ export function WorkspaceDiagnosticsList({
             ) : null}
             {warningCount > 0 ? (
               <span className="text-muted-foreground">
-                {translate(
-                  'auto.components.right.sidebar.problems.warningCount',
-                  '{{value0}} warnings',
-                  {
-                    value0: warningCount
-                  }
-                )}
+                {workspaceDiagnosticsWarningLabel(warningCount)}
               </span>
             ) : null}
           </div>

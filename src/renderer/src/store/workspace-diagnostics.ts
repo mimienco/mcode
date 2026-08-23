@@ -3,7 +3,7 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 
 import {
-  detectWorkspaceDiagnosticTool,
+  analyzeWorkspaceDiagnosticCommand,
   parseWorkspaceDiagnosticsRunsOutput,
   type WorkspaceDiagnostic,
   type WorkspaceDiagnosticsRun,
@@ -179,16 +179,6 @@ function synthesizeRun(
   }
 }
 
-function toolHintIsRepresented(
-  toolHint: WorkspaceDiagnosticTool,
-  runs: readonly WorkspaceDiagnosticsRun[]
-): boolean {
-  if (toolHint === 'unknown') {
-    return runs.some((run) => ['vitest', 'jest', 'pytest'].includes(run.tool))
-  }
-  return runs.some((run) => run.tool === toolHint)
-}
-
 function attachBasePath(
   diagnostics: readonly WorkspaceDiagnostic[],
   basePath: string | undefined
@@ -222,14 +212,35 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   capturesByPtyId.delete(args.ptyId)
   commandMetadataByPtyId.delete(args.ptyId)
   const output = capture?.chunks.slice(capture.headIndex).join('') ?? ''
-  const toolHint = metadata ? detectWorkspaceDiagnosticTool(metadata.command) : null
-  const parsedRuns = parseWorkspaceDiagnosticsRunsOutput(output, args.exitCode)
+  const commandAnalysis = metadata ? analyzeWorkspaceDiagnosticCommand(metadata.command) : null
+  const toolHint = commandAnalysis?.tool ?? null
+  let parsedRuns = parseWorkspaceDiagnosticsRunsOutput(output, args.exitCode)
+  const representedRunIndex = toolHint
+    ? parsedRuns.findIndex((run) =>
+        toolHint === 'unknown'
+          ? ['vitest', 'jest', 'pytest'].includes(run.tool)
+          : run.tool === toolHint
+      )
+    : -1
+  if (
+    args.exitCode !== null &&
+    args.exitCode !== 0 &&
+    representedRunIndex !== -1 &&
+    parsedRuns[representedRunIndex]?.status === 'passed'
+  ) {
+    parsedRuns = parsedRuns.map((run, index) =>
+      index === representedRunIndex ? { ...run, status: 'failed', failed: 1 } : run
+    )
+  }
   const unresolvedToolRun =
     toolHint &&
     args.exitCode !== null &&
     args.exitCode !== 0 &&
-    !parsedRuns.some((run) => run.status === 'failed') &&
-    !toolHintIsRepresented(toolHint, parsedRuns)
+    representedRunIndex === -1 &&
+    !(
+      commandAnalysis?.precedingOperator === 'and' &&
+      parsedRuns.some((run) => run.status === 'failed')
+    )
       ? synthesizeRun(toolHint, args.exitCode)
       : null
   const runs =

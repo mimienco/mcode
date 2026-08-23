@@ -12211,6 +12211,7 @@
             "showOutput": "Show output",
             "showToolOutput": "Show {{value0}} output",
             "unknownTool": "Diagnostics",
+            "warning": "{{value0}} warning",
             "warningCount": "{{value0}} warnings"
           },
           "right": {

@@ -57,6 +57,16 @@ export function showWorkspaceOutputLabel(tool: WorkspaceDiagnosticTool | null): 
     : translate('auto.components.right.sidebar.problems.showOutput', 'Show output')
 }
 
+export function workspaceDiagnosticsWarningLabel(warningCount: number): string {
+  return warningCount === 1
+    ? translate('auto.components.right.sidebar.problems.warning', '{{value0}} warning', {
+        value0: warningCount
+      })
+    : translate('auto.components.right.sidebar.problems.warningCount', '{{value0}} warnings', {
+        value0: warningCount
+      })
+}
+
 export function workspaceDiagnosticsLiveStatus(run: WorkspaceDiagnosticsSummary): string {
   const warningCount = run.diagnostics.filter((item) => item.severity === 'warning').length
   return [
@@ -66,11 +76,7 @@ export function workspaceDiagnosticsLiveStatus(run: WorkspaceDiagnosticsSummary)
           value0: run.passed
         })
       : null,
-    warningCount > 0
-      ? translate('auto.components.right.sidebar.problems.warningCount', '{{value0}} warnings', {
-          value0: warningCount
-        })
-      : null
+    warningCount > 0 ? workspaceDiagnosticsWarningLabel(warningCount) : null
   ]
     .filter((part): part is string => part !== null)
     .join('. ')

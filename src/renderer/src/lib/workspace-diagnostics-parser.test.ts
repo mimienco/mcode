@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  analyzeWorkspaceDiagnosticCommand,
   detectWorkspaceDiagnosticTool,
   parseWorkspaceDiagnosticsOutput,
   parseWorkspaceDiagnosticsRunsOutput
@@ -280,5 +281,20 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
     expect(detectWorkspaceDiagnosticTool('eslint --config vitest.config.ts src')).toBe('eslint')
     expect(detectWorkspaceDiagnosticTool('rg eslint')).toBeNull()
     expect(detectWorkspaceDiagnosticTool('npm install eslint')).toBeNull()
+  })
+
+  it('preserves the control-flow operator before a detected check', () => {
+    expect(analyzeWorkspaceDiagnosticCommand('vitest run && eslint src')).toEqual({
+      tool: 'eslint',
+      precedingOperator: 'and'
+    })
+    expect(analyzeWorkspaceDiagnosticCommand('vitest run; eslint src')).toEqual({
+      tool: 'eslint',
+      precedingOperator: 'sequence'
+    })
+    expect(analyzeWorkspaceDiagnosticCommand('vitest run || eslint src')).toEqual({
+      tool: 'eslint',
+      precedingOperator: 'or'
+    })
   })
 })

@@ -94,15 +94,40 @@ function directTool(command: string): WorkspaceDiagnosticTool | null {
   return tools[executable] ?? null
 }
 
-export function detectWorkspaceDiagnosticTool(command: string): WorkspaceDiagnosticTool | null {
-  const segments = cleanDiagnosticsOutput(command).split(/\s*(?:&&|\|\||;|\r?\n)\s*/)
+export type WorkspaceDiagnosticCommandAnalysis = {
+  tool: WorkspaceDiagnosticTool
+  precedingOperator: 'start' | 'and' | 'or' | 'sequence'
+}
+
+export function analyzeWorkspaceDiagnosticCommand(
+  command: string
+): WorkspaceDiagnosticCommandAnalysis | null {
+  const clean = cleanDiagnosticsOutput(command)
+  const segments: {
+    command: string
+    precedingOperator: WorkspaceDiagnosticCommandAnalysis['precedingOperator']
+  }[] = []
+  const operatorPattern = /&&|\|\||;|\r?\n/g
+  let precedingOperator: WorkspaceDiagnosticCommandAnalysis['precedingOperator'] = 'start'
+  let segmentStart = 0
+  for (const match of clean.matchAll(operatorPattern)) {
+    segments.push({ command: clean.slice(segmentStart, match.index), precedingOperator })
+    precedingOperator = match[0] === '&&' ? 'and' : match[0] === '||' ? 'or' : 'sequence'
+    segmentStart = (match.index ?? 0) + match[0].length
+  }
+  segments.push({ command: clean.slice(segmentStart), precedingOperator })
   for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const tool = directTool(segments[index] ?? '')
+    const segment = segments[index]!
+    const tool = directTool(segment.command)
     if (tool) {
-      return tool
+      return { tool, precedingOperator: segment.precedingOperator }
     }
   }
   return null
+}
+
+export function detectWorkspaceDiagnosticTool(command: string): WorkspaceDiagnosticTool | null {
+  return analyzeWorkspaceDiagnosticCommand(command)?.tool ?? null
 }
 
 export function parseWorkspaceDiagnosticsOutput(
