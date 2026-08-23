@@ -55,6 +55,10 @@ type UseFileExplorerTreePaneStateResult = {
   nodeCommands: ReturnType<typeof useFileExplorerNodeCommands>
 }
 
+type AppStoreState = ReturnType<typeof useAppStore.getState>
+type GitStatusEntries = AppStoreState['gitStatusByWorktree'][string]
+const EMPTY_GIT_STATUS_ENTRIES: GitStatusEntries = []
+
 /**
  * Owns every effect and command handler behind the explorer tree pane.
  *
@@ -118,7 +122,14 @@ export function useFileExplorerTreePaneState({
   const toggleDir = useAppStore((s) => s.toggleDir)
   const openFile = useAppStore((s) => s.openFile)
   const makePreviewFilePermanent = useAppStore((s) => s.makePreviewFilePermanent)
-  const gitStatusByWorktree = useAppStore((s) => s.gitStatusByWorktree)
+  // Why: select only this worktree's slice — the top-level map is replaced on
+  // ANY worktree's status write, and re-rendering the whole tree pane per poll
+  // (including while typing) is the exact cost tab-bar/use-tab-bar-runtime-model avoids.
+  const gitStatusEntries = useAppStore((s) =>
+    activeWorktreeId
+      ? (s.gitStatusByWorktree[activeWorktreeId] ?? EMPTY_GIT_STATUS_ENTRIES)
+      : EMPTY_GIT_STATUS_ENTRIES
+  )
   const closeFile = useAppStore((s) => s.closeFile)
 
   const runtimeDownloadContext = useMemo(
@@ -135,12 +146,11 @@ export function useFileExplorerTreePaneState({
   )
   const isWindows = useMemo(() => navigator.userAgent.includes('Windows'), [])
 
-  const entries = useMemo(
-    () => (activeWorktreeId ? (gitStatusByWorktree[activeWorktreeId] ?? []) : []),
-    [activeWorktreeId, gitStatusByWorktree]
+  const statusByRelativePath = useMemo(() => buildStatusMap(gitStatusEntries), [gitStatusEntries])
+  const folderStatusByRelativePath = useMemo(
+    () => buildFolderStatusMap(gitStatusEntries),
+    [gitStatusEntries]
   )
-  const statusByRelativePath = useMemo(() => buildStatusMap(entries), [entries])
-  const folderStatusByRelativePath = useMemo(() => buildFolderStatusMap(entries), [entries])
 
   const deletion = useFileDeletion({
     activeWorktreeId,

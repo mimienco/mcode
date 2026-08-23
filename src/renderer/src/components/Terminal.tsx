@@ -41,9 +41,6 @@ import type { Tab, TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { hasFeatureInteraction } from '../../../shared/feature-interactions'
-import BrowserPane from './browser-pane/BrowserPane'
-import { RetainedBrowserPaneOverlayLayer } from './browser-pane/assemble-chrome/BrowserPaneOverlayLayer'
-import EmulatorPaneOverlayLayer from './emulator-pane/EmulatorPaneOverlayLayer'
 import {
   isBrowserAutomationVisible,
   onBrowserAutomationVisibilityChange,
@@ -193,6 +190,14 @@ import { EDITOR_TAB_CONTENT_TYPES, getEditorCmdSaveFileId } from './editor/edito
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
 
 const EditorPanel = lazy(() => import('./editor/EditorPanel'))
+// Why: browser/emulator machinery only matters when such a tab exists; keep it out of the terminal chunk every boot parses.
+const BrowserPane = lazy(() => import('./browser-pane/BrowserPane'))
+const RetainedBrowserPaneOverlayLayer = lazy(() =>
+  import('./browser-pane/assemble-chrome/BrowserPaneOverlayLayer').then((module) => ({
+    default: module.RetainedBrowserPaneOverlayLayer
+  }))
+)
+const EmulatorPaneOverlayLayer = lazy(() => import('./emulator-pane/EmulatorPaneOverlayLayer'))
 
 // Why: gate handler runs after a dialog advances so a stray carry-over click can't act on the next dialog; ~200ms absorbs a physical double-click while staying responsive.
 const CLOSE_DIALOG_DEBOUNCE_MS = 200
@@ -2693,7 +2698,9 @@ function Terminal(): React.JSX.Element | null {
                         className={`absolute inset-0${isBrowserActive ? '' : ' pointer-events-none hidden'}`}
                       >
                         {isBrowserActive ? (
-                          <BrowserPane browserTab={browserTab} isActive={isBrowserActive} />
+                          <Suspense fallback={null}>
+                            <BrowserPane browserTab={browserTab} isActive={isBrowserActive} />
+                          </Suspense>
                         ) : null}
                       </div>
                     )
@@ -2871,19 +2878,21 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
         activationDeferredMountTabIds={activationDeferredMountTabIds}
       />
       {/* Why: once eligible, retain slot DOM so hidden worktrees keep their Electron guests alive (STA-3228). */}
-      <RetainedBrowserPaneOverlayLayer
-        worktreeId={worktreeId}
-        isWorktreeActive={isVisible}
-        mountEligible={
-          isVisible ||
-          backgroundMountTabIds === null ||
-          hasAutomationVisibleBrowser ||
-          hasMobileDrivenBrowser
-        }
-      />
-      {isVisible || backgroundMountTabIds === null ? (
-        <EmulatorPaneOverlayLayer worktreeId={worktreeId} isWorktreeActive={isVisible} />
-      ) : null}
+      <Suspense fallback={null}>
+        <RetainedBrowserPaneOverlayLayer
+          worktreeId={worktreeId}
+          isWorktreeActive={isVisible}
+          mountEligible={
+            isVisible ||
+            backgroundMountTabIds === null ||
+            hasAutomationVisibleBrowser ||
+            hasMobileDrivenBrowser
+          }
+        />
+        {isVisible || backgroundMountTabIds === null ? (
+          <EmulatorPaneOverlayLayer worktreeId={worktreeId} isWorktreeActive={isVisible} />
+        ) : null}
+      </Suspense>
       <AiVaultSessionDropLayer worktreeId={worktreeId} enabled={isVisible} />
     </div>
   )

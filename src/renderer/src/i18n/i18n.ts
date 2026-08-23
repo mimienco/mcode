@@ -6,7 +6,6 @@ import i18next, {
 } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
-import en from './locales/en.json'
 import { isPseudoLocalizationLocale, pseudoLocalizeString } from './pseudo-localization'
 import { DEFAULT_LOCALE, resolveUiLocale } from './supported-languages'
 import type { SupportedUiLocale } from '../../../shared/ui-locale'
@@ -21,10 +20,13 @@ export const i18n: I18nInstance = i18next.createInstance()
 // loads. A lazy backend fetches each non-English catalog on demand, so any
 // changeLanguage() call (UI switch or test) transparently loads its bundle
 // instead of paying the parse cost at cold start.
-const NON_DEFAULT_LOCALE_LOADERS: Record<
-  Exclude<SupportedUiLocale, 'en'>,
+// Every locale, English included, loads through the lazy backend: boot renders
+// from inline fallbacks while the catalog chunk streams in off the critical path.
+const LOCALE_LOADERS: Record<
+  SupportedUiLocale,
   () => Promise<{ default: Record<string, unknown> }>
 > = {
+  en: () => import('./locales/en.json'),
   es: () => import('./locales/es.json'),
   ja: () => import('./locales/ja.json'),
   ko: () => import('./locales/ko.json'),
@@ -35,10 +37,10 @@ const lazyLocaleBackend: BackendModule = {
   type: 'backend',
   init: () => {},
   read: (language: string, _namespace: string, callback: ReadCallback) => {
-    const loader = NON_DEFAULT_LOCALE_LOADERS[language as Exclude<SupportedUiLocale, 'en'>]
+    const loader = LOCALE_LOADERS[language as SupportedUiLocale]
     if (!loader) {
-      // English (and unknown locales) are served from bundled resources; signal
-      // "nothing to load" so i18next falls back to the in-memory catalog.
+      // Unknown locales (plugin packs register their own resources) have
+      // nothing for this backend to load.
       callback(null, false)
       return
     }
@@ -55,16 +57,10 @@ void i18n
   .init({
     fallbackLng: DEFAULT_LOCALE,
     lng: DEFAULT_LOCALE,
-    // Why: `resources` seeds the eager English catalog while
-    // `partialBundledLanguages` lets the backend supply the lazy locales — so
-    // i18next uses bundled `en` immediately and only hits the backend for the
-    // languages that aren't already in memory.
+    // Why: no bundled resources — every catalog (English included) arrives via
+    // the lazy backend, so boot never parses a 13k-entry JSON on the critical
+    // path; inline fallbacks cover the brief load window.
     partialBundledLanguages: true,
-    resources: {
-      en: {
-        translation: en
-      }
-    },
     interpolation: {
       escapeValue: false
     },
