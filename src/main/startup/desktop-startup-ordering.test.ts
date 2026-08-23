@@ -99,9 +99,7 @@ describe('startup ordering', () => {
       serveStartup.indexOf('await runtimeRpc.start()')
     )
     expect(desktopStartup).not.toContain('await managedWslCliReconciliationReady')
-    expect(desktopStartup).toContain(
-      "process.platform === 'win32' && app.isPackaged && !serveOptions"
-    )
+    expect(desktopStartup).toContain('if (!serveOptions) {')
     expect(desktopStartup).toContain(
       'openWindow: () => openMainWindow({ revealOnDidFinishLoad: true })'
     )

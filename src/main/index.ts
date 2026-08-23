@@ -12,7 +12,10 @@ import {
   migrateMobilePairingDataToCanonicalUserDataPath
 } from './persistence'
 import { initSessionParseCachePersistence } from './ai-vault/session-parse-cache-persistence'
-import { ensureActiveMCodeProfile, initMCodeProfilePaths } from './mcode-profiles/profile-index-store'
+import {
+  ensureActiveMCodeProfile,
+  initMCodeProfilePaths
+} from './mcode-profiles/profile-index-store'
 import { getMCodeCloudAuthConfig } from './mcode-profiles/profile-cloud-auth-config'
 import { getProfileUserDataPath } from './mcode-profiles/profile-storage-paths'
 import { applyAppIcon } from './app-icon'
@@ -2942,20 +2945,32 @@ void app.whenReady().then(async () => {
       userDataPath: app.getPath('userData')
     })
   }
+  // Resolved once first-window services are bound (desktop) or immediately (serve)
+  // so boot-critical work above no longer competes with CLI-presence stat storms.
+  let resolveFirstWindowBootSettled!: () => void
+  const firstWindowBootSettled = new Promise<void>((resolve) => {
+    resolveFirstWindowBootSettled = resolve
+  })
   if (shouldInstallManagedHooks(is.dev)) {
     // Why: check the persisted off switch before any auto-install so removed hooks don't silently reappear on launch.
     if (isAgentStatusHooksEnabled(store.getSettings())) {
       const managedHookStore = store
-      void applyAgentStatusHooksEnabled(true, managedHookStore.getSettings(), {
-        shouldHydrateShellPath: app.isPackaged,
-        onInstallError: recordManagedHookInstallFailure,
-        shouldContinue: (agent) => {
-          const settings = managedHookStore.getSettings()
-          return isAgentStatusHooksEnabled(settings) && !settings.disabledTuiAgents.includes(agent)
-        }
-      }).catch((error) => {
-        console.warn('[agent-hooks] failed to reconcile managed hooks on startup:', error)
-      })
+      // Why: CLI-presence detection stats every PATH dir per agent binary
+      // (~0.8s of syscalls); firing it during daemon handshake deepened boot stalls.
+      void firstWindowBootSettled.then(() =>
+        applyAgentStatusHooksEnabled(true, managedHookStore.getSettings(), {
+          shouldHydrateShellPath: app.isPackaged,
+          onInstallError: recordManagedHookInstallFailure,
+          shouldContinue: (agent) => {
+            const settings = managedHookStore.getSettings()
+            return (
+              isAgentStatusHooksEnabled(settings) && !settings.disabledTuiAgents.includes(agent)
+            )
+          }
+        }).catch((error) => {
+          console.warn('[agent-hooks] failed to reconcile managed hooks on startup:', error)
+        })
+      )
     } else {
       removeManagedAgentHooks()
     }
@@ -3126,7 +3141,9 @@ void app.whenReady().then(async () => {
 
   const shellPathReady = windowsShellPathHydration.whenReady()
   let desktopWindow: BrowserWindow | null = null
-  if (process.platform === 'win32' && app.isPackaged && !serveOptions) {
+  if (!serveOptions) {
+    // Why: the login-shell PATH probe can take seconds; open the window immediately
+    // (any platform) and start PTY services only once real PATH is known.
     const desktopStartup = startWindowsDesktopBeforeShellPathReady({
       openWindow: () => openMainWindow({ revealOnDidFinishLoad: true }),
       shellPathReady,
@@ -3134,12 +3151,13 @@ void app.whenReady().then(async () => {
     })
     desktopWindow = desktopStartup.window
     bindTerminalRuntimeStartupServices(desktopStartup.services)
+    resolveFirstWindowBootSettled()
   } else {
     await shellPathReady
     bindTerminalRuntimeStartupServices(Promise.resolve(startTerminalRuntimeStartupServices()))
+    resolveFirstWindowBootSettled()
   }
   app.on('activate', handleMacAppActivation)
-
   if (serveOptions) {
     // Why: give managed WSL launchers a brief chance to migrate before headless PTYs go live, without slow repairs withholding all RPC readiness.
     logStartupMilestone('wsl-cli-barrier-start')
