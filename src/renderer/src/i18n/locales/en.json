@@ -12198,6 +12198,7 @@
             "allPassed": "All {{value0}} tests passed",
             "checkFailed": "Check failed",
             "clear": "Clear diagnostics",
+            "commandTool": "Command",
             "emptyDescription": "Run tests, typecheck, or lint in a terminal. Failures will appear here automatically.",
             "emptyTitle": "No diagnostics yet",
             "failedCount": "{{value0}} failed",

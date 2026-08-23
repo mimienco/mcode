@@ -94,9 +94,17 @@ function directTool(command: string): WorkspaceDiagnosticTool | null {
   return tools[executable] ?? null
 }
 
-export type WorkspaceDiagnosticCommandAnalysis = {
+type WorkspaceDiagnosticCommandOperator = 'start' | 'and' | 'or' | 'sequence'
+
+export type WorkspaceDiagnosticCommandStep = {
+  tool: WorkspaceDiagnosticTool | null
+  precedingOperator: WorkspaceDiagnosticCommandOperator
+}
+
+export type WorkspaceDiagnosticCommandAnalysis = WorkspaceDiagnosticCommandStep & {
   tool: WorkspaceDiagnosticTool
-  precedingOperator: 'start' | 'and' | 'or' | 'sequence'
+  selectedStepIndex: number
+  steps: WorkspaceDiagnosticCommandStep[]
 }
 
 export function analyzeWorkspaceDiagnosticCommand(
@@ -105,10 +113,10 @@ export function analyzeWorkspaceDiagnosticCommand(
   const clean = cleanDiagnosticsOutput(command)
   const segments: {
     command: string
-    precedingOperator: WorkspaceDiagnosticCommandAnalysis['precedingOperator']
+    precedingOperator: WorkspaceDiagnosticCommandOperator
   }[] = []
   const operatorPattern = /&&|\|\||;|\r?\n/g
-  let precedingOperator: WorkspaceDiagnosticCommandAnalysis['precedingOperator'] = 'start'
+  let precedingOperator: WorkspaceDiagnosticCommandOperator = 'start'
   let segmentStart = 0
   for (const match of clean.matchAll(operatorPattern)) {
     segments.push({ command: clean.slice(segmentStart, match.index), precedingOperator })
@@ -116,11 +124,22 @@ export function analyzeWorkspaceDiagnosticCommand(
     segmentStart = (match.index ?? 0) + match[0].length
   }
   segments.push({ command: clean.slice(segmentStart), precedingOperator })
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const segment = segments[index]!
-    const tool = directTool(segment.command)
+  const steps = segments.map(
+    (segment): WorkspaceDiagnosticCommandStep => ({
+      tool: directTool(segment.command),
+      precedingOperator: segment.precedingOperator
+    })
+  )
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index]!
+    const tool = step.tool
     if (tool) {
-      return { tool, precedingOperator: segment.precedingOperator }
+      return {
+        tool,
+        precedingOperator: step.precedingOperator,
+        selectedStepIndex: index,
+        steps
+      }
     }
   }
   return null

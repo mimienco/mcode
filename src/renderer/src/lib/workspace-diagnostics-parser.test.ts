@@ -286,15 +286,39 @@ describe('parseWorkspaceDiagnosticsOutput', () => {
   it('preserves the control-flow operator before a detected check', () => {
     expect(analyzeWorkspaceDiagnosticCommand('vitest run && eslint src')).toEqual({
       tool: 'eslint',
-      precedingOperator: 'and'
+      precedingOperator: 'and',
+      selectedStepIndex: 1,
+      steps: [
+        { tool: 'vitest', precedingOperator: 'start' },
+        { tool: 'eslint', precedingOperator: 'and' }
+      ]
     })
     expect(analyzeWorkspaceDiagnosticCommand('vitest run; eslint src')).toEqual({
       tool: 'eslint',
-      precedingOperator: 'sequence'
+      precedingOperator: 'sequence',
+      selectedStepIndex: 1,
+      steps: [
+        { tool: 'vitest', precedingOperator: 'start' },
+        { tool: 'eslint', precedingOperator: 'sequence' }
+      ]
     })
     expect(analyzeWorkspaceDiagnosticCommand('vitest run || eslint src')).toEqual({
       tool: 'eslint',
-      precedingOperator: 'or'
+      precedingOperator: 'or',
+      selectedStepIndex: 1,
+      steps: [
+        { tool: 'vitest', precedingOperator: 'start' },
+        { tool: 'eslint', precedingOperator: 'or' }
+      ]
+    })
+    expect(analyzeWorkspaceDiagnosticCommand('vitest run && node scripts/check.js')).toEqual({
+      tool: 'vitest',
+      precedingOperator: 'start',
+      selectedStepIndex: 0,
+      steps: [
+        { tool: 'vitest', precedingOperator: 'start' },
+        { tool: null, precedingOperator: 'and' }
+      ]
     })
   })
 })

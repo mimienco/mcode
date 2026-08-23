@@ -260,6 +260,91 @@ describe('workspace diagnostics capture', () => {
     expect(run?.runsByTool.eslint).toBeUndefined()
   })
 
+  it('uses a generic failure when an earlier && step fails without parser evidence', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: 'vitest run && eslint src'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Vitest failed to load config\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run?.runsByTool.command).toMatchObject({ status: 'failed', diagnostics: [] })
+    expect(run?.runsByTool.eslint).toBeUndefined()
+  })
+
+  it('does not blame a passing check for a later non-diagnostic failure', () => {
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command: 'vitest run && node scripts/check-env.js'
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Tests  20 passed (20)\nEnvironment check failed\n'
+    })
+
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run?.runsByTool.vitest).toMatchObject({ status: 'passed', passed: 20 })
+    expect(run?.runsByTool.command).toMatchObject({ status: 'failed', diagnostics: [] })
+  })
+
+  it('clears a generic chain failure after the diagnostic command recovers', () => {
+    const command = 'vitest run && node scripts/check-env.js'
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Tests  2 passed (2)\nEnvironment check failed\n'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 1
+    })
+
+    beginWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      command
+    })
+    captureWorkspaceTerminalOutput({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      data: 'Tests  2 passed (2)\nEnvironment check passed\n'
+    })
+    completeWorkspaceDiagnosticsCommand({
+      ptyId: 'pty-checks',
+      worktreeId: 'wt-1',
+      exitCode: 0
+    })
+
+    const run = useWorkspaceDiagnosticsStore.getState().runsByWorktreeId[WORKSPACE_KEY]
+    expect(run?.runsByTool.vitest).toMatchObject({ status: 'passed', passed: 2 })
+    expect(run?.runsByTool.command).toBeUndefined()
+  })
+
   it('retires a generic package-test failure when a concrete runner recovers', () => {
     beginWorkspaceDiagnosticsCommand({
       ptyId: 'pty-tests',

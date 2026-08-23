@@ -10,6 +10,7 @@ export function workspaceDiagnosticToolLabel(tool: WorkspaceDiagnosticTool): str
     typescript: 'TypeScript',
     eslint: 'ESLint',
     ruff: 'Ruff',
+    command: translate('auto.components.right.sidebar.problems.commandTool', 'Command'),
     unknown: translate('auto.components.right.sidebar.problems.unknownTool', 'Diagnostics')
   }
   return labels[tool]

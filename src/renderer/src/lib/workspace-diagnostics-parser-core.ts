@@ -7,6 +7,7 @@ export type WorkspaceDiagnosticTool =
   | 'typescript'
   | 'eslint'
   | 'ruff'
+  | 'command'
   | 'unknown'
 
 export type WorkspaceDiagnostic = {

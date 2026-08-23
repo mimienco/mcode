@@ -9,6 +9,7 @@ import {
   type WorkspaceDiagnosticsRun,
   type WorkspaceDiagnosticTool
 } from '@/lib/workspace-diagnostics-parser'
+import { resolveWorkspaceDiagnosticCommandRuns } from '@/lib/workspace-diagnostics-command-outcome'
 
 const MAX_CAPTURE_CHARS = 256 * 1024
 const MAX_CAPTURED_TERMINALS = 64
@@ -164,21 +165,6 @@ function aggregateRuns(
   }
 }
 
-function synthesizeRun(
-  tool: WorkspaceDiagnosticTool,
-  exitCode: number | null
-): WorkspaceDiagnosticsRun {
-  const failed = exitCode !== null && exitCode !== 0
-  return {
-    tool,
-    status: failed ? 'failed' : 'passed',
-    failed: failed ? 1 : 0,
-    passed: 0,
-    total: failed ? 1 : 0,
-    diagnostics: []
-  }
-}
-
 function attachBasePath(
   diagnostics: readonly WorkspaceDiagnostic[],
   basePath: string | undefined
@@ -213,44 +199,11 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   commandMetadataByPtyId.delete(args.ptyId)
   const output = capture?.chunks.slice(capture.headIndex).join('') ?? ''
   const commandAnalysis = metadata ? analyzeWorkspaceDiagnosticCommand(metadata.command) : null
-  const toolHint = commandAnalysis?.tool ?? null
-  let parsedRuns = parseWorkspaceDiagnosticsRunsOutput(output, args.exitCode)
-  const representedRunIndex = toolHint
-    ? parsedRuns.findIndex((run) =>
-        toolHint === 'unknown'
-          ? ['vitest', 'jest', 'pytest'].includes(run.tool)
-          : run.tool === toolHint
-      )
-    : -1
-  if (
-    args.exitCode !== null &&
-    args.exitCode !== 0 &&
-    representedRunIndex !== -1 &&
-    parsedRuns[representedRunIndex]?.status === 'passed'
-  ) {
-    parsedRuns = parsedRuns.map((run, index) =>
-      index === representedRunIndex ? { ...run, status: 'failed', failed: 1 } : run
-    )
-  }
-  const unresolvedToolRun =
-    toolHint &&
-    args.exitCode !== null &&
-    args.exitCode !== 0 &&
-    representedRunIndex === -1 &&
-    !(
-      commandAnalysis?.precedingOperator === 'and' &&
-      parsedRuns.some((run) => run.status === 'failed')
-    )
-      ? synthesizeRun(toolHint, args.exitCode)
-      : null
-  const runs =
-    parsedRuns.length > 0
-      ? unresolvedToolRun
-        ? [...parsedRuns, unresolvedToolRun]
-        : parsedRuns
-      : toolHint
-        ? [synthesizeRun(toolHint, args.exitCode)]
-        : []
+  const runs = resolveWorkspaceDiagnosticCommandRuns({
+    commandAnalysis,
+    exitCode: args.exitCode,
+    parsedRuns: parseWorkspaceDiagnosticsRunsOutput(output, args.exitCode)
+  })
   if (runs.length === 0) {
     return []
   }
@@ -267,6 +220,9 @@ export function completeWorkspaceDiagnosticsCommand(args: {
   useWorkspaceDiagnosticsStore.setState((state) => {
     const prior = state.runsByWorktreeId[workspaceIdentity]?.runsByTool ?? {}
     const runsByTool = { ...prior }
+    if (commandAnalysis) {
+      delete runsByTool.command
+    }
     const hasUnknownTestRun = entries.some((entry) => entry.tool === 'unknown')
     const hasConcreteTestRun = entries.some((entry) =>
       ['vitest', 'jest', 'pytest'].includes(entry.tool)
