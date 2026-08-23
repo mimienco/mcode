@@ -104,6 +104,57 @@ describe('WorkspaceSessionHandler', () => {
     expect(staleResponse.result.snapshot.revision).toBe(1)
   })
 
+  it('rejects replace-session patches with an absent or non-numeric baseRevision', async () => {
+    const session = {
+      activeWorktreePath: '/repo/worktree',
+      activeTabId: 'tab-1',
+      tabsByWorktreePath: {},
+      terminalLayoutsByTabId: {}
+    }
+
+    // Seed the namespace at revision 1.
+    await sendRequest(
+      dispatcher,
+      'workspace.patch',
+      {
+        namespace: 'ssh target/path',
+        baseRevision: 0,
+        clientId: 'client-a',
+        patch: { kind: 'replace-session', session }
+      },
+      1
+    )
+
+    for (const [id, params] of [
+      [
+        2,
+        {
+          namespace: 'ssh target/path',
+          clientId: 'client-b',
+          patch: { kind: 'replace-session', session }
+        }
+      ],
+      [
+        3,
+        {
+          namespace: 'ssh target/path',
+          baseRevision: 'latest',
+          clientId: 'client-b',
+          patch: { kind: 'replace-session', session }
+        }
+      ]
+    ] as const) {
+      written = []
+      await sendRequest(dispatcher, 'workspace.patch', params as Record<string, unknown>, id)
+      const response = decodeJsonFrames(written).find(
+        (frame) => (frame as { id?: number }).id === id
+      ) as { result: { ok: boolean; reason: string; snapshot: { revision: number } } }
+      expect(response.result.ok).toBe(false)
+      expect(response.result.reason).toBe('stale-revision')
+      expect(response.result.snapshot.revision).toBe(1)
+    }
+  })
+
   it('tracks presence per namespace', async () => {
     await sendRequest(
       dispatcher,

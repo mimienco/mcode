@@ -162,13 +162,28 @@ export type ConnectHandshakeCallbacks = {
 }
 
 // Why: defense-in-depth prevents a bad .version from pairing incompatible bridge and daemon versions.
+// A peer that accepts TCP but never completes the application handshake must not stall --connect
+// indefinitely: the transport-level connect timeout is cleared on 'connect', so the handshake owns
+// the only remaining deadline.
+const CONNECT_HANDSHAKE_DEADLINE_MS = 10_000
+
 export function runConnectHandshake(
   sock: Socket,
   myVersion: string,
   cb: ConnectHandshakeCallbacks,
-  endpointCredential?: string
+  endpointCredential?: string,
+  deadlineMs: number = CONNECT_HANDSHAKE_DEADLINE_MS
 ): void {
   let handshakeDone = false
+
+  const deadline = setTimeout(() => {
+    if (handshakeDone) {
+      return
+    }
+    process.stderr.write(`[relay-connect] Handshake timed out after ${deadlineMs}ms\n`)
+    sock.destroy()
+    process.exit(1)
+  }, deadlineMs)
 
   const decoder: FrameDecoder = new FrameDecoder(
     (frame: DecodedFrame) => {
@@ -195,6 +210,7 @@ export function runConnectHandshake(
       if (msg.type === 'mcode-relay-handshake-ok') {
         process.stderr.write(`[relay-connect] Handshake OK at version=${msg.version}\n`)
         handshakeDone = true
+        clearTimeout(deadline)
         const leftover = decoder.drain()
         sock.removeAllListeners('data')
         cb.onAccepted(leftover)

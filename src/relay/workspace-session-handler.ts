@@ -128,7 +128,11 @@ export class WorkspaceSessionHandler {
     const namespace = sanitizeNamespace(params.namespace)
     const current = this.read(namespace)
     const baseRevision = Number(params.baseRevision)
-    if (Number.isFinite(baseRevision) && baseRevision !== current.revision) {
+    // Why: absent or non-numeric baseRevision previously skipped the staleness
+    // check entirely, letting a malformed or legacy client overwrite newer
+    // session state unconditionally. Treat it as stale so the client gets the
+    // current snapshot back and must retry with a real revision.
+    if (!Number.isFinite(baseRevision) || baseRevision !== current.revision) {
       return { ok: false, reason: 'stale-revision', snapshot: current }
     }
 

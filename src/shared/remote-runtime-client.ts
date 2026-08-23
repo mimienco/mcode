@@ -622,8 +622,10 @@ export async function subscribeRemoteRuntimeRequest<TResult>(
       ) {
         return false
       }
-      ensureSendQueue(ws).enqueue(Buffer.from(encryptBytes(bytes, sharedKey)))
-      return true
+      // Why: forward the queue's admission result — enqueue can reject under
+      // backpressure (dropping the frame), and callers rely on the boolean to
+      // know the input never reached the wire.
+      return ensureSendQueue(ws).enqueue(Buffer.from(encryptBytes(bytes, sharedKey)))
     }
 
     const succeed = (): void => {

@@ -106,6 +106,22 @@ describe('handshake round-trip over a real Socket pair', () => {
     })
   }
 
+  it('times out and exits when the daemon accepts but never completes the handshake', async () => {
+    // Silent server: accepts TCP, never sends a handshake frame.
+    server = createServer((sock) => trackServerSocket(sock))
+    await new Promise<void>((resolve) => server!.listen(sockPath, () => resolve()))
+
+    const bridgeSock = connect(sockPath)
+    await new Promise<void>((r) => bridgeSock.once('connect', () => r()))
+    const closed = new Promise<void>((resolve) => bridgeSock.once('close', () => resolve()))
+
+    runConnectHandshake(bridgeSock, '0.1.0+match', { onAccepted: vi.fn() }, undefined, 50)
+
+    await closed
+    expect(exitSpy).toHaveBeenCalledWith(1)
+    bridgeSock.destroy()
+  })
+
   it('accepts a matching version and delivers no leftover when the bridge sent only the handshake', async () => {
     const { accepted } = await startDaemon('0.1.0+match')
 

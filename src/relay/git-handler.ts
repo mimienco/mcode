@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- Why: centralizes the git RPC protocol surface so local and SSH git behavior stay in one dispatch table. */
 import { execFile, spawn, type ExecFileOptions } from 'node:child_process'
+import { terminateRelaySubprocessTree } from './subprocess-tree-termination'
 import { promisify } from 'node:util'
 import * as path from 'node:path'
 import type { RelayDispatcher, RequestContext } from './dispatcher'
@@ -1267,7 +1268,10 @@ export class GitHandler {
         context?.signal?.removeEventListener('abort', onAbort)
       }
       const onAbort = (): void => {
-        child.kill()
+        // Why: tree-kill, not child.kill() — on Windows git may run through
+        // wrappers, and SSH/credential-helper descendants survive a direct
+        // kill after the client disconnects (same policy as agent-exec-handler).
+        terminateRelaySubprocessTree(child)
       }
       context?.signal?.addEventListener('abort', onAbort, { once: true })
       child.stdout?.on('data', (chunk: Buffer) => {

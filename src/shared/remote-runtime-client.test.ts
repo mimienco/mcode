@@ -87,6 +87,21 @@ describe('subscribeRemoteRuntimeRequest', () => {
     expect(subscription.sendBinary(bytes)).toBe(true)
     await expect(server.nextBinary).resolves.toEqual(bytes)
     expect(onError).not.toHaveBeenCalled()
+
+    // Why: regression guard for the backpressure admission contract — if the
+    // outbound queue rejects a frame (wire write throws), sendBinary must
+    // report false instead of claiming delivery.
+    const { WebSocket } = await import('ws')
+    const realSend = WebSocket.prototype.send
+    WebSocket.prototype.send = function () {
+      throw new Error('wire down')
+    }
+    try {
+      expect(subscription.sendBinary(new Uint8Array([9]))).toBe(false)
+    } finally {
+      WebSocket.prototype.send = realSend
+    }
+    expect(onError).toHaveBeenCalled()
     subscription.close()
   })
 
