@@ -219,8 +219,8 @@ describe('WorkspaceDiagnosticsList', () => {
   })
 
   it('distinguishes output actions for independent command failures', () => {
-    const commandA = 'vitest run && node env-a.js'
-    const commandB = 'eslint src && node env-b.js'
+    const commandA = 'vitest run && node scripts/check-environment-a.js'
+    const commandB = 'eslint src && node scripts/check-environment-b.js'
     const commandRun = (ptyId: string, commandLabel: string, commandCwd: string) => ({
       tool: 'command' as const,
       ptyId,
@@ -239,8 +239,8 @@ describe('WorkspaceDiagnosticsList', () => {
         run={{
           tools: ['command'],
           runsByTool: {
-            'command:a': commandRun('pty-a', commandA, '/repo/packages/a'),
-            'command:b': commandRun('pty-b', commandB, '/repo/packages/b')
+            'command:a': commandRun('pty-a', commandA, '/repo/very-long-workspace/packages/a'),
+            'command:b': commandRun('pty-b', commandB, '/repo/very-long-workspace/packages/b')
           },
           outputPtyId: 'pty-b',
           status: 'failed',
@@ -257,10 +257,11 @@ describe('WorkspaceDiagnosticsList', () => {
       />
     )
 
-    expect(markup).toContain('env-a.js')
+    expect(markup).toContain('check-environment-a.js')
     expect(markup).toContain('packages/a')
-    expect(markup).toContain('env-b.js')
+    expect(markup).toContain('check-environment-b.js')
     expect(markup).toContain('packages/b')
+    expect(markup).toContain('very-long-workspace')
     expect(markup).toContain('max-w-full')
     expect(markup).toContain('min-w-0 truncate')
     expect(markup).toContain('title="Show output for')

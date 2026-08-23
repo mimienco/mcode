@@ -64,32 +64,34 @@ export function locationlessFailedOutputs(run: WorkspaceDiagnosticsSummary): {
   return [...outputs.values()]
 }
 
-function boundedCommandContext(command: string, cwd?: string): string {
+function commandContext(command: string, cwd: string | undefined, bounded: boolean): string {
   const compactCommand = command.replace(/\s+/g, ' ').trim()
   const commandSnippet =
-    compactCommand.length > 44 ? `${compactCommand.slice(0, 43)}…` : compactCommand
+    bounded && compactCommand.length > 44 ? `${compactCommand.slice(0, 43)}…` : compactCommand
   if (!cwd) {
     return commandSnippet
   }
-  const cwdParts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
-  const compactCwd = cwdParts.slice(-2).join('/')
+  const normalizedCwd = cwd.replace(/\\/g, '/').replace(/\/+$/, '')
+  const cwdParts = normalizedCwd.split('/').filter(Boolean)
+  const compactCwd = bounded ? cwdParts.slice(-2).join('/') : normalizedCwd
   if (!compactCwd) {
     return commandSnippet
   }
-  const cwdSnippet = compactCwd.length > 28 ? `…${compactCwd.slice(-27)}` : compactCwd
+  const cwdSnippet = bounded && compactCwd.length > 28 ? `…${compactCwd.slice(-27)}` : compactCwd
   return `${commandSnippet} — ${cwdSnippet}`
 }
 
-export function showWorkspaceOutputLabel(
+function workspaceOutputLabel(
   tool: WorkspaceDiagnosticTool | null,
   commandLabel?: string,
-  commandCwd?: string
+  commandCwd?: string,
+  bounded = false
 ): string {
   if (tool === 'command' && commandLabel) {
     return translate(
       'auto.components.right.sidebar.problems.showCommandOutput',
       'Show output for “{{value0}}”',
-      { value0: boundedCommandContext(commandLabel, commandCwd) }
+      { value0: commandContext(commandLabel, commandCwd, bounded) }
     )
   }
   return tool
@@ -97,6 +99,22 @@ export function showWorkspaceOutputLabel(
         value0: workspaceDiagnosticToolLabel(tool)
       })
     : translate('auto.components.right.sidebar.problems.showOutput', 'Show output')
+}
+
+export function showWorkspaceOutputLabel(
+  tool: WorkspaceDiagnosticTool | null,
+  commandLabel?: string,
+  commandCwd?: string
+): string {
+  return workspaceOutputLabel(tool, commandLabel, commandCwd)
+}
+
+export function showWorkspaceOutputVisualLabel(
+  tool: WorkspaceDiagnosticTool | null,
+  commandLabel?: string,
+  commandCwd?: string
+): string {
+  return workspaceOutputLabel(tool, commandLabel, commandCwd, true)
 }
 
 export function workspaceDiagnosticsWarningLabel(warningCount: number): string {

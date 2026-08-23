@@ -24,6 +24,7 @@ import { resolveTerminalTabPtyOwnership } from '@/lib/terminal-tab-for-pty-id'
 import {
   locationlessFailedOutputs,
   showWorkspaceOutputLabel,
+  showWorkspaceOutputVisualLabel,
   workspaceDiagnosticToolLabel,
   workspaceDiagnosticsLiveStatus,
   workspaceDiagnosticsStatusLabel,
@@ -162,6 +163,11 @@ export function WorkspaceDiagnosticsList({
             ? availableLocationlessOutputs.map(
                 ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => {
                   const outputLabel = showWorkspaceOutputLabel(tool, commandLabel, commandCwd)
+                  const visualOutputLabel = showWorkspaceOutputVisualLabel(
+                    tool,
+                    commandLabel,
+                    commandCwd
+                  )
                   return (
                     <Button
                       key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
@@ -173,7 +179,7 @@ export function WorkspaceDiagnosticsList({
                       title={outputLabel}
                       onClick={() => onShowOutput(ptyId)}
                     >
-                      <span className="min-w-0 truncate">{outputLabel}</span>
+                      <span className="min-w-0 truncate">{visualOutputLabel}</span>
                     </Button>
                   )
                 }
@@ -195,6 +201,11 @@ export function WorkspaceDiagnosticsList({
                   {availableLocationlessOutputs.map(
                     ({ ptyId, tool, commandIdentity, commandLabel, commandCwd }) => {
                       const outputLabel = showWorkspaceOutputLabel(tool, commandLabel, commandCwd)
+                      const visualOutputLabel = showWorkspaceOutputVisualLabel(
+                        tool,
+                        commandLabel,
+                        commandCwd
+                      )
                       return (
                         <Button
                           key={`${ptyId}:${commandIdentity ?? tool ?? ''}`}
@@ -206,7 +217,7 @@ export function WorkspaceDiagnosticsList({
                           title={outputLabel}
                           onClick={() => onShowOutput(ptyId)}
                         >
-                          <span className="min-w-0 truncate">{outputLabel}</span>
+                          <span className="min-w-0 truncate">{visualOutputLabel}</span>
                         </Button>
                       )
                     }
