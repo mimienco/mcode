@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { createQueryFreshnessGate } from './query-freshness-gate'
 import type { AppState } from '../types'
 import type {
   KeybindingActionId,
@@ -12,6 +13,7 @@ export type KeybindingsSlice = {
   keybindings: KeybindingOverrides
   keybindingSnapshot: KeybindingFileSnapshot | null
   fetchKeybindings: () => Promise<void>
+  ensureKeybindingsFresh: () => Promise<void>
   setKeybindingSnapshot: (snapshot: KeybindingFileSnapshot) => void
   ensureKeybindingsFile: () => Promise<KeybindingFileSnapshot | null>
   setKeybindingOverride: (actionId: KeybindingActionId, bindings: string[]) => Promise<void>
@@ -31,101 +33,109 @@ function applySnapshot(
   }
 }
 
-export const createKeybindingsSlice: StateCreator<AppState, [], [], KeybindingsSlice> = (set) => ({
-  keybindings: EMPTY_KEYBINDINGS,
-  keybindingSnapshot: null,
+export const createKeybindingsSlice: StateCreator<AppState, [], [], KeybindingsSlice> = (
+  set,
+  get
+) => {
+  const keybindingsQueryGate = createQueryFreshnessGate(30_000)
+  return {
+    keybindings: EMPTY_KEYBINDINGS,
+    keybindingSnapshot: null,
 
-  setKeybindingSnapshot: (snapshot) => set(applySnapshot(snapshot)),
+    setKeybindingSnapshot: (snapshot) => set(applySnapshot(snapshot)),
 
-  ensureKeybindingsFile: async () => {
-    if (!window.api.keybindings) {
-      return null
-    }
-    try {
-      const snapshot = await window.api.keybindings.ensureFile()
-      set(applySnapshot(snapshot))
-      return snapshot
-    } catch (error) {
-      console.error('Failed to prepare keybindings file:', error)
-      throw error
-    }
-  },
+    ensureKeybindingsFile: async () => {
+      if (!window.api.keybindings) {
+        return null
+      }
+      try {
+        const snapshot = await window.api.keybindings.ensureFile()
+        set(applySnapshot(snapshot))
+        return snapshot
+      } catch (error) {
+        console.error('Failed to prepare keybindings file:', error)
+        throw error
+      }
+    },
 
-  fetchKeybindings: async () => {
-    if (!window.api.keybindings) {
-      return
-    }
-    try {
-      const snapshot = await window.api.keybindings.get()
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to fetch keybindings:', error)
-    }
-  },
+    fetchKeybindings: async () => {
+      if (!window.api.keybindings) {
+        return
+      }
+      try {
+        const snapshot = await window.api.keybindings.get()
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to fetch keybindings:', error)
+      }
+    },
 
-  setKeybindingOverride: async (actionId, bindings) => {
-    try {
-      const snapshot = await window.api.keybindings.setAction({ actionId, bindings })
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to update keybinding:', error)
-      throw error
-    }
-  },
+    ensureKeybindingsFresh: () => keybindingsQueryGate.run(() => get().fetchKeybindings()),
 
-  resetKeybindingOverride: async (actionId) => {
-    try {
-      const snapshot = await window.api.keybindings.setAction({ actionId, bindings: null })
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to reset keybinding:', error)
-      throw error
-    }
-  },
+    setKeybindingOverride: async (actionId, bindings) => {
+      try {
+        const snapshot = await window.api.keybindings.setAction({ actionId, bindings })
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to update keybinding:', error)
+        throw error
+      }
+    },
 
-  disableKeybindingAction: async (actionId) => {
-    try {
-      const snapshot = await window.api.keybindings.setAction({ actionId, bindings: [] })
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to disable keybinding:', error)
-      throw error
-    }
-  },
+    resetKeybindingOverride: async (actionId) => {
+      try {
+        const snapshot = await window.api.keybindings.setAction({ actionId, bindings: null })
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to reset keybinding:', error)
+        throw error
+      }
+    },
 
-  reloadKeybindings: async () => {
-    if (!window.api.keybindings) {
-      return
-    }
-    try {
-      const snapshot = await window.api.keybindings.reload()
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to reload keybindings:', error)
-    }
-  },
+    disableKeybindingAction: async (actionId) => {
+      try {
+        const snapshot = await window.api.keybindings.setAction({ actionId, bindings: [] })
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to disable keybinding:', error)
+        throw error
+      }
+    },
 
-  openKeybindingsFile: async () => {
-    if (!window.api.keybindings) {
-      return
-    }
-    try {
-      const snapshot = await window.api.keybindings.openFile()
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to open keybindings file:', error)
-    }
-  },
+    reloadKeybindings: async () => {
+      if (!window.api.keybindings) {
+        return
+      }
+      try {
+        const snapshot = await window.api.keybindings.reload()
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to reload keybindings:', error)
+      }
+    },
 
-  revealKeybindingsFile: async () => {
-    if (!window.api.keybindings) {
-      return
-    }
-    try {
-      const snapshot = await window.api.keybindings.revealFile()
-      set(applySnapshot(snapshot))
-    } catch (error) {
-      console.error('Failed to reveal keybindings file:', error)
+    openKeybindingsFile: async () => {
+      if (!window.api.keybindings) {
+        return
+      }
+      try {
+        const snapshot = await window.api.keybindings.openFile()
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to open keybindings file:', error)
+      }
+    },
+
+    revealKeybindingsFile: async () => {
+      if (!window.api.keybindings) {
+        return
+      }
+      try {
+        const snapshot = await window.api.keybindings.revealFile()
+        set(applySnapshot(snapshot))
+      } catch (error) {
+        console.error('Failed to reveal keybindings file:', error)
+      }
     }
   }
-})
+}

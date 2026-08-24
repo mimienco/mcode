@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { createQueryFreshnessGate } from './query-freshness-gate'
 import type { AppState } from '../types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { toast } from 'sonner'
@@ -42,6 +43,7 @@ export type SettingsSlice = SettingsSearchState & {
   worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: string | null
   worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId: string | null
   fetchSettings: (options?: ownerHydration.FetchSettingsOptions) => Promise<void>
+  ensureSettingsFresh: (options?: ownerHydration.FetchSettingsOptions) => Promise<void>
   awaitOwnerWorktreeVisibilityDefaultsHydration: () => Promise<void>
   updateSettings: (updates: Partial<GlobalSettings>) => Promise<void>
   updateSettingsOrThrow: (updates: Partial<GlobalSettings>) => Promise<void>
@@ -177,38 +179,67 @@ async function verifyRuntimeEnvironmentReachable(environmentId: string | null): 
   markRuntimeEnvironmentCompatible(environmentId)
 }
 
-export const createSettingsSlice: StateCreator<AppState, [], [], SettingsSlice> = (set, get) => ({
-  settings: null,
-  worktreeVisibilityDefaultsByHost: {},
-  worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: null,
-  worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId: null,
-  ...createSettingsSearchState((state) => set(state)),
+export const createSettingsSlice: StateCreator<AppState, [], [], SettingsSlice> = (set, get) => {
+  // Why: PERF-17 — per-store query gate; closure state keeps tests isolated.
+  const settingsQueryGate = createQueryFreshnessGate(30_000)
+  return {
+    settings: null,
+    worktreeVisibilityDefaultsByHost: {},
+    worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: null,
+    worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId: null,
+    ...createSettingsSearchState((state) => set(state)),
 
-  fetchSettings: async (options) => {
-    await ownerHydration.fetchSettingsWithOwnerHydration({ options, set, get })
-    const { runtimeEnvironmentCatalogHydrated, runtimeEnvironments, runtimeStatusByEnvironmentId } =
-      get()
-    // Why: settings refreshes are frequent, but only incomplete host coverage needs
-    // the all-host boot probe. A recorded null still means the host was checked.
-    if (
-      !runtimeEnvironmentCatalogHydrated ||
-      !hasCompleteRuntimeStatusCoverage(runtimeEnvironments, runtimeStatusByEnvironmentId) ||
-      // Why: coverage is blind to catalog edits from another client or the mcode CLI.
-      isRuntimeCatalogListingStale()
-    ) {
-      void get().hydrateRuntimeEnvironmentStatuses()
-    }
-  },
+    fetchSettings: async (options) => {
+      await ownerHydration.fetchSettingsWithOwnerHydration({ options, set, get })
+      const {
+        runtimeEnvironmentCatalogHydrated,
+        runtimeEnvironments,
+        runtimeStatusByEnvironmentId
+      } = get()
+      // Why: settings refreshes are frequent, but only incomplete host coverage needs
+      // the all-host boot probe. A recorded null still means the host was checked.
+      if (
+        !runtimeEnvironmentCatalogHydrated ||
+        !hasCompleteRuntimeStatusCoverage(runtimeEnvironments, runtimeStatusByEnvironmentId) ||
+        // Why: coverage is blind to catalog edits from another client or the mcode CLI.
+        isRuntimeCatalogListingStale()
+      ) {
+        void get().hydrateRuntimeEnvironmentStatuses()
+      }
+    },
 
-  awaitOwnerWorktreeVisibilityDefaultsHydration: () =>
-    ownerHydration.awaitOwnerWorktreeVisibilityDefaultsHydration(get),
+    ensureSettingsFresh: (options) => settingsQueryGate.run(() => get().fetchSettings(options)),
 
-  updateSettings: async (updates) => {
-    const shouldPublish = ownerHydration.createSettingsPublicationFence(
-      'activeRuntimeEnvironmentId' in updates || 'worktreeVisibilityDefaults' in updates
-    )
-    const visibilityOwnerHostId = getSettingsFocusedExecutionHostId(get().settings)
-    try {
+    awaitOwnerWorktreeVisibilityDefaultsHydration: () =>
+      ownerHydration.awaitOwnerWorktreeVisibilityDefaultsHydration(get),
+
+    updateSettings: async (updates) => {
+      const shouldPublish = ownerHydration.createSettingsPublicationFence(
+        'activeRuntimeEnvironmentId' in updates || 'worktreeVisibilityDefaults' in updates
+      )
+      const visibilityOwnerHostId = getSettingsFocusedExecutionHostId(get().settings)
+      try {
+        await persistSettingsUpdates(
+          set,
+          updates,
+          get().settings,
+          get().worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId,
+          get().worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId,
+          shouldPublish
+        )
+        if ('worktreeVisibilityDefaults' in updates) {
+          await get().fetchAllWorktrees({ visibilityOwnerHostId })
+        }
+      } catch (err) {
+        console.error('Failed to update settings:', err)
+      }
+    },
+
+    updateSettingsOrThrow: async (updates) => {
+      const shouldPublish = ownerHydration.createSettingsPublicationFence(
+        'activeRuntimeEnvironmentId' in updates || 'worktreeVisibilityDefaults' in updates
+      )
+      const visibilityOwnerHostId = getSettingsFocusedExecutionHostId(get().settings)
       await persistSettingsUpdates(
         set,
         updates,
@@ -220,85 +251,68 @@ export const createSettingsSlice: StateCreator<AppState, [], [], SettingsSlice> 
       if ('worktreeVisibilityDefaults' in updates) {
         await get().fetchAllWorktrees({ visibilityOwnerHostId })
       }
-    } catch (err) {
-      console.error('Failed to update settings:', err)
-    }
-  },
+    },
 
-  updateSettingsOrThrow: async (updates) => {
-    const shouldPublish = ownerHydration.createSettingsPublicationFence(
-      'activeRuntimeEnvironmentId' in updates || 'worktreeVisibilityDefaults' in updates
-    )
-    const visibilityOwnerHostId = getSettingsFocusedExecutionHostId(get().settings)
-    await persistSettingsUpdates(
-      set,
-      updates,
-      get().settings,
-      get().worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId,
-      get().worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId,
-      shouldPublish
-    )
-    if ('worktreeVisibilityDefaults' in updates) {
-      await get().fetchAllWorktrees({ visibilityOwnerHostId })
-    }
-  },
-
-  setActiveRuntimeEnvironmentPreference: async (environmentId) => {
-    const nextId = normalizeRuntimeEnvironmentId(environmentId)
-    const previousId = normalizeRuntimeEnvironmentId(get().settings?.activeRuntimeEnvironmentId)
-    if (previousId === nextId) {
-      return true
-    }
-    const shouldPublish = ownerHydration.createSettingsPublicationFence(true)
-    try {
-      clearRuntimeCompatibilityCache(nextId)
-      await verifyRuntimeEnvironmentReachable(nextId)
-      if (!shouldPublish()) {
+    setActiveRuntimeEnvironmentPreference: async (environmentId) => {
+      const nextId = normalizeRuntimeEnvironmentId(environmentId)
+      const previousId = normalizeRuntimeEnvironmentId(get().settings?.activeRuntimeEnvironmentId)
+      if (previousId === nextId) {
         return true
       }
-      const nextSettings = await window.api.settings.setActiveRuntimeEnvironmentPreference({
-        environmentId: nextId
-      })
-      bumpProviderRuntimeSessionGeneration()
-      // Why: this is a focus change, so keep other host state while hydrating only the new owner's default.
-      const focusedSettings =
-        (nextSettings as GlobalSettings | undefined) ??
-        (get().settings ? { ...get().settings!, activeRuntimeEnvironmentId: nextId } : null)
-      if (focusedSettings) {
-        const hydrated = await hydrateOwnerWorktreeVisibilityDefaults(
-          focusedSettings,
-          get().worktreeVisibilityDefaultsByHost
-        )
+      const shouldPublish = ownerHydration.createSettingsPublicationFence(true)
+      try {
+        clearRuntimeCompatibilityCache(nextId)
+        await verifyRuntimeEnvironmentReachable(nextId)
         if (!shouldPublish()) {
           return true
         }
-        set((state) => ({
-          settings: hydrated.settings,
-          worktreeVisibilityDefaultsByHost: {
-            ...state.worktreeVisibilityDefaultsByHost,
-            ...hydrated.defaultsByHost
-          },
-          worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId:
-            hydrated.supportedRuntimeEnvironmentId,
-          worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId:
-            hydrated.sourceDefaultsSupportedRuntimeEnvironmentId
-        }))
-      } else {
-        set({ settings: null })
+        const nextSettings = await window.api.settings.setActiveRuntimeEnvironmentPreference({
+          environmentId: nextId
+        })
+        bumpProviderRuntimeSessionGeneration()
+        // Why: this is a focus change, so keep other host state while hydrating only the new owner's default.
+        const focusedSettings =
+          (nextSettings as GlobalSettings | undefined) ??
+          (get().settings ? { ...get().settings!, activeRuntimeEnvironmentId: nextId } : null)
+        if (focusedSettings) {
+          const hydrated = await hydrateOwnerWorktreeVisibilityDefaults(
+            focusedSettings,
+            get().worktreeVisibilityDefaultsByHost
+          )
+          if (!shouldPublish()) {
+            return true
+          }
+          set((state) => ({
+            settings: hydrated.settings,
+            worktreeVisibilityDefaultsByHost: {
+              ...state.worktreeVisibilityDefaultsByHost,
+              ...hydrated.defaultsByHost
+            },
+            worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId:
+              hydrated.supportedRuntimeEnvironmentId,
+            worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId:
+              hydrated.sourceDefaultsSupportedRuntimeEnvironmentId
+          }))
+        } else {
+          set({ settings: null })
+        }
+        // Why: hydration is host-merged by downstream slices. Switching focus
+        // should add/update the selected host without discarding other hosts.
+        await get().fetchRepos()
+        await get().fetchAllWorktrees()
+        await get().fetchWorktreeLineage()
+        await get().fetchBrowserSessionProfiles()
+        return true
+      } catch (err) {
+        console.error('Failed to switch runtime environment:', err)
+        toast.error(
+          translate('auto.store.slices.settings.e12dab333b', 'Failed to switch servers'),
+          {
+            description: err instanceof Error ? err.message : String(err)
+          }
+        )
+        return false
       }
-      // Why: hydration is host-merged by downstream slices. Switching focus
-      // should add/update the selected host without discarding other hosts.
-      await get().fetchRepos()
-      await get().fetchAllWorktrees()
-      await get().fetchWorktreeLineage()
-      await get().fetchBrowserSessionProfiles()
-      return true
-    } catch (err) {
-      console.error('Failed to switch runtime environment:', err)
-      toast.error(translate('auto.store.slices.settings.e12dab333b', 'Failed to switch servers'), {
-        description: err instanceof Error ? err.message : String(err)
-      })
-      return false
     }
   }
-})
+}

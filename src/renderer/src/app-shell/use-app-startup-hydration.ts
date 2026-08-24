@@ -57,10 +57,10 @@ function useStartupActions() {
       fetchWorktrees: s.fetchWorktrees,
       fetchWorktreeLineage: s.fetchWorktreeLineage,
       fetchMCodeProfiles: s.fetchMCodeProfiles,
-      fetchSettings: s.fetchSettings,
+      ensureSettingsFresh: s.ensureSettingsFresh,
       awaitOwnerWorktreeVisibilityDefaultsHydration:
         s.awaitOwnerWorktreeVisibilityDefaultsHydration,
-      fetchKeybindings: s.fetchKeybindings,
+      ensureKeybindingsFresh: s.ensureKeybindingsFresh,
       initGitHubCache: s.initGitHubCache,
       hydrateWorkspaceSession: s.hydrateWorkspaceSession,
       hydrateTabsSession: s.hydrateTabsSession,
@@ -109,11 +109,11 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
       const startupStartedAt = performance.now()
       logRendererStartupDiagnostic('startup-chain-start')
       try {
-        // Why: nothing in the hydration chain reads profile state synchronously, so don't let it add a serial IPC round-trip before fetchSettings.
+        // Why: nothing in the hydration chain reads profile state synchronously, so don't let it add a serial IPC round-trip before ensureSettingsFresh.
         void actions.fetchMCodeProfiles()
         // Why: publish local settings before persisted UI/catalog work; a saved remote owner's defaults can spend the full connect timeout.
         await timeRendererStartupStep('fetch-settings', () =>
-          actions.fetchSettings({ deferOwnerWorktreeVisibilityDefaults: true })
+          actions.ensureSettingsFresh({ deferOwnerWorktreeVisibilityDefaults: true })
         )
         // Why: hidden-at-launch PTYs can query OSC 10/11 before any pane mounts; publish view attributes as soon as settings exist so main's silent-until-push responder has data.
         publishTerminalViewAttributesAtAppStart(
@@ -123,7 +123,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
         // Why: start keybindings + onboarding now so their IPC overlaps the local catalog scans; await them at their original spots. The .catch marks rejections handled if an earlier await throws first.
         // Why: browser session profiles are NOT started early — on a remote runtime the RPC may be unconnected and a failed fetch clears the list.
         const keybindingsPromise = timeRendererStartupStep('fetch-keybindings', () =>
-          actions.fetchKeybindings()
+          actions.ensureKeybindingsFresh()
         )
         keybindingsPromise.catch(() => {})
         const onboardingPromise = timeRendererStartupStep('onboarding-get', () =>
