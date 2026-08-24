@@ -18,6 +18,9 @@ import { WindowsShellPathOwnership, windowsPathSegmentKey } from './windows-shel
 
 const DELIMITER = '__MCODE_SHELL_PATH__'
 const SPAWN_TIMEOUT_MS = 5000
+// Why: PERF-15 — a looping rc file must not balloon main-process memory; the
+// real PATH region is orders of magnitude smaller than this cap.
+const MAX_CAPTURE_BYTES = 1024 * 1024
 
 // ANSI escape sequences can leak into the captured output when the user's rc
 // files print banners or set colored prompts. Strip them before parsing.
@@ -167,7 +170,20 @@ function spawnShellAndReadPath(shell: string): Promise<HydrationResult> {
       finish({ segments: [], ok: false, failureReason: 'timeout' })
     }, SPAWN_TIMEOUT_MS)
 
+    let capturedBytes = 0
     const onStdoutData = (chunk: Buffer): void => {
+      capturedBytes += chunk.length
+      if (capturedBytes > MAX_CAPTURE_BYTES) {
+        child.stdout.pause?.()
+        // Why: finish() is once-guarded so a late close/error after the kill cannot double-resolve.
+        try {
+          child.kill('SIGKILL')
+        } catch {
+          // ignore
+        }
+        finish({ segments: [], ok: false, failureReason: 'output_overflow' })
+        return
+      }
       stdout += chunk.toString('utf8')
     }
 

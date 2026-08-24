@@ -1130,7 +1130,14 @@ const activationChecklistItemCompletedSchema = z
 
 // Why: disambiguates `on_path:false` rows on dashboard 1562016 (shell-hydration failure vs genuinely-not-on-PATH). See docs/agent-on-path-detection.md.
 const pathSourceSchema = z.enum(['shell_hydrate', 'sync_seed_only'])
-const pathFailureReasonSchema = z.enum(['none', 'no_shell', 'timeout', 'spawn_error', 'empty_path'])
+const pathFailureReasonSchema = z.enum([
+  'none',
+  'no_shell',
+  'timeout',
+  'spawn_error',
+  'empty_path',
+  'output_overflow'
+])
 
 // Compile-time guard: schema enum must match `ShellHydrationFailureReason`; drift breaks the build, not runtime parsing.
 type _PathFailureReasonSync =

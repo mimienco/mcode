@@ -10,5 +10,6 @@ export type ShellHydrationFailureReason =
   | 'timeout'
   | 'spawn_error'
   | 'empty_path'
+  | 'output_overflow'
 
 export type PathSource = 'shell_hydrate' | 'sync_seed_only'
