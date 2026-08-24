@@ -1,4 +1,8 @@
-import type { AgentHookInstallStatus, AgentHookTarget } from '../../shared/agent-hook-types'
+import {
+  AGENT_HOOK_TARGETS,
+  type AgentHookInstallStatus,
+  type AgentHookTarget
+} from '../../shared/agent-hook-types'
 import {
   getManagedAgentHookTarget,
   isManagedAgentHookTarget
@@ -37,6 +41,14 @@ export function isAgentStatusHooksEnabled(
 ): boolean {
   return settings?.agentStatusHooksEnabled !== false
 }
+
+// (spawnSync, ~1.5s on the first run after an update). Boot reconciliation
+// skips it — codex reconciles at pane launch instead
+// (prepareCodexRuntimeHomeForLaunch), and explicit settings toggles keep the
+// full target list.
+export const BOOT_RECONCILE_HOOK_AGENTS: readonly AgentHookTarget[] = AGENT_HOOK_TARGETS.filter(
+  (agent) => agent !== 'codex'
+)
 
 function errorStatus(agent: AgentHookTarget, error: unknown): AgentHookInstallStatus {
   return {

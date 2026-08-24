@@ -68,6 +68,7 @@ import {
 } from './agent-hooks/restored-subagent-liveness-sweep'
 import {
   applyAgentStatusHooksEnabled,
+  BOOT_RECONCILE_HOOK_AGENTS,
   isAgentStatusHooksEnabled,
   removeManagedAgentHooks
 } from './agent-hooks/managed-agent-hook-controls'
@@ -2979,6 +2980,10 @@ void app.whenReady().then(async () => {
       // (~0.8s of syscalls); firing it during daemon handshake deepened boot stalls.
       void firstWindowBootSettled.then(() =>
         applyAgentStatusHooksEnabled(true, managedHookStore.getSettings(), {
+          // Why: codex's installer blocks on a synchronous trust-grant child session
+          // (~1.5s stall right when the user starts interacting); codex reconciles
+          // at pane launch instead, so boot reconciliation skips it.
+          agents: BOOT_RECONCILE_HOOK_AGENTS,
           shouldHydrateShellPath: app.isPackaged,
           onInstallError: recordManagedHookInstallFailure,
           shouldContinue: (agent) => {
