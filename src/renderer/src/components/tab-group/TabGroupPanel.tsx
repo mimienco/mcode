@@ -14,6 +14,7 @@ import TabBar from '../tab-bar/TabBar'
 
 import { TabBarQuickCommandsButton } from '../tab-bar/TabBarQuickCommandsButton'
 import { useTabGroupWorkspaceModel } from './useTabGroupWorkspaceModel'
+import TabGroupEmptyState from './TabGroupEmptyState'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
 import { resolveGroupTabFromVisibleId } from './tab-group-visible-id'
 import { getTabPaneBodyDroppableId, type HoveredTabInsertion } from './useTabDragSplit'
@@ -308,6 +309,19 @@ export default function TabGroupPanel({
           <div
             className="pointer-events-none absolute inset-x-0 top-1/4 h-px"
             data-contextual-tour-target="workspace-agent-terminal-tip"
+          />
+        ) : null}
+        {model.groupTabs.length === 0 ? (
+          <TabGroupEmptyState
+            worktreeId={worktreeId}
+            groupId={groupId}
+            onNewTerminal={commands.newTerminalTab}
+            onNewBrowser={commands.newBrowserTab}
+            onNewMarkdown={() => {
+              void commands.newFileTab()
+            }}
+            onNewSimulator={commands.newSimulatorTab}
+            onActivateTerminal={commands.activateTerminal}
           />
         ) : null}
         {activeTab &&

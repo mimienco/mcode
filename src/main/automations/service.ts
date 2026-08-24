@@ -33,6 +33,8 @@ export class AutomationService {
   private readonly codexUsage: CodexUsageStore | null
   private readonly allowRemoteHostScheduling: boolean
   private readonly headlessDispatcher: HeadlessAutomationDispatcher | null
+  /** Why: optional so tests stay hermetic; production wires the shared notification dispatch handler. */
+  private readonly notifyRunCompleted?: (run: AutomationRun) => void
 
   constructor(
     store: Store,
@@ -42,6 +44,7 @@ export class AutomationService {
       codexUsage?: CodexUsageStore
       allowRemoteHostScheduling?: boolean
       headlessDispatcher?: HeadlessAutomationDispatcher
+      notifyRunCompleted?: (run: AutomationRun) => void
     } = {}
   ) {
     this.store = store
@@ -50,6 +53,7 @@ export class AutomationService {
     this.codexUsage = opts.codexUsage ?? null
     this.allowRemoteHostScheduling = opts.allowRemoteHostScheduling ?? false
     this.headlessDispatcher = opts.headlessDispatcher ?? null
+    this.notifyRunCompleted = opts.notifyRunCompleted
   }
 
   setWebContents(webContents: WebContents | null): void {
@@ -145,8 +149,9 @@ export class AutomationService {
     if (run.usage) {
       return run
     }
+    const automation = this.store.listAutomations().find((entry) => entry.id === run.automationId)
     const usage = await collectAutomationRunUsage({
-      automation: this.store.listAutomations().find((entry) => entry.id === run.automationId),
+      automation,
       run,
       claudeUsage: this.claudeUsage,
       codexUsage: this.codexUsage
@@ -156,7 +161,7 @@ export class AutomationService {
     if (!this.store.listAutomationRuns(run.automationId).some((entry) => entry.id === run.id)) {
       return run
     }
-    return this.store.updateAutomationRun({
+    const updated = this.store.updateAutomationRun({
       runId: run.id,
       status: run.status,
       workspaceId: run.workspaceId,
@@ -164,6 +169,66 @@ export class AutomationService {
       usage,
       error: run.error
     })
+    let final = updated
+    if (
+      automation?.maxCostUsdPerRun != null &&
+      usage.status === 'known' &&
+      usage.estimatedCostUsd != null &&
+      usage.estimatedCostUsd > automation.maxCostUsdPerRun
+    ) {
+      // Why: cost circuit-breaker — pause scheduled runs until a human re-enables.
+      this.store.updateAutomation(run.automationId, { enabled: false })
+      final = this.store.updateAutomationRun({
+        runId: run.id,
+        status: 'stopped_cost_cap',
+        workspaceId: run.workspaceId,
+        terminalSessionId: run.terminalSessionId,
+        usage,
+        error: `Cost cap $${automation.maxCostUsdPerRun.toFixed(2)} exceeded by estimate $${usage.estimatedCostUsd.toFixed(2)}; scheduled runs paused.`
+      })
+    }
+    // Why: bounded retry (o8-ladder-lite) — exactly one automatic re-dispatch per
+    // failed scheduled run; the retry itself carries `retryOfRunId`, so a second
+    // failure can never spawn a third attempt. Manual runs stay human-owned.
+    if (
+      final.status === 'dispatch_failed' &&
+      !final.retryOfRunId &&
+      final.trigger === 'scheduled' &&
+      automation
+    ) {
+      const alreadyRetried = this.store
+        .listAutomationRuns(run.automationId)
+        .some((entry) => entry.retryOfRunId === final.id)
+      if (!alreadyRetried) {
+        const retry = this.store.createAutomationRun(automation, Date.now(), 'scheduled')
+        const linked = this.store.linkAutomationRunRetry({
+          failedRunId: final.id,
+          retryRunId: retry.id,
+          title: `Retry · ${retry.title}`
+        })
+        try {
+          const dispatchedRetry = await this.requestDispatch(automation, linked)
+          // Why: skipped_* settles synchronously here (no window/dispatcher), so
+          // announce it now — otherwise the retry's own finalize never notifies.
+          if (isFinalAutomationRunStatus(dispatchedRetry.status)) {
+            this.notifyRunCompleted?.(dispatchedRetry)
+          }
+        } catch {
+          // Why: a scheduling crash must surface as the retry's own failure,
+          // never vanish into an unobserved promise.
+          this.store.updateAutomationRun({
+            runId: linked.id,
+            status: 'dispatch_failed',
+            workspaceId: null,
+            terminalSessionId: null,
+            error: 'Retry dispatch failed.'
+          })
+        }
+      }
+    }
+    // Why: announce only after the persisted finalize, so a failed write never announces a phantom completion.
+    this.notifyRunCompleted?.(final)
+    return final
   }
 
   private async evaluateDueRuns(): Promise<void> {

@@ -39,7 +39,15 @@ describe('agent session resume metadata', () => {
     ['droid', { session_id: 'droid-session' }, { key: 'session_id', id: 'droid-session' }],
     ['grok', { sessionId: 'grok-session' }, { key: 'session_id', id: 'grok-session' }],
     ['devin', { session_id: 'devin-session' }, { key: 'session_id', id: 'devin-session' }],
-    ['omp', { session_id: 'omp-session' }, { key: 'session_id', id: 'omp-session' }],
+    [
+      'omp',
+      { session_id: 'omp-session', session_file: '/tmp/omp-session.jsonl' },
+      {
+        key: 'session_id',
+        id: 'omp-session',
+        transcriptPath: '/tmp/omp-session.jsonl'
+      }
+    ],
     [
       'prime-agent',
       { session_id: 'prime-session', session_file: '/tmp/prime-session.jsonl' },

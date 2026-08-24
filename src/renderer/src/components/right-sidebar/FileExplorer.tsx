@@ -246,7 +246,11 @@ function FileExplorerFiles(): React.JSX.Element {
                   'pointer-events-none invisible absolute inset-x-0 top-0'
               )}
             >
-              <SearchQueryRow {...searchPanel.queryRowProps} />
+              <SearchQueryRow
+                {...searchPanel.queryRowProps}
+                replaceOpen={searchPanel.replaceRowProps.open}
+                onToggleReplace={searchPanel.replaceRowProps.onOpenToggle}
+              />
             </div>
           </div>
         </FileExplorerQueryStrip>
@@ -259,37 +263,20 @@ function FileExplorerFiles(): React.JSX.Element {
         >
           <SearchFilters {...searchPanel.filtersProps} />
         </div>
-        <div
-          className={cn(
-            'px-2 pb-1.5',
-            explorerView !== 'search' &&
-              'pointer-events-none invisible h-0 overflow-hidden p-0'
-          )}
-        >
-          <button
-            type="button"
-            className="flex w-full items-center gap-1 rounded-sm py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-            onClick={searchPanel.replaceRowProps.onOpenToggle}
+        {searchPanel.replaceRowProps.open ? (
+          <div
+            className={cn(
+              'px-2 pb-1.5',
+              explorerView !== 'search' &&
+                'pointer-events-none invisible h-0 overflow-hidden p-0'
+            )}
           >
-            <span
-              className={cn(
-                'transition-transform',
-                searchPanel.replaceRowProps.open && 'rotate-90'
-              )}
-            >
-              ▸
-            </span>
-            {translate('auto.components.right.sidebar.replace.toggle', 'Replace')}
-          </button>
-          {searchPanel.replaceRowProps.open ? (
-            <div className="mt-1">
-              <SearchReplaceRow
-                {...searchPanel.replaceRowProps}
-                useRegex={searchPanel.queryRowProps.useRegex}
-              />
-            </div>
-          ) : null}
-        </div>
+            <SearchReplaceRow
+              {...searchPanel.replaceRowProps}
+              useRegex={searchPanel.queryRowProps.useRegex}
+            />
+          </div>
+        ) : null}
         {/* Why: the Files and Contents views share one body slot; layering them
            avoids remounting heavy virtualized panes while preserving full height. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">

@@ -13,6 +13,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import type { AgentCatalogEntry } from '@/lib/agent-catalog'
 import { AUTOMATION_EDITOR_SECTION_LABEL_CLASS, Field } from './automation-page-parts'
 import { AutomationMissedRunGraceField } from './AutomationMissedRunGraceField'
+import { AutomationSafetyRailFields } from './AutomationSafetyRailFields'
 import { AutomationPrecheckFields } from './AutomationPrecheckFields'
 import AutomationProjectCombobox from './AutomationProjectCombobox'
 import { AutomationSchedulePicker } from './AutomationSchedulePicker'
@@ -183,6 +184,11 @@ export function AutomationEditorSettingsSidebar({
               draft={draft}
               disabled={isHermesTarget}
               pickerTriggerClassName={pickerTriggerClassName}
+              onDraftChange={onDraftChange}
+            />
+            <AutomationSafetyRailFields
+              draft={draft}
+              disabled={isHermesTarget}
               onDraftChange={onDraftChange}
             />
           </div>

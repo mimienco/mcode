@@ -228,7 +228,9 @@ export function extractAgentProviderSession(
     // Why: OMP's managed extension reports the authoritative CLI resume id.
     case 'omp': {
       const id = readSessionId(payload, ['session_id'])
-      return id ? { key: 'session_id', id } : null
+      return id
+        ? withTranscriptPath({ key: 'session_id', id }, payload, ['session_file'])
+        : null
     }
     case 'amp':
     case 'cursor':

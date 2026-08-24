@@ -847,3 +847,4 @@ describe('windows terminal capabilities', () => {
     })
   })
 })
+

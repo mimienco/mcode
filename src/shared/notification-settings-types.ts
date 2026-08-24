@@ -3,6 +3,7 @@ import type { AgentStatusState, AgentType } from './agent-status-types'
 export type NotificationSettings = {
   enabled: boolean
   agentTaskComplete: boolean
+  automationRunComplete: boolean
   terminalBell: boolean
   suppressWhenFocused: boolean
   customSoundId:
@@ -21,7 +22,11 @@ export type NotificationSettings = {
   customSoundVolume: number
 }
 
-export type NotificationEventSource = 'agent-task-complete' | 'terminal-bell' | 'test'
+export type NotificationEventSource =
+  | 'agent-task-complete'
+  | 'automation-run-complete'
+  | 'terminal-bell'
+  | 'test'
 
 export type NotificationDispatchRequest = {
   source: NotificationEventSource
@@ -43,6 +48,12 @@ export type NotificationDispatchRequest = {
   agentToolInput?: string
   agentLastAssistantMessage?: string
   agentInterrupted?: boolean
+  /** Automation-only: display name of the automation whose run finalized. */
+  automationName?: string
+  /** Automation-only: coarse outcome label for the notification title. */
+  automationOutcome?: 'completed' | 'failed' | 'skipped'
+  /** Automation-only: failure detail snippet for the notification body. */
+  automationError?: string | null
 }
 
 export type NotificationDispatchResult = {

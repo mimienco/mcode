@@ -118,6 +118,7 @@ describe('onboarding flow persistence', () => {
     const notifications = buildCompletedOnboardingNotificationSettings({
       enabled: false,
       agentTaskComplete: false,
+      automationRunComplete: false,
       terminalBell: false,
       suppressWhenFocused: false,
       customSoundId: 'two-tone',

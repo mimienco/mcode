@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import CommentMarkdown, {
   type CommentMarkdownLinkClickHandler
@@ -20,6 +20,8 @@ import { NativeChatSessionContextDisclosure } from './NativeChatSessionContextDi
 import { NativeChatToolRun } from './NativeChatToolRun'
 import { NativeChatCopyButton } from './NativeChatCopyButton'
 import { NativeChatImageRefs } from './NativeChatImageRefs'
+import { NativeChatUserMessageImageChips } from './NativeChatUserMessageImageChips'
+import { extractUserMessageImagePaths } from './native-chat-user-message-image-paths'
 import { NATIVE_CHAT_STREAMING_ID } from '../../../../shared/native-chat-streaming'
 
 function geometryOf(el: HTMLElement): ScrollGeometry {
@@ -95,7 +97,7 @@ function TypingIndicatorRow(): React.JSX.Element {
 /** One message: its prose first, then a collapsible run folding all of the
  *  turn's tool activity. Monochrome per STYLEGUIDE: user prompts read as a
  *  lifted card, assistant prose as body copy, reasoning de-emphasized. */
-function MessageRow({
+const MessageRow = memo(function MessageRow({
   message,
   previousRole,
   expandSignal,
@@ -115,7 +117,9 @@ function MessageRow({
 }): React.JSX.Element | null {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const { prose, tools } = useMemo(() => splitNativeChatBlocks(message.blocks), [message.blocks])
-  const markdown = proseToMarkdown(prose)
+  // Why: PERF-07 — prose concatenation must not rerun for every message on
+  // every parent render (stream appends re-render the list each frame).
+  const markdown = useMemo(() => proseToMarkdown(prose), [prose])
   const isUser = message.role === 'user'
   const isPending = message.id.startsWith('pending:')
   const isReasoning = message.role === 'reasoning'
@@ -131,6 +135,10 @@ function MessageRow({
   const disclosedUserContent = useMemo(
     () => splitNativeChatSessionContext(isUser ? markdown : ''),
     [isUser, markdown]
+  )
+  const userMessageImages = useMemo(
+    () => extractUserMessageImagePaths(disclosedUserContent.visibleText),
+    [disclosedUserContent.visibleText]
   )
   const hasImages = prose.some((block) => block.type === 'image-ref')
 
@@ -159,20 +167,17 @@ function MessageRow({
         {/* User turns get a distinct muted fill (not the card/canvas color) so
             the prompt reads apart from the assistant's body copy. */}
         <div className="max-w-[min(42rem,88%)] rounded-xl rounded-br-sm border border-border/70 bg-muted/60 px-4 py-3 text-sm leading-relaxed text-foreground">
-          {disclosedUserContent.visibleText ? (
-            <>
-              <NativeChatImageRefs blocks={prose} showPreviews={false} />
-              <CommentMarkdown
-                content={disclosedUserContent.visibleText}
-                variant="document"
-                className="text-sm"
-                onLinkClick={onLinkClick}
-                allowFileUriLinks={allowFileUriLinks}
-              />
-            </>
-          ) : (
-            <NativeChatImageRefs blocks={prose} showPreviews={false} />
-          )}
+          <NativeChatUserMessageImageChips imagePaths={userMessageImages.imagePaths} />
+          <NativeChatImageRefs blocks={prose} showPreviews={false} />
+          {userMessageImages.text ? (
+            <CommentMarkdown
+              content={userMessageImages.text}
+              variant="document"
+              className="text-sm"
+              onLinkClick={onLinkClick}
+              allowFileUriLinks={allowFileUriLinks}
+            />
+          ) : null}
           <NativeChatSessionContextDisclosure disclosure={disclosedUserContent} />
         </div>
         {deliveryFailed ? (
@@ -253,7 +258,7 @@ function MessageRow({
       {showControls ? <AgentControls markdown={markdown} onScrollToTop={scrollToTop} /> : null}
     </div>
   )
-}
+})
 
 export function NativeChatMessageList({
   session,

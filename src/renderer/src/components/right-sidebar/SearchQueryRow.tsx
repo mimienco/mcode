@@ -1,8 +1,9 @@
 import React from 'react'
-import { Search as SearchIcon, CaseSensitive, WholeWord, Regex, X, Loader2 } from 'lucide-react'
+import { Search as SearchIcon, CaseSensitive, WholeWord, Regex, X, Loader2, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleButton } from './SearchResultItems'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 
 export type SearchQueryRowProps = {
   inputRef: React.Ref<HTMLInputElement>
@@ -11,6 +12,9 @@ export type SearchQueryRowProps = {
   caseSensitive: boolean
   wholeWord: boolean
   useRegex: boolean
+  /** When set, a replace-disclosure chevron renders ahead of the search icon. */
+  replaceOpen?: boolean
+  onToggleReplace?: () => void
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onKeyDown: (e: React.KeyboardEvent) => void
   onClearSearch: () => void
@@ -26,6 +30,8 @@ export function SearchQueryRow({
   caseSensitive,
   wholeWord,
   useRegex,
+  replaceOpen,
+  onToggleReplace,
   onQueryChange,
   onKeyDown,
   onClearSearch,
@@ -38,6 +44,21 @@ export function SearchQueryRow({
       className="flex h-7 items-center gap-1 rounded-sm border border-border bg-input/50 px-1.5 focus-within:border-ring"
       data-ignore-file-explorer-keys="true"
     >
+      {onToggleReplace ? (
+        <button
+          type="button"
+          aria-label={translate('auto.components.right.sidebar.replace.toggle', 'Toggle replace')}
+          aria-expanded={replaceOpen}
+          title={translate('auto.components.right.sidebar.replace.toggle', 'Toggle replace')}
+          className={cn(
+            'flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-transform hover:bg-accent hover:text-foreground',
+            replaceOpen && 'rotate-90 text-foreground'
+          )}
+          onClick={onToggleReplace}
+        >
+          <ChevronRight className="size-3.5" />
+        </button>
+      ) : null}
       <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
       <input
         ref={inputRef}

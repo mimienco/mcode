@@ -140,6 +140,21 @@ describe('Pi hook normalization', () => {
     expect(result?.payload.lastAssistantMessage).toBe('Done — I refactored the helper.')
   })
 
+  it('message_update streams the in-progress assistant preview while OMP is working', () => {
+    const result = _internals.normalizeHookPayload(
+      'omp',
+      buildBody({
+        hook_event_name: 'message_update',
+        role: 'assistant',
+        text: 'Checking the build output…'
+      }),
+      'production'
+    )
+    expect(result?.payload.state).toBe('working')
+    expect(result?.payload.agentType).toBe('omp')
+    expect(result?.payload.lastAssistantMessage).toBe('Checking the build output…')
+  })
+
   it('message_end (user) is ignored', () => {
     const result = _internals.normalizeHookPayload(
       'pi',

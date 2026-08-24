@@ -16,6 +16,7 @@ export type AutomationRunStatus =
   | 'skipped_unavailable'
   | 'skipped_needs_interactive_auth'
   | 'dispatch_failed'
+  | 'stopped_cost_cap'
 export type AutomationRunTrigger = 'scheduled' | 'manual'
 
 /** Statuses a run can never leave; only these are safe to evict from history. */
@@ -26,7 +27,8 @@ export function isFinalAutomationRunStatus(status: AutomationRunStatus): boolean
     status === 'skipped_precheck' ||
     status === 'skipped_missed' ||
     status === 'skipped_unavailable' ||
-    status === 'skipped_needs_interactive_auth'
+    status === 'skipped_needs_interactive_auth' ||
+    status === 'stopped_cost_cap'
   )
 }
 
@@ -122,6 +124,13 @@ export type Automation = {
   lastRunAt?: number
   missedRunPolicy: AutomationMissedRunPolicy
   missedRunGraceMinutes: number
+  /** Why: cost circuit-breaker — when the post-run usage estimate exceeds this,
+   *  the run finalizes as `stopped_cost_cap` and scheduled runs pause until a
+   *  human re-enables. null/undefined = uncapped. */
+  maxCostUsdPerRun?: number | null
+  /** Why: safety rail — false/undefined prepends a no-push/no-PR guard block to
+   *  every dispatched prompt so scheduled runs stay inside the worktree. */
+  autoPushEnabled?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -156,6 +165,9 @@ export type AutomationRun = {
   /** Why: run titles must stay unique once retention prunes old runs, so the
    *  number can no longer be derived from how many runs are currently kept. */
   runNumber?: number
+  /** Why: bounded retry (o8-ladder-lite) — set on the retry run pointing at the
+   *  failed run it re-executes. Presence blocks any further automatic retry. */
+  retryOfRunId?: string | null
 }
 
 export type AutomationCreateInput = {
@@ -173,6 +185,8 @@ export type AutomationCreateInput = {
   baseBranch?: string | null
   setupDecision?: SetupDecision
   reuseSession?: boolean
+  maxCostUsdPerRun?: number | null
+  autoPushEnabled?: boolean
   timezone: string
   rrule: string
   dtstart: number
@@ -200,6 +214,8 @@ export type AutomationUpdateInput = Partial<
     | 'dtstart'
     | 'enabled'
     | 'missedRunGraceMinutes'
+    | 'maxCostUsdPerRun'
+    | 'autoPushEnabled'
   >
 >
 

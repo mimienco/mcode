@@ -437,4 +437,18 @@ describe('keybindings', () => {
       })
     ).toBe(true)
   })
+
+  it('defines a default shortcut for toggling search replace on every platform', () => {
+    for (const platform of ['darwin', 'linux', 'win32'] as const) {
+      expect(getEffectiveKeybindingsForAction('search.toggleReplace', platform)).toEqual([
+        'Mod+Shift+H'
+      ])
+    }
+    expect(formatKeybindingList(['Mod+Shift+H'], 'darwin')).toBe('⌘⇧H')
+    expect(formatKeybindingList(['Mod+Shift+H'], 'linux')).toBe('Ctrl+Shift+H')
+
+    const definition = getKeybindingDefinition('search.toggleReplace')
+    expect(definition?.group).toBe('File Explorer')
+    expect(definition?.searchKeywords).toContain('replace')
+  })
 })

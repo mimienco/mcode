@@ -2881,7 +2881,12 @@ type ResolvedWorktreeInFlight = {
 // events after it — idempotent, no duplicate local pushes.
 export type MobileNotificationDispatchEvent = {
   type: 'notification'
-  source: 'agent-task-complete' | 'terminal-bell' | 'test' | 'plugin'
+  source:
+    | 'agent-task-complete'
+    | 'automation-run-complete'
+    | 'terminal-bell'
+    | 'test'
+    | 'plugin'
   title: string
   body: string
   worktreeId?: string
@@ -20034,6 +20039,7 @@ export class MCodeRuntimeService {
         linkedGitLabIssue: meta?.linkedGitLabIssue ?? null,
         comment: meta?.comment ?? '',
         isPinned: meta?.isPinned ?? false,
+        ...(meta?.personas !== undefined ? { personas: meta.personas } : {}),
         isActive: false,
         unread: meta?.isUnread ?? false,
         liveTerminalCount: 0,

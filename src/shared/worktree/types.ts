@@ -98,6 +98,9 @@ export type Worktree = {
   isArchived: boolean
   isUnread: boolean
   isPinned: boolean
+  /** WP4 personas: per-agentType display overrides for agent rows on this
+   *  workspace. Optional so legacy persisted worktrees load unchanged. */
+  personas?: Record<string, { name?: string; color?: string }>
   sortOrder: number
   /** User-authored sidebar ordering. Higher values render earlier in Manual sort. */
   manualOrder?: number

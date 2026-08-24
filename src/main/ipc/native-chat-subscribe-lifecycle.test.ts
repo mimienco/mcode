@@ -43,10 +43,14 @@ type DeferredSubscription = {
 
 type SenderHarness = {
   destroy: () => void
+  navigateMainFrame: () => void
   registeredCleanupCount: () => number
+  registeredNavigationCleanupCount: () => number
   sender: {
     id: number
     isDestroyed: () => boolean
+    on: (event: string, callback: (...args: unknown[]) => void) => void
+    off: (event: string, callback: (...args: unknown[]) => void) => void
     once: (event: string, callback: () => void) => void
     send: ReturnType<typeof vi.fn>
   }
@@ -79,17 +83,44 @@ function deferredSubscription(): DeferredSubscription {
 function createSender(id: number): SenderHarness {
   let destroyed = false
   const destroyedCallbacks: (() => void)[] = []
+  const navigationCallbacks: ((...args: unknown[]) => void)[] = []
   return {
     destroy: () => {
       destroyed = true
-      for (const callback of destroyedCallbacks) {
+      for (const callback of destroyedCallbacks.slice()) {
         callback()
       }
     },
+    navigateMainFrame: () => {
+      for (const callback of navigationCallbacks.slice()) {
+        callback({}, 'http://localhost:5173/', false, true)
+      }
+    },
     registeredCleanupCount: () => destroyedCallbacks.length,
+    registeredNavigationCleanupCount: () => navigationCallbacks.length,
     sender: {
       id,
       isDestroyed: () => destroyed,
+      on: (event, callback) => {
+        if (event === 'did-start-navigation') {
+          navigationCallbacks.push(callback)
+        }
+      },
+      off: (event, callback) => {
+        if (event === 'did-start-navigation') {
+          const index = navigationCallbacks.indexOf(callback)
+          if (index !== -1) {
+            navigationCallbacks.splice(index, 1)
+          }
+          return
+        }
+        if (event === 'destroyed') {
+          const index = destroyedCallbacks.indexOf(callback as () => void)
+          if (index !== -1) {
+            destroyedCallbacks.splice(index, 1)
+          }
+        }
+      },
       once: (event, callback) => {
         if (event === 'destroyed') {
           destroyedCallbacks.push(callback)
@@ -189,6 +220,29 @@ describe('nativeChat subscribe lifecycle', () => {
 
     pending.resolve()
     await waitFor(() => pending.unsubscribe.mock.calls.length === 1)
+  })
+
+  it('closes pending and live watchers when the renderer document reloads', async () => {
+    const pending = deferredSubscription()
+    const live = deferredSubscription()
+    subscribeTranscript.mockReturnValueOnce(pending.promise).mockReturnValueOnce(live.promise)
+    const renderer = createSender(20)
+
+    subscribe(renderer.sender, 'pending-reload')
+    const pendingSignal = setupSignal(0)
+    renderer.navigateMainFrame()
+    expect(pendingSignal.aborted).toBe(true)
+    pending.resolve()
+    await waitFor(() => pending.unsubscribe.mock.calls.length === 1)
+
+    subscribe(renderer.sender, 'live-reload')
+    live.resolve()
+    await waitFor(() => _getNativeChatPendingSubscriptionCountForTest() === 0)
+    renderer.navigateMainFrame()
+
+    expect(live.unsubscribe).toHaveBeenCalledOnce()
+    expect(_getNativeChatSenderCleanupCountForTest()).toBe(0)
+    expect(renderer.registeredNavigationCleanupCount()).toBe(0)
   })
 
   it('keeps the latest same-id subscribe when setup resolves in reverse order', async () => {

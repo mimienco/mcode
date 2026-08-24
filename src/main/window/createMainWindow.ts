@@ -61,6 +61,7 @@ import { installPrivilegedWindowNavigationPolicy } from './privileged-window-nav
 import { isMacosTahoeOrNewer } from './macos-tahoe-release'
 import { registerPluginPanelNavigationGuard } from '../plugins/plugin-panel-navigation-guard'
 import { installWindowsPathRegistryChangeListener } from '../pty/windows-path-registry-change'
+import { installMainLoopStallDiagnostics } from './main-loop-stall-diagnostics'
 import { installRendererResponsivenessDiagnostics } from './renderer-responsiveness-diagnostics'
 
 // Why: show/restore/resume can overlap before the size nudge resets; never capture the temporary width as the next baseline.
@@ -310,6 +311,8 @@ export function createMainWindow(
     }
   })
   installRendererResponsivenessDiagnostics(mainWindow)
+  // Why: singleton inside the module; later windows (popouts) must not stack heartbeats.
+  installMainLoopStallDiagnostics()
   mainWindow.on('page-title-updated', (event) => {
     event.preventDefault()
     mainWindow.setTitle(nativeWindowTitle)

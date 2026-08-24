@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { Button } from '../ui/button'
 import { Separator } from '../ui/separator'
-import { BellRing, Bot, Siren } from 'lucide-react'
+import { BellRing, Bot, CalendarClock, Siren } from 'lucide-react'
 import { useAppStore } from '@/store'
 import {
   MacNotificationPermissionCard,
@@ -143,6 +143,25 @@ export function NotificationsPane({
         onToggle={() =>
           void updateNotificationSettings({
             agentTaskComplete: !notificationSettings.agentTaskComplete
+          })
+        }
+      />
+
+      <NotificationSettingToggle
+        icon={<CalendarClock className="size-4" />}
+        label={translate(
+          'auto.components.settings.NotificationsPane.automationRunComplete.label',
+          'Automation Run Complete'
+        )}
+        description={translate(
+          'auto.components.settings.NotificationsPane.automationRunComplete.description',
+          'A scheduled automation run finishes or fails.'
+        )}
+        checked={notificationSettings.automationRunComplete}
+        disabled={!notificationSettings.enabled}
+        onToggle={() =>
+          void updateNotificationSettings({
+            automationRunComplete: !notificationSettings.automationRunComplete
           })
         }
       />

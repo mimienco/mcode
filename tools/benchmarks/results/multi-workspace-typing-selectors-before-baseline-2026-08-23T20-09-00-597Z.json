@@ -1,0 +1,314 @@
+{
+  "benchmark": "multi-workspace-typing-latency",
+  "label": "selectors-before",
+  "scenario": "baseline",
+  "timestamp": "2026-08-23T20:09:00.597Z",
+  "config": {
+    "loadPanes": 4,
+    "loadRateKbps": 256,
+    "keyCount": 32,
+    "keyCadenceMs": 250,
+    "cpuWorkers": 0
+  },
+  "measurement": {
+    "keyCount": 32,
+    "missingPtyArrivalCount": 0,
+    "missingEchoCount": 0,
+    "totalMs": {
+      "count": 32,
+      "p50": 33,
+      "p90": 61,
+      "p99": 2920,
+      "max": 2920
+    },
+    "inputHalfMs": {
+      "count": 32,
+      "p50": 5,
+      "p90": 8,
+      "p99": 1002,
+      "max": 1002
+    },
+    "echoHalfMs": {
+      "count": 32,
+      "p50": 27,
+      "p90": 52,
+      "p99": 2027,
+      "max": 2027
+    },
+    "maxTimerDriftMs": 3054.399999976158,
+    "samples": [
+      {
+        "seq": 1,
+        "sentAt": 1787515729931,
+        "ptyArrivedAt": 1787515729984,
+        "echoSeenAt": 1787515730036
+      },
+      {
+        "seq": 2,
+        "sentAt": 1787515730186,
+        "ptyArrivedAt": 1787515730193,
+        "echoSeenAt": 1787515730219
+      },
+      {
+        "seq": 3,
+        "sentAt": 1787515730437,
+        "ptyArrivedAt": 1787515730443,
+        "echoSeenAt": 1787515730452
+      },
+      {
+        "seq": 4,
+        "sentAt": 1787515730688,
+        "ptyArrivedAt": 1787515730693,
+        "echoSeenAt": 1787515730701
+      },
+      {
+        "seq": 5,
+        "sentAt": 1787515730945,
+        "ptyArrivedAt": 1787515731838,
+        "echoSeenAt": 1787515733865
+      },
+      {
+        "seq": 6,
+        "sentAt": 1787515732835,
+        "ptyArrivedAt": 1787515733837,
+        "echoSeenAt": 1787515733900
+      },
+      {
+        "seq": 7,
+        "sentAt": 1787515733839,
+        "ptyArrivedAt": 1787515733843,
+        "echoSeenAt": 1787515733900
+      },
+      {
+        "seq": 8,
+        "sentAt": 1787515734096,
+        "ptyArrivedAt": 1787515734101,
+        "echoSeenAt": 1787515734114
+      },
+      {
+        "seq": 9,
+        "sentAt": 1787515734348,
+        "ptyArrivedAt": 1787515734353,
+        "echoSeenAt": 1787515734378
+      },
+      {
+        "seq": 10,
+        "sentAt": 1787515734607,
+        "ptyArrivedAt": 1787515734613,
+        "echoSeenAt": 1787515734639
+      },
+      {
+        "seq": 11,
+        "sentAt": 1787515734868,
+        "ptyArrivedAt": 1787515734873,
+        "echoSeenAt": 1787515734900
+      },
+      {
+        "seq": 12,
+        "sentAt": 1787515735130,
+        "ptyArrivedAt": 1787515735135,
+        "echoSeenAt": 1787515735162
+      },
+      {
+        "seq": 13,
+        "sentAt": 1787515735393,
+        "ptyArrivedAt": 1787515735398,
+        "echoSeenAt": 1787515735425
+      },
+      {
+        "seq": 14,
+        "sentAt": 1787515735653,
+        "ptyArrivedAt": 1787515735659,
+        "echoSeenAt": 1787515735686
+      },
+      {
+        "seq": 15,
+        "sentAt": 1787515735914,
+        "ptyArrivedAt": 1787515735919,
+        "echoSeenAt": 1787515735947
+      },
+      {
+        "seq": 16,
+        "sentAt": 1787515736175,
+        "ptyArrivedAt": 1787515736180,
+        "echoSeenAt": 1787515736207
+      },
+      {
+        "seq": 17,
+        "sentAt": 1787515736437,
+        "ptyArrivedAt": 1787515736441,
+        "echoSeenAt": 1787515736455
+      },
+      {
+        "seq": 18,
+        "sentAt": 1787515736698,
+        "ptyArrivedAt": 1787515736704,
+        "echoSeenAt": 1787515736731
+      },
+      {
+        "seq": 19,
+        "sentAt": 1787515736958,
+        "ptyArrivedAt": 1787515736963,
+        "echoSeenAt": 1787515736991
+      },
+      {
+        "seq": 20,
+        "sentAt": 1787515737209,
+        "ptyArrivedAt": 1787515737214,
+        "echoSeenAt": 1787515737224
+      },
+      {
+        "seq": 21,
+        "sentAt": 1787515737466,
+        "ptyArrivedAt": 1787515737471,
+        "echoSeenAt": 1787515737501
+      },
+      {
+        "seq": 22,
+        "sentAt": 1787515737728,
+        "ptyArrivedAt": 1787515737734,
+        "echoSeenAt": 1787515737761
+      },
+      {
+        "seq": 23,
+        "sentAt": 1787515737986,
+        "ptyArrivedAt": 1787515737993,
+        "echoSeenAt": 1787515738020
+      },
+      {
+        "seq": 24,
+        "sentAt": 1787515738237,
+        "ptyArrivedAt": 1787515738242,
+        "echoSeenAt": 1787515738251
+      },
+      {
+        "seq": 25,
+        "sentAt": 1787515738494,
+        "ptyArrivedAt": 1787515738500,
+        "echoSeenAt": 1787515738527
+      },
+      {
+        "seq": 26,
+        "sentAt": 1787515738754,
+        "ptyArrivedAt": 1787515738759,
+        "echoSeenAt": 1787515738786
+      },
+      {
+        "seq": 27,
+        "sentAt": 1787515739014,
+        "ptyArrivedAt": 1787515739022,
+        "echoSeenAt": 1787515739049
+      },
+      {
+        "seq": 28,
+        "sentAt": 1787515739274,
+        "ptyArrivedAt": 1787515739279,
+        "echoSeenAt": 1787515739307
+      },
+      {
+        "seq": 29,
+        "sentAt": 1787515739537,
+        "ptyArrivedAt": 1787515739543,
+        "echoSeenAt": 1787515739571
+      },
+      {
+        "seq": 30,
+        "sentAt": 1787515739798,
+        "ptyArrivedAt": 1787515739804,
+        "echoSeenAt": 1787515739831
+      },
+      {
+        "seq": 31,
+        "sentAt": 1787515740059,
+        "ptyArrivedAt": 1787515740065,
+        "echoSeenAt": 1787515740093
+      },
+      {
+        "seq": 32,
+        "sentAt": 1787515740321,
+        "ptyArrivedAt": 1787515740326,
+        "echoSeenAt": 1787515740355
+      }
+    ]
+  },
+  "scheduler": {
+    "backgroundEnqueueCount": 0,
+    "deferredForegroundEnqueueCount": 0,
+    "foregroundWriteCount": 38,
+    "backgroundWriteCount": 0,
+    "deferredForegroundWriteCount": 0,
+    "flushWriteCount": 0,
+    "scheduledDrainCount": 0,
+    "queuedTerminalCount": 0,
+    "queuedChars": 0,
+    "peakQueuedTerminalCount": 0,
+    "peakQueuedChars": 0,
+    "peakQueuedCharsByTerminal": 0,
+    "droppedBacklogCount": 0,
+    "drainWrites": [],
+    "drainHighPriority": []
+  },
+  "mainDelivery": {
+    "pendingPtyCount": 0,
+    "pendingChars": 0,
+    "maxPendingCharsByPty": 0,
+    "rendererInFlightPtyCount": 0,
+    "rendererInFlightChars": 0,
+    "maxRendererInFlightCharsByPty": 0,
+    "activeRendererPtyCount": 1,
+    "flushScheduled": false,
+    "peakPendingChars": 1355,
+    "peakMaxPendingCharsByPty": 1355,
+    "peakRendererInFlightChars": 1355,
+    "peakMaxRendererInFlightCharsByPty": 1355,
+    "ackGatedFlushSkipCount": 0,
+    "hiddenDeliveryGatedPtyCount": 0,
+    "deliveryInterestPtyCount": 0,
+    "hiddenDeliveryDroppedChars": 0,
+    "hiddenDeliveryDroppedChunks": 0,
+    "hiddenDeliveryGatedVisiblePtyCount": 0,
+    "hiddenDeliveryGatedActivePtyCount": 0,
+    "pendingDroppedChars": 0,
+    "diagnostics": {
+      "appVersion": "1.4.178-rc.2",
+      "mainUptimeMs": 30976,
+      "windowFocused": false,
+      "windowVisible": false,
+      "windowMinimized": false,
+      "msSinceLastPowerSuspend": null,
+      "msSinceLastPowerResume": null,
+      "perPty": [
+        {
+          "id": "…@@58405c8e",
+          "sentChars": 4380,
+          "ackedChars": 4380,
+          "inFlightChars": 0,
+          "pendingChars": 0,
+          "hidden": false,
+          "visible": true,
+          "active": true,
+          "msSinceLastSend": 268,
+          "msSinceLastAck": 268
+        }
+      ],
+      "breadcrumbs": [
+        {
+          "atMs": 1787515720726,
+          "kind": "renderer-lifecycle-reset",
+          "repeats": 2
+        },
+        {
+          "atMs": 1787515727740,
+          "kind": "gate-unmark",
+          "detail": {
+            "id": "…@@58405c8e"
+          }
+        }
+      ]
+    },
+    "rendererLifecycleResetCount": 1,
+    "lastLifecycleResetClearedChars": 0,
+    "rendererPtyDispatcherReady": true,
+    "rendererDispatcherReadyForcedCount": 0
+  }
+}

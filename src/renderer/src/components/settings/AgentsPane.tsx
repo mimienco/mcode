@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- Why: the Agents pane keeps catalog rows, default
    selection, per-agent controls, and runtime location together so settings
    reconciliation stays visible in one file. */
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -283,20 +283,34 @@ export function AgentPermissionsSetting({
   )
 }
 
-function AgentCommandOverrideInput({
+export function AgentCommandOverrideInput({
   defaultCmd,
   cmdOverride,
   onSaveOverride
 }: AgentCommandOverrideInputProps): React.JSX.Element {
   const draftSeed = cmdOverride ?? defaultCmd
   const [cmdDraft, setCmdDraft] = useState(draftSeed)
+  // Why: PERF-16 — blur is the single commit owner; Enter only blurs, and a
+  // draft that maps to the already-committed value never re-saves.
+  const lastCommittedRef = useRef(cmdOverride ?? '')
+  useEffect(() => {
+    lastCommittedRef.current = cmdOverride ?? ''
+  }, [cmdOverride])
 
   const commitCmd = (): void => {
     const trimmed = cmdDraft.trim()
     if (!trimmed || trimmed === defaultCmd) {
-      onSaveOverride('')
       setCmdDraft(defaultCmd)
+      if (lastCommittedRef.current === '') {
+        return
+      }
+      lastCommittedRef.current = ''
+      onSaveOverride('')
     } else {
+      if (lastCommittedRef.current === trimmed) {
+        return
+      }
+      lastCommittedRef.current = trimmed
       onSaveOverride(trimmed)
     }
   }
@@ -313,7 +327,6 @@ function AgentCommandOverrideInput({
           onBlur={commitCmd}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              commitCmd()
               e.currentTarget.blur()
             }
             if (e.key === 'Escape') {
@@ -344,16 +357,26 @@ function AgentCommandOverrideInput({
   )
 }
 
-function AgentDefaultArgsInput({
+export function AgentDefaultArgsInput({
   defaultArgs,
   argsOverride,
   onSaveArgs
 }: AgentDefaultArgsInputProps): React.JSX.Element {
   const draftSeed = argsOverride
   const [argsDraft, setArgsDraft] = useState(draftSeed)
+  // Why: PERF-16 — skip the save when the trimmed draft already matches the committed value.
+  const lastCommittedRef = useRef(argsOverride ?? '')
+  useEffect(() => {
+    lastCommittedRef.current = argsOverride ?? ''
+  }, [argsOverride])
 
   const commitArgs = (): void => {
-    onSaveArgs(argsDraft.trim())
+    const trimmed = argsDraft.trim()
+    if (trimmed === lastCommittedRef.current) {
+      return
+    }
+    lastCommittedRef.current = trimmed
+    onSaveArgs(trimmed)
   }
 
   return (
@@ -368,7 +391,6 @@ function AgentDefaultArgsInput({
           onBlur={commitArgs}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              commitArgs()
               e.currentTarget.blur()
             }
             if (e.key === 'Escape') {
@@ -402,7 +424,7 @@ function AgentDefaultArgsInput({
   )
 }
 
-function AgentDefaultEnvInput({
+export function AgentDefaultEnvInput({
   defaultEnv,
   envOverride,
   onSaveEnv
@@ -412,6 +434,12 @@ function AgentDefaultEnvInput({
   const [envDraft, setEnvDraft] = useState(draftSeed)
   const [envDraftTooLarge, setEnvDraftTooLarge] = useState(false)
   const envDraftErrorId = useId()
+  // Why: PERF-16 — the parsed env is a fresh object per commit, so compare the
+  // normalized serialization against the last committed one.
+  const lastCommittedRef = useRef(draftSeed)
+  useEffect(() => {
+    lastCommittedRef.current = stringifyAgentDefaultEnvDraft(envOverride)
+  }, [envOverride])
 
   const commitEnv = (): void => {
     const parsedDraft = parseAgentDefaultEnvDraft(envDraft)
@@ -419,6 +447,11 @@ function AgentDefaultEnvInput({
     if (parsedDraft.tooLarge) {
       return
     }
+    const committedText = stringifyAgentDefaultEnvDraft(parsedDraft.env)
+    if (committedText === lastCommittedRef.current) {
+      return
+    }
+    lastCommittedRef.current = committedText
     onSaveEnv(parsedDraft.env)
   }
 
@@ -439,7 +472,6 @@ function AgentDefaultEnvInput({
           onBlur={commitEnv}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              commitEnv()
               e.currentTarget.blur()
             }
             if (e.key === 'Escape') {

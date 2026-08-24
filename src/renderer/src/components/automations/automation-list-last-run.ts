@@ -53,7 +53,7 @@ export function getAutomationRunLastRunAt(run: AutomationRun): number {
 }
 
 export function getToneForAutomationRunStatus(status: AutomationRunStatus): AutomationLastRunTone {
-  if (status === 'dispatch_failed') {
+  if (status === 'dispatch_failed' || status === 'stopped_cost_cap') {
     return 'failed'
   }
   if (status === 'completed') {

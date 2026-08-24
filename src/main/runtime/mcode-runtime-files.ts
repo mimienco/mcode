@@ -20,10 +20,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import type { SearchOptions, SearchResult } from '../../shared/code-search-types'
-import type {
-  ReplaceOptions,
-  ReplaceSummary
-} from '../../shared/code-replace-types'
+import type { ReplaceOptions, ReplaceSummary } from '../../shared/code-replace-types'
 import type { DirEntry, FsChangeEvent, MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { GitWorktreeInfo, Worktree } from '../../shared/worktree/types'
 import {
@@ -116,7 +113,7 @@ import {
 } from '../../shared/node-bounded-file-reader'
 import { QUICK_OPEN_LISTING_MAX_RESULTS } from '../../shared/quick-open-listing-limits'
 
-const MOBILE_FILE_LIST_LIMIT = 5000
+export const MOBILE_FILE_LIST_LIMIT = 5000
 // Legacy SSH relays cannot enforce a byte budget; 32 max-length paths stay under one 4 MiB frame.
 const QUICK_OPEN_LEGACY_REMOTE_RESULT_LIMIT = 32
 const MOBILE_FILE_PATH_SEARCH_CACHE_LIMIT = 20_000
@@ -274,6 +271,9 @@ const RUNTIME_PREVIEWABLE_BINARY_MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
+  '.jpe': 'image/jpeg',
+  '.avif': 'image/avif',
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
@@ -640,9 +640,17 @@ export class RuntimeFileCommands {
     const store = this.host.requireStore()
     const target = await this.host.resolveRuntimeFileTarget(worktreeSelector)
     const { worktree, connectionId } = target
+    // Why: PERF-05 — ask for one past the limit so truncation stays detectable
+    // without enumerating and sorting the whole tree.
+    const requestedLimit = MOBILE_FILE_LIST_LIMIT + 1
     const files = connectionId
-      ? await this.listRemoteMobileFiles(worktree.path, connectionId, undefined, options.signal)
-      : await listQuickOpenFiles(worktree.path, store, undefined, options.signal)
+      ? await this.listRemoteMobileFiles(
+          worktree.path,
+          connectionId,
+          requestedLimit,
+          options.signal
+        )
+      : await listQuickOpenFiles(worktree.path, store, undefined, options.signal, requestedLimit)
     const entries = files
       .filter((relativePath) => isSafeMobileRelativePath(relativePath))
       .sort((a, b) => a.localeCompare(b))
@@ -657,8 +665,10 @@ export class RuntimeFileCommands {
       worktree: worktree.id,
       rootPath: worktree.path,
       files: entries,
+      // Why: with a bounded listing the total is a lower bound once truncated.
       totalCount: files.length,
-      truncated: files.length > MOBILE_FILE_LIST_LIMIT
+      truncated: files.length > MOBILE_FILE_LIST_LIMIT,
+      totalCountExact: files.length <= MOBILE_FILE_LIST_LIMIT
     }
   }
 
@@ -2254,6 +2264,7 @@ export class RuntimeFileCommands {
       let resolved = false
       let processErrorObserved = false
       let unavailableExitObserved = false
+      let rgUnavailable = false
       let child: ChildProcess | null = null
       const transformAbsPath = wslInfo
         ? (p: string): string => toWindowsWslPath(p, wslInfo.distro)
@@ -2268,7 +2279,9 @@ export class RuntimeFileCommands {
           this.activeRuntimeTextSearches.delete(searchKey)
         }
         cleanupListeners()
-        resolvePromise(result)
+        resolvePromise(
+          Promise.resolve(result).then((r) => (rgUnavailable ? { ...r, rgUnavailable: true } : r))
+        )
       }
       const resolveOnce = (): void => finish(finalize(acc))
       const resolveWithoutRipgrep = (): void =>
@@ -2327,6 +2340,7 @@ export class RuntimeFileCommands {
       }
       const onError = (): void => {
         processErrorObserved = true
+        rgUnavailable = true
         if (child && isRipgrepUnavailableExit(child, null, null)) {
           resolveWithoutRipgrep()
           return
@@ -2341,6 +2355,7 @@ export class RuntimeFileCommands {
           })
         ) {
           unavailableExitObserved = true
+          rgUnavailable = true
           resolveWithoutRipgrep()
           return
         }

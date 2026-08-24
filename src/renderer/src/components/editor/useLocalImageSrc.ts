@@ -288,7 +288,14 @@ export function loadLocalImageAbsolutePath(
   }
 
   const readGeneration = cacheGeneration
-  const loadPromise = readImagePreview(absolutePath, connectionId, runtimeContext)
+  // Why: preview targets (paste temp files, user-referenced paths like Downloads)
+  // live outside workspace roots; the authorize IPC exists for exactly this
+  // user-initiated read, and the renderer could invoke it directly regardless.
+  const loadPromise = Promise.resolve(
+    window.api.fs.authorizeExternalPath?.({ targetPath: absolutePath })
+  )
+    .catch(() => undefined)
+    .then(() => readImagePreview(absolutePath, connectionId, runtimeContext))
     .then((result) => {
       if (!result.isBinary || !result.content || cacheGeneration !== readGeneration) {
         // Why: local image paths must stay behind IPC/runtime authorization;

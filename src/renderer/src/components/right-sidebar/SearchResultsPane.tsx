@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type {
   SearchFileResult,
   SearchMatch,
   SearchResult
 } from '../../../../shared/code-search-types'
+import { detectInstallCommand } from '../../../../shared/quick-open-install-rg'
 import type { SearchRow } from './search-rows'
 import { FileResultRow, MatchResultRow } from './SearchResultItems'
 import { translate } from '@/i18n/i18n'
@@ -32,6 +33,19 @@ export function SearchResultsPane({
   onToggleCollapsedFile,
   onMatchClick
 }: SearchResultsPaneProps): React.JSX.Element {
+  // Why: the install command is OS-dependent; resolve once per mount.
+  const [installCommand, setInstallCommand] = useState('')
+  useEffect(() => {
+    let alive = true
+    void detectInstallCommand().then((command) => {
+      if (alive) {
+        setInstallCommand(command)
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -117,7 +131,21 @@ export function SearchResultsPane({
           </div>
         )}
 
-        {!hasCommittedResults && query && !loading && (
+        {results?.rgUnavailable && results.totalMatches === 0 && query && !loading && (
+          <div className="flex flex-col gap-1 px-3 py-2 text-xs text-muted-foreground">
+            <span>
+              {translate(
+                'auto.components.right.sidebar.Search.rgUnavailableHint',
+                'Search found nothing because ripgrep (rg) is not installed or not on PATH.'
+              )}
+            </span>
+            {installCommand ? (
+              <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">{installCommand}</code>
+            ) : null}
+          </div>
+        )}
+
+        {!results?.rgUnavailable && !hasCommittedResults && query && !loading && (
           <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">
             {translate('auto.components.right.sidebar.Search.d56d140747', 'Press Enter to search')}
           </div>

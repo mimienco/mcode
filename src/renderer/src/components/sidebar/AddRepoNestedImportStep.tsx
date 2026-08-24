@@ -155,8 +155,10 @@ export function AddRepoNestedImportStep({
             )}
           </p>
         ) : null}
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {noRepositoriesSelected ? (
+        {/* Why: showing disabled import buttons next to the folder escape reads as
+            broken; they only make sense once a repository is selected. */}
+        {noRepositoriesSelected ? (
+          <div className="flex shrink-0 justify-end gap-2">
             <Button
               onClick={handleOpenAsFolder}
               disabled={isAdding || scanInProgress}
@@ -168,29 +170,29 @@ export function AddRepoNestedImportStep({
                 'Open as Folder'
               )}
             </Button>
-          ) : null}
-          <Button
-            onClick={() => handleImport('separate')}
-            disabled={isAdding || scanInProgress || noRepositoriesSelected}
-            variant="outline"
-          >
-            {showSeparateSpinner ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {translate(
-              'auto.components.sidebar.AddRepoNestedImportStep.aa0247680d',
-              'No, import separately'
-            )}
-          </Button>
-          <Button
-            onClick={() => handleImport('group')}
-            disabled={isAdding || scanInProgress || noRepositoriesSelected}
-          >
-            {showGroupSpinner ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {translate(
-              'auto.components.sidebar.AddRepoNestedImportStep.a0bc4d1f8e',
-              'Yes, import as group'
-            )}
-          </Button>
-        </div>
+          </div>
+        ) : (
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button
+              onClick={() => handleImport('separate')}
+              disabled={isAdding || scanInProgress}
+              variant="outline"
+            >
+              {showSeparateSpinner ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              {translate(
+                'auto.components.sidebar.AddRepoNestedImportStep.aa0247680d',
+                'No, import separately'
+              )}
+            </Button>
+            <Button onClick={() => handleImport('group')} disabled={isAdding || scanInProgress}>
+              {showGroupSpinner ? <Loader2 className="size-3.5 animate-spin" /> : null}
+              {translate(
+                'auto.components.sidebar.AddRepoNestedImportStep.a0bc4d1f8e',
+                'Yes, import as group'
+              )}
+            </Button>
+          </div>
+        )}
       </div>
     </>
   )

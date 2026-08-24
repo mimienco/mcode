@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { AgentStateDot, agentStateLabel } from '@/components/AgentStateDot'
 import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/dashboard/useDashboardData'
@@ -6,8 +6,14 @@ import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
 import { cn } from '@/lib/utils'
 import { getAgentDotState } from './worktree-card-agent-summary'
+import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { getAgentRowPrimaryText } from '@/lib/agent-row-primary-text'
+import {
+  nextAgentPersonaColor,
+  getWorktreeAgentPersona,
+  findWorktreeById
+} from './agent-persona'
 import { formatAgentToolPreview } from '@/lib/agent-row-tool-preview'
 import { useAgentRowConversationName } from '@/components/dashboard/use-agent-row-conversation-name'
 import { lastEnteredDoneAt } from '@/components/dashboard/agent-finished-timestamp'
@@ -119,7 +125,47 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
   const hideIcon = hideIdentityIcon || agent.rowSource === 'subagent'
   const dotState = getAgentDotState(agent)
   const conversationName = useAgentRowConversationName(agent)
-  const primary = getCompactAgentPrimary(agent, conversationName)
+  // WP4 persona override: user-authored name/color wins over every derived label.
+  const persona = useAppStore((s) =>
+    getWorktreeAgentPersona(s.worktreesByRepo, agent.tab.worktreeId, agent.agentType)
+  )
+  const [isEditingPersonaName, setIsEditingPersonaName] = useState(false)
+  const personaDraftRef = useRef<HTMLInputElement>(null)
+  const commitPersonaName = (raw: string): void => {
+    const trimmed = raw.trim()
+    const worktree = findWorktreeById(
+      useAppStore.getState().worktreesByRepo,
+      agent.tab.worktreeId
+    )
+    const existingMap = worktree?.personas
+    const current = existingMap?.[agent.agentType]
+    const nextName = trimmed.length > 0 ? trimmed : undefined
+    if (nextName === undefined && current === undefined) {
+      return
+    }
+    void useAppStore.getState().updateWorktreeMeta(agent.tab.worktreeId, {
+      personas: {
+        ...existingMap,
+        [agent.agentType]: { name: nextName, color: current?.color }
+      }
+    })
+  }
+  const cyclePersonaColor = (): void => {
+    const nextColor = nextAgentPersonaColor(persona?.color)
+    const worktree = findWorktreeById(
+      useAppStore.getState().worktreesByRepo,
+      agent.tab.worktreeId
+    )
+    void useAppStore.getState().updateWorktreeMeta(agent.tab.worktreeId, {
+      personas: {
+        ...worktree?.personas,
+        [agent.agentType]: { name: persona?.name, color: nextColor }
+      }
+    })
+  }
+  const personaName = persona?.name?.trim()
+  const primary =
+    personaName ?? getCompactAgentPrimary(agent, conversationName)
   const isLineageChild = agent.lineage?.depth === 1
   const secondary = getCompactAgentSecondary(agent)
   const model = agent.entry.model?.trim() ?? ''
@@ -195,6 +241,26 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
         <span className="size-4 shrink-0" aria-hidden />
       ) : null}
       <AgentStateDot state={dotState} size="sm" />
+      {persona?.color && (
+        <button
+          type="button"
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: persona.color }}
+          title={translate(
+            'auto.components.sidebar.CompactAgentRow.colorCycle.title',
+            'Agent color — click to cycle'
+          )}
+          aria-label={translate(
+            'auto.components.sidebar.CompactAgentRow.colorCycle.title',
+            'Agent color — click to cycle'
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            cyclePersonaColor()
+          }}
+          onKeyDown={stopActivationKeyPropagation}
+        />
+      )}
       {!hideIcon && (
         <span className="inline-flex shrink-0" title={formatAgentTypeLabel(agent.agentType)}>
           <AgentIcon agent={agentTypeToIconAgent(agent.agentType)} size={13} />
@@ -203,9 +269,44 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
       <span className="min-w-0 flex-1 truncate">
         {/* Why: the selected-row fill is strong enough to wash out the dimmed
             prompt/secondary text, so lift both toward full foreground when focused. */}
-        <span className={isFocusedPane ? 'text-foreground' : 'text-muted-foreground/90'}>
-          {primary}
-        </span>
+        {isEditingPersonaName ? (
+          <input
+            ref={(node) => {
+              node?.focus()
+              node?.select()
+              personaDraftRef.current = node
+            }}
+            defaultValue={personaName ?? ''}
+            className="w-full max-w-48 bg-transparent text-xs outline-none ring-1 ring-border"
+            aria-label={translate(
+            'auto.components.sidebar.CompactAgentRow.rename.input',
+            'Agent display name'
+          )}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') {
+                commitPersonaName(e.currentTarget.value)
+                setIsEditingPersonaName(false)
+              } else if (e.key === 'Escape') {
+                setIsEditingPersonaName(false)
+              }
+            }}
+            onBlur={(e) => {
+              commitPersonaName(e.currentTarget.value)
+              setIsEditingPersonaName(false)
+            }}
+          />
+        ) : (
+          <span
+            className={isFocusedPane ? 'text-foreground' : 'text-muted-foreground/90'}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              setIsEditingPersonaName(true)
+            }}
+          >
+            {primary}
+          </span>
+        )}
         {secondary && (
           <span className={isFocusedPane ? 'text-foreground/70' : 'text-muted-foreground/65'}>
             {' '}

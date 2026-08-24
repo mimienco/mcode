@@ -50,16 +50,22 @@ function renderStepMarkup(
   )
 }
 
-function findButton(container: HTMLElement, label: string): HTMLButtonElement {
+function findButton(
+  container: HTMLElement,
+  label: string,
+  { optional = false }: { optional?: boolean } = {}
+): HTMLButtonElement | null {
   const button = Array.from(container.querySelectorAll('button')).find((entry) =>
     entry.textContent?.includes(label)
   )
   if (!button) {
+    if (optional) {
+      return null
+    }
     throw new Error(`Button not found: ${label}`)
   }
   return button
 }
-
 describe('AddRepoNestedImportStep', () => {
   let root: Root | null = null
   let container: HTMLDivElement | null = null
@@ -214,8 +220,9 @@ describe('AddRepoNestedImportStep', () => {
     })
 
     expect(host.textContent).toContain('No repositories are selected')
-    expect(findButton(host, 'No, import separately').disabled).toBe(true)
-    expect(findButton(host, 'Yes, import as group').disabled).toBe(true)
+    // Why: import buttons stay hidden until a repository is selected.
+    expect(findButton(host, 'No, import separately', { optional: true })).toBeNull()
+    expect(findButton(host, 'Yes, import as group', { optional: true })).toBeNull()
     expect(findButton(host, 'Open as Folder').disabled).toBe(false)
 
     act(() => {

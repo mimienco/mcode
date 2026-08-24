@@ -100,6 +100,7 @@ export function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalS
     notifications: {
       enabled: true,
       agentTaskComplete: true,
+      automationRunComplete: true,
       terminalBell: false,
       suppressWhenFocused: true,
       customSoundId: 'system',

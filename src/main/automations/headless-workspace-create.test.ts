@@ -72,7 +72,7 @@ describe('headless automation workspace create args', () => {
       activate: false,
       createdWithAgent: 'codex',
       startupAgent: 'codex',
-      startupPrompt: 'Review changes',
+      startupPrompt: expect.stringContaining('[MCode automation safety rail]'),
       telemetrySource: 'unknown',
       automationProvenance: {
         kind: 'created-by-automation',

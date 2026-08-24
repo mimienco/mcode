@@ -253,6 +253,7 @@ import { getSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
 import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
 import { isPtyIncarnationId } from '../../shared/pty-incarnation'
 import type { PtyListedSession } from '../../shared/pty-listed-session'
+import { appendStallRecord } from '../window/main-stall-log'
 
 // ─── Provider Registry ──────────────────────────────────────────────
 // Routes PTY operations by connectionId (null = local provider).
@@ -5980,6 +5981,10 @@ export function registerPtyHandlers(
         return null
       }
       const scrollbackRows = normalizeSnapshotScrollbackRows(args.opts?.scrollbackRows)
+      // Why timed: this serialization is CPU-bound on the main thread, so a slow one stalls
+      // every queued IPC app-wide. The log makes that stall attributable (rows/chars/source)
+      // without changing the response contract.
+      const serializeStartedAtMs = Date.now()
       try {
         const runtimeSeqBeforeSnapshot = runtime.getPtyOutputSequence(args.id)
         const providerSnapshotRequired = providerSnapshotRequiredPtys.has(args.id)
@@ -5997,6 +6002,21 @@ export function registerPtyHandlers(
           (await runtime.serializeHiddenOutputRecoveryBuffer(args.id, {
             scrollbackRows
           }))
+        const serializeElapsedMs = Date.now() - serializeStartedAtMs
+        if (serializeElapsedMs >= 50) {
+          appendStallRecord('slow_hidden_output_serialization', {
+            ms: serializeElapsedMs,
+            rows: scrollbackRows ?? 'default',
+            chars: (snapshot?.data.length ?? 0) + (snapshot?.scrollbackAnsi?.length ?? 0),
+            source: snapshot?.source ?? 'none',
+            ptyId: args.id
+          })
+          console.warn(
+            `[terminal-snapshot] slow hidden-output serialization: ${serializeElapsedMs}ms rows=${scrollbackRows ?? 'default'} chars=${
+              (snapshot?.data.length ?? 0) + (snapshot?.scrollbackAnsi?.length ?? 0)
+            } source=${snapshot?.source ?? 'none'}`
+          )
+        }
         if (!snapshot || typeof snapshot.seq !== 'number') {
           return snapshot
         }

@@ -29,6 +29,7 @@ function createSettings(): GlobalSettings {
     notifications: {
       enabled: true,
       agentTaskComplete: true,
+      automationRunComplete: true,
       terminalBell: true,
       suppressWhenFocused: true,
       customSoundId: 'system',

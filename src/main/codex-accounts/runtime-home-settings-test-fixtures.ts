@@ -79,6 +79,7 @@ export function createSettings(overrides: TestSettingsOverrides = {}): GlobalSet
     notifications: {
       enabled: true,
       agentTaskComplete: true,
+      automationRunComplete: true,
       terminalBell: false,
       suppressWhenFocused: true,
       customSoundId: 'system',

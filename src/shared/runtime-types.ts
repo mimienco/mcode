@@ -386,6 +386,8 @@ export type RuntimeFileListResult = {
   files: RuntimeFileListEntry[]
   totalCount: number
   truncated: boolean
+  /** Why: PERF-05 — bounded listings make totalCount a lower bound when truncated. */
+  totalCountExact?: boolean
   quickOpenSearchVersion?: number
 }
 

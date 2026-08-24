@@ -10,6 +10,8 @@ import { NativeChatTitlebarPortalProvider } from '../components/native-chat/Nati
 import type { VirtualizedScrollAnchor } from '../hooks/useVirtualizedScrollAnchor'
 import { TitlebarLeftControls } from './TitlebarLeftControls'
 import { TitlebarMainStrip } from './TitlebarMainStrip'
+import { PageLoadingSurface } from './page-loading-surface'
+import { useStableActiveView } from './use-stable-active-view'
 import type { AppChromeLayout } from './use-app-chrome-layout'
 import type { FloatingWorkspacePanelState } from './use-floating-workspace-panel'
 
@@ -65,25 +67,33 @@ function WorktreeSidebar({
   )
 }
 
-function ActivePage({ layout }: { layout: AppChromeLayout }): React.JSX.Element {
-  const { activeView, activeWorktreeId, activePendingCreationId, creationLayoutActive } = layout
+function ActivePage({
+  layout,
+  displayedView
+}: {
+  layout: AppChromeLayout
+  displayedView: string
+}): React.JSX.Element {
+  const { activeWorktreeId, activePendingCreationId, creationLayoutActive } = layout
   return (
     <>
-      {activeView === 'settings' ? <Settings /> : null}
-      {activeView === 'skills' ? <SkillsPage /> : null}
-      {activeView === 'artifacts' ? <ArtifactsPage /> : null}
-      {activeView === 'tasks' ? <TaskPage /> : null}
-      {activeView === 'automations' ? <AutomationsPage /> : null}
-      {activeView === 'activity' ? <ActivityPrototypePage /> : null}
-      {activeView === 'space' ? <WorkspaceSpacePage /> : null}
-      {activeView === 'mobile' ? <MobilePage /> : null}
-      {activeView === 'terminal' && creationLayoutActive && activePendingCreationId ? (
+      {displayedView === 'settings' ? <Settings /> : null}
+      {displayedView === 'skills' ? <SkillsPage /> : null}
+      {displayedView === 'artifacts' ? <ArtifactsPage /> : null}
+      {displayedView === 'tasks' ? <TaskPage /> : null}
+      {displayedView === 'automations' ? <AutomationsPage /> : null}
+      {displayedView === 'activity' ? <ActivityPrototypePage /> : null}
+      {displayedView === 'space' ? <WorkspaceSpacePage /> : null}
+      {displayedView === 'mobile' ? <MobilePage /> : null}
+      {displayedView === 'terminal' && creationLayoutActive && activePendingCreationId ? (
         <WorktreeCreationPanel
           creationId={activePendingCreationId}
           reserveCollapsedSidebarHeaderSpace={layout.leftTitlebarChromeLayout.isFloating}
         />
       ) : null}
-      {activeView === 'terminal' && !activeWorktreeId && !creationLayoutActive ? <Landing /> : null}
+      {displayedView === 'terminal' && !activeWorktreeId && !creationLayoutActive ? (
+        <Landing />
+      ) : null}
     </>
   )
 }
@@ -94,6 +104,8 @@ export function AppWorkspaceShell(props: {
   floatingWorkspace: FloatingWorkspacePanelState
 }): React.JSX.Element {
   const { layout, floatingWorkspace } = props
+  // Why: cold lazy chunks must not blank the center surface; the prior page stays mounted until the next view's import commits.
+  const { displayedView } = useStableActiveView(layout.activeView)
   const titlebarLeftControls = <TitlebarLeftControls layout={layout} />
   const titlebarMainStrip = <TitlebarMainStrip layout={layout} />
   // Why: keep virtualized scroll memory above the sidebar's workspace/landing remount so the left list doesn't restart at scrollTop 0.
@@ -123,7 +135,7 @@ export function AppWorkspaceShell(props: {
       <RecoverableRenderErrorBoundary
         boundaryId="app.workspace-shell"
         surface="workspace-shell"
-        resetKey={layout.activeView}
+        resetKey={displayedView}
         title={translate('auto.App.df1d56bf87', 'The workspace shell hit an error.')}
         description={translate(
           'auto.App.8504ddf267',
@@ -188,7 +200,7 @@ export function AppWorkspaceShell(props: {
                   <div className="flex flex-1 min-w-0 min-h-0 flex-col">
                     {layout.shouldMountTerminalWorkbench ? (
                       <TerminalWorkbenchContainer isVisible={layout.terminalWorkbenchVisible}>
-                        <Suspense fallback={null}>
+                        <Suspense fallback={<PageLoadingSurface />}>
                           <RecoverableRenderErrorBoundary
                             boundaryId="terminal.workbench"
                             surface="terminal-workbench"
@@ -207,18 +219,18 @@ export function AppWorkspaceShell(props: {
                         </Suspense>
                       </TerminalWorkbenchContainer>
                     ) : null}
-                    <Suspense fallback={null}>
+                    <Suspense fallback={<PageLoadingSurface />}>
                       <RecoverableRenderErrorBoundary
-                        boundaryId={`page.${layout.activeView}`}
+                        boundaryId={`page.${displayedView}`}
                         surface="page"
-                        resetKey={layout.activeView}
+                        resetKey={displayedView}
                         title={translate('auto.App.b7a714db1e', 'This page hit an error.')}
                         description={translate(
                           'auto.App.03a14f6b5b',
                           'Retry the page or navigate to another MCode surface.'
                         )}
                       >
-                        <ActivePage layout={layout} />
+                        <ActivePage layout={layout} displayedView={displayedView} />
                       </RecoverableRenderErrorBoundary>
                     </Suspense>
                   </div>

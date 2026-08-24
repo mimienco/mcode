@@ -169,7 +169,8 @@ describe('filesystem rg search timeout', () => {
         expect(() => child.emit('error', error)).not.toThrow()
       }
 
-      await expect(promise).resolves.toBe(fallback)
+      await expect(promise).resolves.toEqual({ ...fallback, rgUnavailable: true })
+
       expect(searchWithGitGrepMock).toHaveBeenCalledTimes(1)
       expect(checkRgAvailableMock).not.toHaveBeenCalled()
       expect(child.listenerCount('error')).toBe(0)
@@ -190,7 +191,44 @@ describe('filesystem rg search timeout', () => {
     await flushMicrotasks()
     child.emit('error', new Error('post-spawn failure'))
 
-    await expect(promise).resolves.toMatchObject({ files: [] })
+    await expect(promise).resolves.toMatchObject({ files: [], rgUnavailable: true })
+    expect(searchWithGitGrepMock).not.toHaveBeenCalled()
+  })
+
+  it('flags rgUnavailable when the rg binary cannot spawn at all', async () => {
+    const child = createMockProcess()
+    Object.defineProperty(child, 'pid', { value: undefined })
+    wslAwareSpawnMock.mockReturnValue(child)
+    registerFilesystemHandlers({} as never)
+
+    const promise = handlers.get('fs:search')!(
+      { sender: { id: 9 } },
+      { rootPath: '/repo', query: 'ok' }
+    ) as Promise<{ rgUnavailable?: boolean; totalMatches: number }>
+    await flushMicrotasks()
+    child.emit('error', new Error('spawn rg ENOENT'))
+
+    const result = await promise
+    expect(result.rgUnavailable).toBe(true)
+    expect(result.totalMatches).toBe(0)
+    expect(searchWithGitGrepMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits rgUnavailable on healthy rg runs', async () => {
+    const child = createMockProcess()
+    Object.defineProperty(child, 'pid', { value: 1 })
+    wslAwareSpawnMock.mockReturnValue(child)
+    registerFilesystemHandlers({} as never)
+
+    const promise = handlers.get('fs:search')!(
+      { sender: { id: 10 } },
+      { rootPath: '/repo', query: 'ok' }
+    ) as Promise<{ rgUnavailable?: boolean }>
+    await flushMicrotasks()
+    child.emit('close', 0)
+
+    const result = await promise
+    expect(result.rgUnavailable).toBeUndefined()
     expect(searchWithGitGrepMock).not.toHaveBeenCalled()
   })
 
@@ -209,8 +247,7 @@ describe('filesystem rg search timeout', () => {
     await flushMicrotasks()
     child.emit('close', 127, null)
 
-    await expect(promise).resolves.toBe(fallback)
-    expect(searchWithGitGrepMock).toHaveBeenCalledTimes(1)
+    await expect(promise).resolves.toEqual({ ...fallback, rgUnavailable: true })
   })
 
   it('routes rg through the registered WSL project runtime for Windows-path worktrees', async () => {

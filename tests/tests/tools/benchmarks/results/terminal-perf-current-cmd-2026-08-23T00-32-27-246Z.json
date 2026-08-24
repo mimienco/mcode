@@ -1,0 +1,814 @@
+{
+  "label": "current-cmd",
+  "startedAt": "2026-08-23T00:32:27.246Z",
+  "platform": "win32 10.0.19045",
+  "shell": "C:\\Windows\\System32\\cmd.exe",
+  "args": {
+    "iterations": 5,
+    "switches": 24,
+    "cycles": 12
+  },
+  "scenarios": {
+    "tab-create": {
+      "samples": [
+        {
+          "index": 0,
+          "storeCreateMs": 2.800000011920929,
+          "ptyBindMs": 4384.300000011921,
+          "firstOutputMs": 4524.800000011921,
+          "paintSettleMs": 4543.800000011921,
+          "timedOut": false
+        },
+        {
+          "index": 1,
+          "storeCreateMs": 4.100000023841858,
+          "ptyBindMs": 612.5,
+          "firstOutputMs": 666.3000000119209,
+          "paintSettleMs": 670.6999999880791,
+          "timedOut": false
+        },
+        {
+          "index": 2,
+          "storeCreateMs": 2.900000035762787,
+          "ptyBindMs": 467.4000000357628,
+          "firstOutputMs": 587.6999999880791,
+          "paintSettleMs": 804.6000000238419,
+          "timedOut": false
+        },
+        {
+          "index": 3,
+          "storeCreateMs": 2.199999988079071,
+          "ptyBindMs": 615,
+          "firstOutputMs": 694.6999999880791,
+          "paintSettleMs": 809.7999999523163,
+          "timedOut": false
+        },
+        {
+          "index": 4,
+          "storeCreateMs": 2.5,
+          "ptyBindMs": 630.6000000238419,
+          "firstOutputMs": 647.6999999880791,
+          "paintSettleMs": 689.1000000238419,
+          "timedOut": false
+        }
+      ],
+      "longtasks": [
+        68,
+        50,
+        685,
+        108,
+        213,
+        109,
+        265,
+        57,
+        309,
+        169,
+        172,
+        248,
+        62,
+        106,
+        108,
+        104,
+        78,
+        315,
+        53,
+        184,
+        53,
+        80,
+        307,
+        58,
+        170,
+        73
+      ]
+    }
+  },
+  "summaries": [
+    {
+      "name": "tab-create",
+      "samples": 5,
+      "timedOut": 0,
+      "fields": {
+        "storeCreateMs": {
+          "count": 5,
+          "median": 3,
+          "p95": 4,
+          "max": 4
+        },
+        "ptyBindMs": {
+          "count": 5,
+          "median": 615,
+          "p95": 4384,
+          "max": 4384
+        },
+        "firstOutputMs": {
+          "count": 5,
+          "median": 666,
+          "p95": 4525,
+          "max": 4525
+        },
+        "paintSettleMs": {
+          "count": 5,
+          "median": 805,
+          "p95": 4544,
+          "max": 4544
+        }
+      },
+      "longtaskCount": 26,
+      "longtaskMaxMs": 685
+    }
+  ],
+  "finalDiagnostics": {
+    "hasStore": true,
+    "workspaceSessionReady": true,
+    "hydrationSucceeded": true,
+    "activeView": "terminal",
+    "activeRepoId": "a28105b8-368f-4f1a-bc9f-a1971e976899",
+    "activeWorktreeId": "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo",
+    "activeTabType": "terminal",
+    "activeTabId": "db428028-d8bb-4f2f-87f5-7a7e61fe0b57",
+    "terminalGpuAcceleration": "auto",
+    "repoCount": 1,
+    "worktreeCountsByRepo": {
+      "a28105b8-368f-4f1a-bc9f-a1971e976899": 3
+    },
+    "ptyIdsByTabId": [
+      "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo@@ebfd62bc"
+    ],
+    "paneManagerCount": 1,
+    "activePane": {
+      "id": 1,
+      "leafId": "7daa6067-ff76-4fb4-9a85-f1e75e18277e",
+      "ptyId": "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo@@ebfd62bc",
+      "cols": 159,
+      "rows": 58,
+      "buffer": {
+        "baseY": 0,
+        "viewportY": 0,
+        "cursorY": 0,
+        "length": 58
+      }
+    },
+    "renderingDiagnostics": [
+      {
+        "paneId": 1,
+        "terminalGpuAcceleration": "auto",
+        "gpuRenderingEnabled": true,
+        "webglAttachmentDeferred": false,
+        "webglDisabledAfterContextLoss": false,
+        "webglAttachFailedSinceRecovery": false,
+        "hasComplexScriptOutput": false,
+        "terminalWebglAutoDecision": {
+          "allowWebgl": true,
+          "reason": "non-linux",
+          "renderer": null,
+          "vendor": null
+        },
+        "hasWebgl": true
+      }
+    ],
+    "allPaneManagersDiagnostics": [
+      {
+        "tabId": "db428028-d8bb-4f2f-87f5-7a7e61fe0b57",
+        "diagnostics": [
+          {
+            "paneId": 1,
+            "terminalGpuAcceleration": "auto",
+            "gpuRenderingEnabled": true,
+            "webglAttachmentDeferred": false,
+            "webglDisabledAfterContextLoss": false,
+            "webglAttachFailedSinceRecovery": false,
+            "hasComplexScriptOutput": false,
+            "terminalWebglAutoDecision": {
+              "allowWebgl": true,
+              "reason": "non-linux",
+              "renderer": null,
+              "vendor": null
+            },
+            "hasWebgl": true
+          }
+        ]
+      }
+    ],
+    "webglContextCounts": {
+      "attachedWebglCount": 1,
+      "deferredWebglCount": 0,
+      "managerCount": 1,
+      "paneCount": 1
+    },
+    "webglIdentity": {
+      "available": true,
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2070 SUPER (0x00001E84) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    "rendererProbe": {
+      "intervalMs": 50,
+      "last": 33329.40000003576,
+      "maxDriftMs": 715.3999999761581,
+      "samples": 146,
+      "startedAt": 20472.400000035763,
+      "lastTickAt": 33329.40000003576
+    },
+    "ptySessions": {
+      "value": [
+        {
+          "id": "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo@@ebfd62bc",
+          "cwd": "C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo",
+          "title": "shell",
+          "agentOwnership": "absent"
+        },
+        {
+          "id": "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo@@0cb9161f",
+          "cwd": "C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo",
+          "title": "shell",
+          "agentOwnership": "absent"
+        },
+        {
+          "id": "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo@@f49b8184",
+          "cwd": "C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo",
+          "title": "shell",
+          "agentOwnership": "absent"
+        },
+        {
+          "id": "a28105b8-368f-4f1a-bc9f-a1971e976899::C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo@@5874d3b4",
+          "cwd": "C:/Users/Milan M/AppData/Local/Temp/mcode-termperf-KQkl5x/repo",
+          "title": "shell",
+          "agentOwnership": "absent"
+        }
+      ]
+    },
+    "rendererDeliveryDebug": {
+      "value": {
+        "pendingPtyCount": 0,
+        "pendingChars": 0,
+        "maxPendingCharsByPty": 0,
+        "rendererInFlightPtyCount": 0,
+        "rendererInFlightChars": 0,
+        "maxRendererInFlightCharsByPty": 0,
+        "activeRendererPtyCount": 1,
+        "flushScheduled": false,
+        "peakPendingChars": 146,
+        "peakMaxPendingCharsByPty": 146,
+        "peakRendererInFlightChars": 392,
+        "peakMaxRendererInFlightCharsByPty": 256,
+        "ackGatedFlushSkipCount": 0,
+        "hiddenDeliveryGatedPtyCount": 0,
+        "deliveryInterestPtyCount": 0,
+        "hiddenDeliveryDroppedChars": 82,
+        "hiddenDeliveryDroppedChunks": 2,
+        "hiddenDeliveryGatedVisiblePtyCount": 0,
+        "hiddenDeliveryGatedActivePtyCount": 0,
+        "pendingDroppedChars": 0,
+        "diagnostics": {
+          "appVersion": "1.4.178-rc.2",
+          "mainUptimeMs": 36432,
+          "windowFocused": true,
+          "windowVisible": true,
+          "windowMinimized": false,
+          "msSinceLastPowerSuspend": null,
+          "msSinceLastPowerResume": null,
+          "perPty": [
+            {
+              "id": "…@@ebfd62bc",
+              "sentChars": 83,
+              "ackedChars": 83,
+              "inFlightChars": 0,
+              "pendingChars": 0,
+              "hidden": false,
+              "visible": true,
+              "active": true,
+              "msSinceLastSend": 4679,
+              "msSinceLastAck": 4677
+            },
+            {
+              "id": "…@@0cb9161f",
+              "sentChars": 425,
+              "ackedChars": 425,
+              "inFlightChars": 0,
+              "pendingChars": 0,
+              "hidden": false,
+              "visible": false,
+              "active": false,
+              "msSinceLastSend": 2663,
+              "msSinceLastAck": 2602
+            },
+            {
+              "id": "…@@f49b8184",
+              "sentChars": 425,
+              "ackedChars": 425,
+              "inFlightChars": 0,
+              "pendingChars": 0,
+              "hidden": false,
+              "visible": false,
+              "active": false,
+              "msSinceLastSend": 1156,
+              "msSinceLastAck": 1155
+            },
+            {
+              "id": "…@@5874d3b4",
+              "sentChars": 425,
+              "ackedChars": 425,
+              "inFlightChars": 0,
+              "pendingChars": 0,
+              "hidden": false,
+              "visible": false,
+              "active": false,
+              "msSinceLastSend": 15,
+              "msSinceLastAck": 14
+            }
+          ],
+          "breadcrumbs": [
+            {
+              "atMs": 1787445154909,
+              "kind": "renderer-lifecycle-reset",
+              "repeats": 2
+            },
+            {
+              "atMs": 1787445182714,
+              "kind": "gate-mark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              }
+            },
+            {
+              "atMs": 1787445183367,
+              "kind": "gate-unmark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              },
+              "repeats": 2
+            },
+            {
+              "atMs": 1787445183700,
+              "kind": "gate-mark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              }
+            },
+            {
+              "atMs": 1787445184428,
+              "kind": "gate-unmark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              },
+              "repeats": 2
+            },
+            {
+              "atMs": 1787445184758,
+              "kind": "gate-mark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              }
+            },
+            {
+              "atMs": 1787445185571,
+              "kind": "gate-unmark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              },
+              "repeats": 2
+            },
+            {
+              "atMs": 1787445185979,
+              "kind": "gate-mark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              }
+            },
+            {
+              "atMs": 1787445186799,
+              "kind": "gate-unmark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              },
+              "repeats": 2
+            },
+            {
+              "atMs": 1787445187191,
+              "kind": "gate-mark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              }
+            },
+            {
+              "atMs": 1787445187889,
+              "kind": "gate-unmark",
+              "detail": {
+                "id": "…@@ebfd62bc"
+              },
+              "repeats": 2
+            }
+          ]
+        },
+        "rendererLifecycleResetCount": 2,
+        "lastLifecycleResetClearedChars": 0,
+        "rendererPtyDispatcherReady": true,
+        "rendererDispatcherReadyForcedCount": 1
+      }
+    }
+  },
+  "cleanupErrors": [],
+  "elapsedMs": 41021,
+  "appLogsTail": [
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=19376 maxGapMs=7",
+      "at": 1787445171189
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023251.889:INFO:CONSOLE:14341] \"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold\", source: http://localhost:5174/@fs/D:/ADE/orca/node_modules/.vite/deps/react-dom_client.js?v=92d41f57 (14341)",
+      "at": 1787445171889
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] ready-to-show t=20096",
+      "at": 1787445171909
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] did-finish-load t=20097",
+      "at": 1787445171910
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-startup-chain-start t=20989 rendererT=17870",
+      "at": 1787445172807
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-startup-chain-start t=21012 rendererT=17922",
+      "at": 1787445172826
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023252.967:INFO:CONSOLE:2] \"%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security",
+      "at": 1787445172969
+    },
+    {
+      "source": "stderr",
+      "line": "  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of",
+      "at": 1787445172970
+    },
+    {
+      "source": "stderr",
+      "line": "  this app to unnecessary security risks.",
+      "at": 1787445172970
+    },
+    {
+      "source": "stderr",
+      "line": "For more information and help, consult",
+      "at": 1787445172970
+    },
+    {
+      "source": "stderr",
+      "line": "https://electronjs.org/docs/tutorial/security.",
+      "at": 1787445172970
+    },
+    {
+      "source": "stderr",
+      "line": "This warning will not show up",
+      "at": 1787445172970
+    },
+    {
+      "source": "stderr",
+      "line": "once the app is packaged.\", source: node:electron/js2c/sandbox_bundle (2)",
+      "at": 1787445172970
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-settings-done t=21242 rendererT=18151 durationMs=279",
+      "at": 1787445173058
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=21392 maxGapMs=38",
+      "at": 1787445173205
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-settings-done t=21514 rendererT=18424 durationMs=501",
+      "at": 1787445173328
+    },
+    {
+      "source": "stdout",
+      "line": "[skills] scan roots=23 present=0 walked=23 skills=0 ms=2 ids=home-codex,home-agents,home-claude,codex-plugin-cache,home-grok,home-opencode,home-pi,home-omp,home-prime-agent,home-gemini,home-antigravity,home-cursor",
+      "at": 1787445173477
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-keybindings-done t=21723 rendererT=18623 durationMs=471",
+      "at": 1787445173537
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-onboarding-get-done t=21723 rendererT=18623 durationMs=472",
+      "at": 1787445173537
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-ui-get-done t=21723 rendererT=18623 durationMs=472",
+      "at": 1787445173537
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-hydrate-persisted-ui-done t=21723 rendererT=18624 durationMs=0",
+      "at": 1787445173537
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-keybindings-done t=21744 rendererT=18653 durationMs=228",
+      "at": 1787445173559
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-onboarding-get-done t=21744 rendererT=18654 durationMs=229",
+      "at": 1787445173559
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-ui-get-done t=21744 rendererT=18654 durationMs=229",
+      "at": 1787445173559
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-hydrate-persisted-ui-done t=21748 rendererT=18657 durationMs=3",
+      "at": 1787445173561
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023253.602:INFO:CONSOLE:163] \"Tooltip is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.\", source: http://localhost:5174/@fs/D:/ADE/orca/node_modules/.vite/deps/dist-DulX20tI.js?v=92d41f57 (163)",
+      "at": 1787445173603
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-list-runtime-session-hosts-done t=21845 rendererT=18753 durationMs=129",
+      "at": 1787445173659
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-list-runtime-session-hosts-done t=21845 rendererT=18754 durationMs=97",
+      "at": 1787445173659
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023253.698:INFO:CONSOLE:1422] \"%cReact Grab v0.1.34%c",
+      "at": 1787445173699
+    },
+    {
+      "source": "stderr",
+      "line": "https://react-grab.com background: #330039; color: #ffffff; border: 1px solid #d75fcb; padding: 4px 4px 4px 24px; border-radius: 4px; background-image: url(\"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyOTQgMjk0Ij48cGF0aCBmaWxsPSIjZmY0MGUwIiBkPSJNMTQ1IDQ3YzI1LTIwIDUwLTI3IDY3LTE3IDE2IDkgMjMgMzAgMjAgNjAgMCAyLTEgNS0xIDdsLTIgMTNoLTFsLTEyLTRjLTgtMy0xNy01LTI1LTZsLTE3LTNjLTEwLTEtMjAtMS0yOS0xLTEwIDAtMjAgMC0yOSAxLTYgOC0xMSAxNi0xNiAyNC01IDktOSAxNy0xMyAyNiA0IDkgOCAxOCAxMyAyNnMxMCAxNiAxNiAyNGwxMSAxNGM1IDcgMTEgMTMgMTggMTlsMTAgOHMtMSAwIDAgMGwtMTEgOWMtMTcgMTQtMzUgMjItNDkgMjItNiAwLTEzLTItMTgtNS0xNi05LTIzLTMwLTIwLTU5IDEtMyAxLTUgMS04LTMwLTEyLTQ4LTI5LTQ4LTUwIDAtMTggMTQtMzUgNDEtNDcgMi0xIDUtMiA3LTMgMC0yIDAtNS0xLTctMy0zMCA0LTUxIDIwLTYwIDE4LTEwIDQyLTMgNjggMTdNNzEgMjAxYy0xIDItMSA0LTEgNS0yIDI0IDMgNDEgMTMgNDdoMWMxMSA3IDMwIDEgNTEtMTUtMTAtOS0xOC0xOC0yNi0yOS0xMy0xLTI2LTQtMzgtOG05LTM4Yy0zIDktNSAxNy03IDI2IDggMiAxNyA0IDI1IDYtMy01LTYtMTAtOS0xNi0zLTUtNi0xMC05LTE2bS0xOS01M2MtMiAxLTMgMS01IDItMjEgMTAtMzQgMjMtMzQgMzUgMCAxMyAxNCAyNyAzOSAzNyAzLTEyIDctMjUgMTItMzctNS0xMi05LTI0LTEyLTM3bTM3LTEwYy04IDEtMTcgMy0yNSA2IDIgOCA0IDE2IDcgMjUgMy01IDYtMTEgOS0xNnptLTMtNjFjLTQtMS04IDAtMTIgMi0xMCA3LTE1IDI0LTEzIDQ3IDAgMiAwIDMgMSA1IDEyLTQgMjUtNiAzOC04IDgtMTAgMTYtMjAgMjYtMjktMTUtMTEtMjktMTctNDAtMTdtMTExIDJjLTQtMi04LTMtMTItMi0xMSAwLTI1IDUtNDAgMTcgMTAgOSAxOSAxOSAyNiAyOSAxMyAyIDI2IDQgMzkgOHYtNWMzLTIzLTItNDAtMTMtNDdtLTYxIDIzYy03IDYtMTMgMTMtMTkgMTloMzdjLTYtNi0xMi0xMy0xOC0xOSIvPjxtYXNrIGlkPSJhIj48cGF0aCBmaWxsPSIjZmZmIiBkPSJtMjM1IDg1LTEzMyAyNyAyOCAxMzMgMTMzLTI3WiIvPjwvbWFzaz48cGF0aCBmaWxsPSIjZmY0MGUwIiBkPSJtMTM3IDEzMCA3NiAxMWM4IDEgOSAxMSAzIDE1bC0yOCAxNi00IDMyYy0xIDgtMTAgMTAtMTQgNGwtNDEtNjZjLTMtNiAxLTEzIDgtMTIiIG1hc2s9InVybCgjYSkiLz48L3N2Zz4=\"); background-size: 16px 16px; background-repeat: no-repeat; background-position: 4px center; display: inline-block; margin-bottom: 4px; \", source: http://localhost:5174/@fs/D:/ADE/orca/node_modules/.vite/deps/react-grab.js?v=92d41f57 (1422)",
+      "at": 1787445173699
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-repos-local-done t=21931 rendererT=18838 durationMs=214",
+      "at": 1787445173744
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-repos-local-done t=21931 rendererT=18839 durationMs=182",
+      "at": 1787445173744
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-repo-catalog-settlement-done t=21931 rendererT=18839 durationMs=2",
+      "at": 1787445173744
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-repo-catalog-settlement-done t=21932 rendererT=18840 durationMs=0",
+      "at": 1787445173745
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-project-groups-local-done t=21953 rendererT=18862 durationMs=23",
+      "at": 1787445173766
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-session-get-done t=21954 rendererT=18864 durationMs=24",
+      "at": 1787445173767
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-project-groups-local-done t=21955 rendererT=18865 durationMs=25",
+      "at": 1787445173768
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-session-get-done t=21955 rendererT=18865 durationMs=25",
+      "at": 1787445173768
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-folder-workspaces-local-done t=21968 rendererT=18877 durationMs=15",
+      "at": 1787445173781
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-first-window-services-await-done t=21968 rendererT=18877 durationMs=14",
+      "at": 1787445173781
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-hydration-worktrees-done t=21968 rendererT=18878 durationMs=0",
+      "at": 1787445173781
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-repo-catalog-final-settlement-done t=21968 rendererT=18878 durationMs=0",
+      "at": 1787445173781
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-folder-workspaces-local-done t=21971 rendererT=18879 durationMs=14",
+      "at": 1787445173784
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-first-window-services-await-done t=21972 rendererT=18879 durationMs=14",
+      "at": 1787445173785
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-hydration-worktrees-done t=21972 rendererT=18879 durationMs=0",
+      "at": 1787445173785
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-repo-catalog-final-settlement-done t=21972 rendererT=18879 durationMs=0",
+      "at": 1787445173785
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-hydrate-session-stores-done t=21980 rendererT=18885 durationMs=6",
+      "at": 1787445173793
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-visit-timestamp-prune-done t=21980 rendererT=18886 durationMs=1",
+      "at": 1787445173793
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-fetch-browser-session-profiles-done t=22024 rendererT=18931 durationMs=44",
+      "at": 1787445173837
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-ssh-reconnect-skipped t=22024 rendererT=18931 connectionIds=0",
+      "at": 1787445173837
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023253.924:INFO:CONSOLE:1428] \"[React Grab] v0.1.34 is outdated (latest: v0.2.0). Run `npx grab@latest upgrade` to upgrade.\", source: http://localhost:5174/@fs/D:/ADE/orca/node_modules/.vite/deps/react-grab.js?v=92d41f57 (1428)",
+      "at": 1787445173924
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-recover-legacy-worker-terminals-pre-reconnect-done t=22973 rendererT=19883 durationMs=952",
+      "at": 1787445174786
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-terminal-provider-snapshot-capabilities-done t=22974 rendererT=19883 durationMs=1",
+      "at": 1787445174787
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-reconnect-terminals-done t=23022 rendererT=19931 durationMs=48",
+      "at": 1787445174835
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=23399 maxGapMs=823",
+      "at": 1787445175212
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-recover-legacy-worker-terminals-post-reconnect-done t=23534 rendererT=20443 durationMs=512",
+      "at": 1787445175348
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-startup-hydration-done t=23536 rendererT=20445 durationMs=2523",
+      "at": 1787445175349
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-owner-visibility-defaults-done t=23536 rendererT=20445 durationMs=0",
+      "at": 1787445175349
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-remote-catalog-refresh-done t=23608 rendererT=20518 durationMs=73",
+      "at": 1787445175422
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] renderer-remote-worktree-refresh-done t=23613 rendererT=20522 durationMs=4",
+      "at": 1787445175426
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=25429 maxGapMs=372",
+      "at": 1787445177244
+    },
+    {
+      "source": "stdout",
+      "line": "[skills] scan roots=30 present=0 walked=7 skills=0 ms=1 ids=repo-agents-ef0dfdf48395d19e,repo-claude-ef0dfdf48395d19e,repo-droid-ef0dfdf48395d19e,repo-continue-ef0dfdf48395d19e,repo-trae-ef0dfdf48395d19e,repo-grok-ef0dfdf48395d19e,repo-aug-ef0dfdf48395d19e",
+      "at": 1787445177772
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=27458 maxGapMs=841",
+      "at": 1787445179271
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023301.007:INFO:CONSOLE:409] \"[pty-connect] pane=1 tab=db428028-d8bb-4f2f-87f5-7a7e61fe0b57 restored=null existing=null detached=null reattach=null hasTransport=false pendingKey=db428028-d8bb-4f2f-87f5-7a7e61fe0b57:7daa6067-ff76-4fb4-9a85-f1e75e18277e\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445181007
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023301.008:INFO:CONSOLE:409] \"[pty-connect] pane=1 -> FRESH SPAWN\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445181011
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023301.048:INFO:CONSOLE:409] \"[pty-connect] pane=1 tab=8d667f95-92d6-4ae9-9b20-7e51ec744017 restored=null existing=null detached=null reattach=null hasTransport=false pendingKey=8d667f95-92d6-4ae9-9b20-7e51ec744017:1dbe007e-d1b3-4344-a2c0-eaf5b892f8a5\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445181052
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023301.049:INFO:CONSOLE:409] \"[pty-connect] pane=1 -> FRESH SPAWN\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445181053
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=29461 maxGapMs=75",
+      "at": 1787445181274
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=31483 maxGapMs=15",
+      "at": 1787445183296
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023303.955:INFO:CONSOLE:409] \"[pty-connect] pane=1 tab=2ff5956f-8bd3-4c79-9b80-f3d1d8fcb3a1 restored=null existing=null detached=null reattach=null hasTransport=false pendingKey=2ff5956f-8bd3-4c79-9b80-f3d1d8fcb3a1:404f4d7a-1c0b-4a7f-9fa1-c5e5851001cb\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445183955
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023303.955:INFO:CONSOLE:409] \"[pty-connect] pane=1 -> FRESH SPAWN\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445183956
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023304.971:INFO:CONSOLE:409] \"[pty-connect] pane=1 tab=56625442-ce0d-4169-af20-899ee49893d6 restored=null existing=null detached=null reattach=null hasTransport=false pendingKey=56625442-ce0d-4169-af20-899ee49893d6:d0e16106-551a-4ebf-a2b0-345143033fd2\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445184972
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023304.971:INFO:CONSOLE:409] \"[pty-connect] pane=1 -> FRESH SPAWN\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445184972
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=33507 maxGapMs=26",
+      "at": 1787445185320
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023305.649:INFO:CONSOLE:163] \"Tooltip is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.\", source: http://localhost:5174/@fs/D:/ADE/orca/node_modules/.vite/deps/dist-DulX20tI.js?v=92d41f57 (163)",
+      "at": 1787445185650
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023306.261:INFO:CONSOLE:409] \"[pty-connect] pane=1 tab=c11d435a-51cb-4552-b6b8-b8e2399ec6fb restored=null existing=null detached=null reattach=null hasTransport=false pendingKey=c11d435a-51cb-4552-b6b8-b8e2399ec6fb:9850c7c1-c69f-42c6-8046-0075417ec7e0\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445186262
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023306.261:INFO:CONSOLE:409] \"[pty-connect] pane=1 -> FRESH SPAWN\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445186262
+    },
+    {
+      "source": "stderr",
+      "line": "[startup] event-loop-stall t=35510 maxGapMs=15",
+      "at": 1787445187323
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023307.469:INFO:CONSOLE:409] \"[pty-connect] pane=1 tab=cf59f25a-4780-41cc-a3ba-12d80a2a79a5 restored=null existing=null detached=null reattach=null hasTransport=false pendingKey=cf59f25a-4780-41cc-a3ba-12d80a2a79a5:9f4ac5c6-d850-4daf-a45a-8064ed2d6d75\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445187470
+    },
+    {
+      "source": "stderr",
+      "line": "[19336:0823/023307.469:INFO:CONSOLE:409] \"[pty-connect] pane=1 -> FRESH SPAWN\", source: http://localhost:5174/src/components/terminal-pane/pty-connection.ts (409)",
+      "at": 1787445187470
+    }
+  ],
+  "ptySpawnTimings": []
+}

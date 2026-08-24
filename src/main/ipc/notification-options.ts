@@ -26,6 +26,10 @@ export function buildNotificationOptions(args: NotificationDispatchRequest): {
   silent?: boolean
   sound?: string
 } {
+  if (args.source === 'automation-run-complete') {
+    return buildAutomationRunCompleteNotificationOptions(args)
+  }
+
   if (args.source === 'terminal-bell') {
     return {
       title: `Bell in ${args.worktreeLabel ?? 'workspace'}`,
@@ -158,4 +162,32 @@ function normalizeNotificationText(value: string | null | undefined, maxLength: 
   const safeTruncated =
     lastCode >= 0xd800 && lastCode <= 0xdbff ? truncated.slice(0, -1) : truncated
   return `${safeTruncated}…`
+}
+
+const AUTOMATION_OUTCOME_LABELS: Readonly<Record<string, string>> = {
+  completed: 'finished',
+  failed: 'failed',
+  skipped: 'was skipped'
+}
+
+function buildAutomationRunCompleteNotificationOptions(args: NotificationDispatchRequest): {
+  title: string
+  body: string
+} {
+  const name = normalizeNotificationText(args.automationName, NOTIFICATION_TITLE_CONTEXT_MAX_LENGTH) || 'Automation'
+  const outcome = AUTOMATION_OUTCOME_LABELS[args.automationOutcome ?? 'completed'] ?? 'finished'
+  const repoContext = normalizeNotificationText(
+    args.repoLabel,
+    NOTIFICATION_TITLE_CONTEXT_MAX_LENGTH
+  )
+  const errorSnippet = normalizeNotificationText(
+    args.automationError,
+    NOTIFICATION_BODY_PREVIEW_MAX_LENGTH
+  )
+  return {
+    title: `${name} ${outcome}`,
+    body:
+      errorSnippet ||
+      (repoContext && repoContext !== name ? `${name} · ${repoContext}` : 'Scheduled automation run completed.')
+  }
 }

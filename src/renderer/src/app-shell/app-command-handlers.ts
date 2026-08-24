@@ -221,6 +221,13 @@ export function createAppCommandHandlers(
           : false
     ],
     [
+      'mission.topDecision',
+      () => {
+        void window.api.dashboard.openPopout?.('mission')
+        return true
+      }
+    ],
+    [
       'sidebar.explorer.toggle',
       () =>
         canRevealRightSidebar

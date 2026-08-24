@@ -143,6 +143,28 @@ export function updateAutomationRun(
   return updated
 }
 
+export function linkAutomationRunRetry(
+  operations: AutomationRunOperations,
+  input: { failedRunId: string; retryRunId: string; title: string }
+): AutomationRun {
+  const index = (operations.state.automationRuns ?? []).findIndex(
+    (entry) => entry.id === input.retryRunId
+  )
+  if (index === -1) {
+    throw new Error('Automation run not found.')
+  }
+  const current = operations.state.automationRuns[index]
+  // Why: the retry run is a fresh scheduled occurrence; only linkage + title change here.
+  const updated: AutomationRun = {
+    ...current,
+    retryOfRunId: input.failedRunId,
+    title: input.title
+  }
+  operations.state.automationRuns[index] = updated
+  operations.flush()
+  return updated
+}
+
 export function snapshotAutomationRunWorkspaceDisplayName(
   operations: AutomationRunOperations,
   workspaceId: string,

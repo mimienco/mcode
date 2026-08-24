@@ -49,6 +49,8 @@ export type WorktreeMeta = {
   isArchived: boolean
   isUnread: boolean
   isPinned: boolean
+  /** WP4 personas: per-agentType display overrides. See Worktree.personas. */
+  personas?: Record<string, { name?: string; color?: string }>
   sortOrder: number
   /** User-authored sidebar ordering. Higher values render earlier in Manual sort. */
   manualOrder?: number

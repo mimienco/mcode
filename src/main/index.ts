@@ -915,6 +915,8 @@ ipcMain.handle('app:recoverLegacyWorkerTerminalsForRendererStartup', () =>
     firstWindowStartupServicesReady,
     managedWslCliStartupBarrierReady,
     localPtyProviderStartupReady,
+    // Why: PERF-02 — zero legacy candidates skip all recovery work entirely.
+    hasLegacyCandidates: () => runtime?.hasLegacyWorkerTerminalRecoveryCandidates() ?? false,
     reconcile: async () => {
       await runtime?.refreshRestoredOrchestrationAuthority()
       return runtime?.reconcileLegacyWorkerTerminals({ materializeRenderer: true })

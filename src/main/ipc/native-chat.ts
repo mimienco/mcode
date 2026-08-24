@@ -136,8 +136,29 @@ function registerSenderCleanup(sender: WebContents): void {
     return
   }
   senderCleanupRegistered.add(sender.id)
-  // Strict teardown: a closed/reloaded window releases every watcher it owns.
-  sender.once('destroyed', () => teardownAllForSender(sender.id))
+  let cleaned = false
+  const cleanup = (): void => {
+    if (cleaned) {
+      return
+    }
+    cleaned = true
+    sender.off('did-start-navigation', handleMainFrameNavigation)
+    sender.off('destroyed', cleanup)
+    teardownAllForSender(sender.id)
+  }
+  const handleMainFrameNavigation = (
+    _event: unknown,
+    _url: string,
+    isSameDocument: boolean,
+    isMainFrame: boolean
+  ): void => {
+    if (isMainFrame && !isSameDocument) {
+      cleanup()
+    }
+  }
+  // HMR/full reload keeps the WebContents alive, so `destroyed` alone leaks every transcript watcher from the old document.
+  sender.on('did-start-navigation', handleMainFrameNavigation)
+  sender.once('destroyed', cleanup)
 }
 
 function beginPendingSubscription(senderId: number, subscriptionId: string): PendingSubscription {

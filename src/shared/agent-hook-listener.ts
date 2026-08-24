@@ -2132,7 +2132,10 @@ function extractPiToolFields(
       { hasToolInputField: hasOwnField(hookPayload, 'tool_input') }
     )
   }
-  if (eventName === 'message_end' && hookPayload.role === 'assistant') {
+  if (
+    (eventName === 'message_update' || eventName === 'message_end') &&
+    hookPayload.role === 'assistant'
+  ) {
     const text = readString(hookPayload, 'text')
     if (text) {
       return { lastAssistantMessage: text }
@@ -4079,6 +4082,7 @@ function normalizePiCompatibleEvent(
         eventName === 'tool_call' ||
         eventName === 'tool_execution_start' ||
         eventName === 'tool_execution_end' ||
+        eventName === 'message_update' ||
         eventName === 'message_end'
       ? 'working'
       : eventName === 'agent_end'

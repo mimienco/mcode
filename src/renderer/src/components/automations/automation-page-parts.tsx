@@ -88,6 +88,8 @@ export function getAutomationRunStatusLabel(status: AutomationRun['status']): st
       return 'Needs credentials'
     case 'dispatch_failed':
       return 'Failed'
+    case 'stopped_cost_cap':
+      return 'Cost cap'
   }
 }
 

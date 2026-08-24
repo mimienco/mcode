@@ -43,6 +43,7 @@ export type KeybindingActionId =
   | 'sidebar.left.toggle'
   | 'sidebar.right.toggle'
   | 'sidebar.explorer.toggle'
+  | 'mission.topDecision'
   | 'sidebar.search.toggle'
   | 'sidebar.sourceControl.toggle'
   | 'sidebar.checks.toggle'
@@ -376,6 +377,14 @@ export const KEYBINDING_DEFINITIONS: readonly KeybindingDefinition[] = [
     scope: 'global',
     searchKeywords: ['shortcut', 'sidebar', 'explorer', 'files'],
     defaultBindings: platformBindings(['Mod+Shift+E'])
+  },
+  {
+    id: 'mission.topDecision',
+    title: 'Open Mission Control decision inbox',
+    group: 'Global',
+    scope: 'global',
+    searchKeywords: ['shortcut', 'mission', 'decision', 'inbox', 'agents', 'needs you'],
+    defaultBindings: platformBindings(['Mod+Shift+J'])
   },
   {
     id: 'sidebar.search.toggle',

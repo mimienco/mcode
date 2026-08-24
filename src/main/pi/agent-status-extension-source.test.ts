@@ -366,7 +366,8 @@ describe('getPiAgentStatusExtensionSource', () => {
       expect(harness.fetchMock).toHaveBeenCalledTimes(1)
       expect(JSON.parse(String(harness.fetchMock.mock.calls[0]?.[1]?.body)).payload).toEqual({
         hook_event_name: 'session_start',
-        session_id: 'omp-session-1'
+        session_id: 'omp-session-1',
+        session_file: '/tmp/omp-session-1.jsonl'
       })
     }
   )
@@ -417,11 +418,16 @@ describe('getPiAgentStatusExtensionSource', () => {
     expect(
       harness.fetchMock.mock.calls.map(([_, init]) => JSON.parse(String(init?.body)).payload)
     ).toEqual([
-      { hook_event_name: 'agent_start', session_id: 'omp-session-8' },
+      {
+        hook_event_name: 'agent_start',
+        session_id: 'omp-session-8',
+        session_file: '/tmp/s'
+      },
       {
         hook_event_name: 'before_agent_start',
         prompt: 'hi',
-        session_id: 'omp-session-9'
+        session_id: 'omp-session-9',
+        session_file: '/tmp/s'
       },
       { hook_event_name: 'agent_end' }
     ])
@@ -451,8 +457,16 @@ describe('getPiAgentStatusExtensionSource', () => {
         }
       })
       await harness.callHook(
-        'message_end',
-        { message: { role: 'assistant', content: 'done' } },
+        'message_update',
+        {
+          message: {
+            role: 'assistant',
+            content: [
+              { type: 'thinking', thinking: 'Inspecting package scripts…' },
+              { type: 'text', text: '\nRunning the build now.' }
+            ]
+          }
+        },
         {
           sessionManager: {
             getSessionId: () => 'omp-session-9',
@@ -460,18 +474,16 @@ describe('getPiAgentStatusExtensionSource', () => {
           }
         }
       )
-      await harness.callHook('message_end', { message: { role: 'user', content: 'next' } }, {})
-
       finishDeliveries[0]?.()
       await vi.waitFor(() => expect(harness.fetchMock).toHaveBeenCalledTimes(2))
       const body = JSON.parse(String(harness.fetchMock.mock.calls[1]?.[1]?.body))
       expect(body.payload).toEqual({
-        hook_event_name: 'message_end',
+        hook_event_name: 'message_update',
         role: 'assistant',
-        text: 'done',
-        session_id: 'omp-session-9'
+        text: 'Inspecting package scripts…\nRunning the build now.',
+        session_id: 'omp-session-9',
+        session_file: '/tmp/omp-session-9.jsonl'
       })
-      expect(body.payload).not.toHaveProperty('session_file')
       expect(harness.fetchMock.mock.calls[1]?.[0]).toBe('http://127.0.0.1:4321/hook/omp')
       expect(harness.spawnMock).not.toHaveBeenCalled()
       finishDeliveries[1]?.()

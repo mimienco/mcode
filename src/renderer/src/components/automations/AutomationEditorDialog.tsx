@@ -47,6 +47,8 @@ export type AutomationDraft = {
   dayOfWeek: string
   customSchedule: string
   missedRunGraceMinutes: string
+  maxCostUsdPerRun: string
+  autoPushEnabled: boolean
   scheduleWarning: string | null
 }
 

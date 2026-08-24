@@ -103,7 +103,8 @@ describe('loadLocalImageSrc', () => {
     const first = loadLocalImageSrc('diagram.png', '/repo/docs/readme.md')
     const second = loadLocalImageSrc('diagram.png', '/repo/docs/readme.md')
 
-    expect(readFile).toHaveBeenCalledTimes(1)
+    // Why: the authorize-then-read chain defers readFile by a microtask.
+    await vi.waitFor(() => expect(readFile).toHaveBeenCalledTimes(1))
     read.resolve(binaryPreview())
 
     await expect(Promise.all([first, second])).resolves.toEqual([

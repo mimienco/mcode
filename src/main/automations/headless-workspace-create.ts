@@ -1,4 +1,5 @@
 import type { Automation, AutomationRun } from '../../shared/automations-types'
+import { buildAutomationRunPrompt } from '../../shared/automation-prompt-guard'
 import { buildAutomationWorkspaceProvenance } from '../../shared/automation-workspace-provenance'
 import type { Repo } from '../../shared/repo-types'
 import type { MCodeRuntimeService } from '../runtime/mcode-runtime'
@@ -40,7 +41,7 @@ export function buildHeadlessAutomationWorktreeCreateArgs({
     activate: false,
     createdWithAgent: automation.agentId,
     startupAgent: automation.agentId,
-    startupPrompt: automation.prompt,
+    startupPrompt: buildAutomationRunPrompt(automation),
     telemetrySource: 'unknown',
     automationProvenance: buildAutomationWorkspaceProvenance(automation, run, repo, createdAt)
   }

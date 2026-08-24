@@ -160,6 +160,9 @@ const PREVIEWABLE_BINARY_MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.jfif': 'image/jpeg',
+  '.jpe': 'image/jpeg',
+  '.avif': 'image/avif',
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
@@ -1029,6 +1032,7 @@ export function registerFilesystemHandlers(
         let resolved = false
         let processErrorObserved = false
         let unavailableExitObserved = false
+        let rgUnavailable = false
         let child: ChildProcess | null = null
         let killTimeout: ReturnType<typeof setTimeout>
 
@@ -1056,7 +1060,9 @@ export function registerFilesystemHandlers(
               unavailableExitObserved
             })
           }
-          resolvePromise(result)
+          resolvePromise(
+            Promise.resolve(result).then((r) => (rgUnavailable ? { ...r, rgUnavailable: true } : r))
+          )
         }
         const resolveOnce = (): void => finish(finalize(acc))
         const resolveWithoutRipgrep = (): void =>
@@ -1090,6 +1096,7 @@ export function registerFilesystemHandlers(
         }
         const handleError = (): void => {
           processErrorObserved = true
+          rgUnavailable = true
           if (child && isRipgrepUnavailableExit(child, null, null)) {
             resolveWithoutRipgrep()
             return
@@ -1104,6 +1111,7 @@ export function registerFilesystemHandlers(
             })
           ) {
             unavailableExitObserved = true
+            rgUnavailable = true
             resolveWithoutRipgrep()
             return
           }

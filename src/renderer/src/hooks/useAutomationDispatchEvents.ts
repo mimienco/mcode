@@ -21,6 +21,7 @@ import {
   createAutomationRunOutputSnapshotBuffer,
   selectAutomationRunOutputSnapshot
 } from '@/components/automations/automation-run-output-snapshot'
+import { buildAutomationRunPrompt } from '../../../shared/automation-prompt-guard'
 import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { AutomationTerminalOwnership } from '@/lib/automation-terminal-ownership'
@@ -513,7 +514,7 @@ export function useAutomationDispatchEvents(): void {
                   const submitted = await submitPromptToAgentPty({
                     tabId: reusableSession.tabId,
                     ptyId: reusableSession.ptyId,
-                    content: automation.prompt
+                    content: buildAutomationRunPrompt(automation)
                   })
                   if (!submitted) {
                     cleanupRunObservers()
@@ -584,7 +585,7 @@ export function useAutomationDispatchEvents(): void {
           const result = await launchAgentBackgroundSession({
             agent: automation.agentId,
             worktreeId: worktree.id,
-            prompt: automation.prompt,
+            prompt: buildAutomationRunPrompt(automation),
             launchSource: 'unknown',
             title: run.title,
             onData: (chunk) => {

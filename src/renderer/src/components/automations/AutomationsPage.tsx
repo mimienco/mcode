@@ -271,6 +271,8 @@ export default function AutomationsPage(): React.JSX.Element {
     dayOfWeek: '1',
     customSchedule: '',
     missedRunGraceMinutes: '720',
+    maxCostUsdPerRun: '',
+    autoPushEnabled: false,
     scheduleWarning: null
   })
 
@@ -1042,6 +1044,8 @@ export default function AutomationsPage(): React.JSX.Element {
       customSchedule: '',
       agentId: template.agentId ?? current.agentId,
       missedRunGraceMinutes: template.missedRunGraceMinutes ?? current.missedRunGraceMinutes,
+      maxCostUsdPerRun: current.maxCostUsdPerRun,
+      autoPushEnabled: current.autoPushEnabled,
       scheduleWarning: null
     }))
   }, [])
@@ -1082,6 +1086,8 @@ export default function AutomationsPage(): React.JSX.Element {
       dayOfWeek: '1',
       customSchedule: '',
       missedRunGraceMinutes: '720',
+      maxCostUsdPerRun: '',
+      autoPushEnabled: false,
       scheduleWarning: null
     }
     const nextDraft = template
@@ -1140,6 +1146,11 @@ export default function AutomationsPage(): React.JSX.Element {
       dayOfWeek: String(schedule?.dayOfWeek ?? 1),
       customSchedule: hasCustomSchedule ? latest.rrule : '',
       missedRunGraceMinutes: String(latest.missedRunGraceMinutes),
+      maxCostUsdPerRun:
+        latest.maxCostUsdPerRun === null || latest.maxCostUsdPerRun === undefined
+          ? ''
+          : String(latest.maxCostUsdPerRun),
+      autoPushEnabled: latest.autoPushEnabled === true,
       scheduleWarning:
         schedule || hasCustomSchedule
           ? null
@@ -1188,6 +1199,8 @@ export default function AutomationsPage(): React.JSX.Element {
       dayOfWeek: '1',
       customSchedule: hasCustomSchedule ? rawSchedule : '',
       missedRunGraceMinutes: '720',
+      maxCostUsdPerRun: '',
+      autoPushEnabled: false,
       scheduleWarning: hasCustomSchedule
         ? null
         : 'This Hermes automation has an unsupported saved schedule. Pick a supported schedule before saving changes.'
@@ -1380,6 +1393,12 @@ export default function AutomationsPage(): React.JSX.Element {
       const missedRunGraceMinutes = Number.isFinite(rawMissedRunGraceMinutes)
         ? Math.max(0, rawMissedRunGraceMinutes)
         : 720
+      const rawMaxCostUsdPerRun = Number(draft.maxCostUsdPerRun)
+      const maxCostUsdPerRun =
+        draft.maxCostUsdPerRun.trim() !== '' && Number.isFinite(rawMaxCostUsdPerRun)
+          ? Math.max(0, rawMaxCostUsdPerRun)
+          : null
+      const autoPushEnabled = draft.autoPushEnabled === true
       const precheck = buildDraftPrecheck(draft)
       const runContext = buildAutomationRunContextForRepo({
         repoId: draft.projectId,
@@ -1443,7 +1462,9 @@ export default function AutomationsPage(): React.JSX.Element {
         setupDecision,
         reuseSession: draft.workspaceMode === 'existing' && draft.reuseSession,
         timezone,
-        missedRunGraceMinutes
+        missedRunGraceMinutes,
+        maxCostUsdPerRun,
+        autoPushEnabled
       }
       if (!currentAutomation || currentAutomation.rrule !== rrule) {
         // Why: non-schedule edits should not reset dtstart or move nextRunAt.
@@ -1472,7 +1493,9 @@ export default function AutomationsPage(): React.JSX.Element {
             timezone,
             rrule,
             dtstart: now,
-            missedRunGraceMinutes
+            missedRunGraceMinutes,
+            maxCostUsdPerRun,
+            autoPushEnabled
           })
       if (!editingAutomationId) {
         await hydratePersistedUIState()
