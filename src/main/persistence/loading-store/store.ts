@@ -183,9 +183,13 @@ import {
   getProfileTerminalScrollbackSnapshotRoot,
   migrateWorkspaceSessionTerminalScrollbackSnapshots,
   readTerminalScrollbackSnapshotSync,
-  warmTerminalScrollbackSnapshotCache,
   type TerminalScrollbackSnapshotStorage
 } from '../../terminal-scrollback-snapshots'
+import {
+  collectActiveTabScrollbackSnapshotRefs,
+  warmTerminalScrollbackSnapshotCache
+} from '../../terminal-scrollback-snapshot-warmup'
+import { appendStallRecord } from '../../window/main-stall-log'
 import {
   deleteRemovedTerminalScrollbackSnapshotsAsync,
   migrateWorkspaceSessionTerminalScrollbackSnapshotsAsync
@@ -335,6 +339,7 @@ import {
 } from '../scheduling-automations/automation-definition-operations'
 import {
   createAutomationRun as createAutomationRunOperation,
+  linkAutomationRunRetry as linkAutomationRunRetryOperation,
   listAutomationRuns as listAutomationRunsOperation,
   snapshotAutomationRunWorkspaceDisplayName as snapshotAutomationRunWorkspaceDisplayNameOperation,
   updateAutomationRun as updateAutomationRunOperation,
@@ -534,6 +539,9 @@ export class Store {
   private quitFlushPromise: Promise<void> | null = null
   // Content hash at last write, to skip no-op writes; derived from the payload with encrypted blobs normalized back to plaintext (see buildStateToSave), since encrypt() uses a random IV per call.
   private lastWrittenStateHash: string | null = null
+  // Why: PERF-08 — counts scheduleSave requests since the last successful
+  // persist; zero means a debounced save has nothing new to serialize.
+  private saveRequestsSinceLastPersist = 0
   private lastDurableWriteGeneration = -1
   private firstPendingSaveAt: number | null = null
   private githubCacheDirty = false
@@ -597,7 +605,12 @@ export class Store {
     // Why: fire-and-forget — async fs keeps the event loop free; a failure must not block boot.
     void warmTerminalScrollbackSnapshotCache(
       this.state.workspaceSession,
-      this.terminalScrollbackSnapshotStorage
+      this.terminalScrollbackSnapshotStorage,
+      // Why: PERF-13 — the shutdown-active tab's panes are the likeliest first
+      // reveals; warm them before the rest so a budget stop cannot skip them.
+      {
+        priorityRefs: collectActiveTabScrollbackSnapshotRefs(this.state.workspaceSession)
+      }
     ).catch((err: unknown) => {
       console.warn(
         `[terminal-scrollback] Snapshot cache warm-up failed: ${err instanceof Error ? err.message : String(err)}`
@@ -1735,6 +1748,7 @@ export class Store {
   private static SAVE_MAX_WAIT_MS = 5_000
 
   private scheduleSave(): void {
+    this.saveRequestsSinceLastPersist += 1
     // Why: once the quit flush has snapshotted, a newly debounced write would fire during
     // teardown with nothing awaiting it, and the process can exit mid-rename. The quit
     // flush is the last write by construction.
@@ -1889,6 +1903,13 @@ export class Store {
       return
     }
     const gen = this.writeGeneration
+    // Why: PERF-08 — nothing mutated since the last successful persist; skip
+    // the multi-MB state build entirely instead of building just to hash-compare.
+    if (this.saveRequestsSinceLastPersist === 0 && this.lastWrittenStateHash !== null) {
+      this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
+      return
+    }
+    this.saveRequestsSinceLastPersist = 0
     const { payload, stateHash, protectedSecretUpdates } = this.buildStateToSave()
     // Why: don't rewrite a byte-identical multi-MB file when state nets out to already-persisted.
     if (stateHash === this.lastWrittenStateHash) {
@@ -1931,6 +1952,7 @@ export class Store {
       // Why re-check gen: a mutation or sync flush during rename makes the installed hash ambiguous; invalidate the no-op guard.
       if (renamed && this.writeGeneration === gen) {
         this.lastWrittenStateHash = stateHash
+        this.saveRequestsSinceLastPersist = 0
         this.protectedSecrets.commitRetentionUpdates(protectedSecretUpdates)
       } else if (renamed) {
         this.lastWrittenStateHash = null
@@ -1958,7 +1980,12 @@ export class Store {
     if (this.writesFrozen) {
       return
     }
+    // Why timed per segment: this is the last synchronous multi-MB work on the main
+    // thread outside shutdown; when it stalls, every queued IPC stalls with it. The
+    // breakdown separates CPU stringify from durable-write fsync from backup rotation.
+    const flushStartedAtMs = Date.now()
     const { payload, stateHash, protectedSecretUpdates } = this.buildStateToSave()
+    const buildMs = Date.now() - flushStartedAtMs
     // Why: matching hash means the file already holds this state; force overrides when an async rename may be racing past the gen check.
     if (!opts.force && stateHash === this.lastWrittenStateHash) {
       return
@@ -1972,6 +1999,7 @@ export class Store {
 
     // Why: on any write/rename failure, remove the tmp file so shutdown crashes don't leak orphans.
     let renamed = false
+    const writeStartedAtMs = Date.now()
     try {
       // Why: fsync the temp file and the directory; a bare rename can survive as stale or empty
       // content after power loss, losing projects/tabs back to the newest usable .bak slot.
@@ -1992,9 +2020,19 @@ export class Store {
         }
       }
     }
+    const writeMs = Date.now() - writeStartedAtMs
     const now = Date.now()
     if (!opts.skipBackupRotation && this.shouldRotateBackups(now, dataFile)) {
       this.rotateBackupsSync(dataFile)
+    }
+    const totalMs = Date.now() - flushStartedAtMs
+    if (totalMs >= 200) {
+      appendStallRecord('sync_state_flush', {
+        ms: totalMs,
+        buildMs,
+        writeMs,
+        bytes: payload.length
+      })
     }
   }
 
@@ -2473,6 +2511,14 @@ export class Store {
 
   updateAutomationRun(result: AutomationDispatchResult): AutomationRun {
     return updateAutomationRunOperation(this.getAutomationRunOperations(), result)
+  }
+
+  linkAutomationRunRetry(input: {
+    failedRunId: string
+    retryRunId: string
+    title: string
+  }): AutomationRun {
+    return linkAutomationRunRetryOperation(this.getAutomationRunOperations(), input)
   }
 
   snapshotAutomationRunWorkspaceDisplayName(workspaceId: string, displayName: string): number {

@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
@@ -54,7 +54,10 @@ function snapshotPath(ref: string, snapshotRoot: string): string | null {
   return join(snapshotRoot, `${ref}.bin`)
 }
 
-function snapshotReadPaths(ref: string, storage?: TerminalScrollbackSnapshotStorage): string[] {
+export function snapshotReadPaths(
+  ref: string,
+  storage?: TerminalScrollbackSnapshotStorage
+): string[] {
   const primaryRoot = getSnapshotRoot(storage)
   const primaryPath = snapshotPath(ref, primaryRoot)
   if (!primaryPath) {
@@ -97,12 +100,15 @@ function readTrailingUtf8(path: string, maxBytes: number): string {
 }
 
 // Cache keys resolve to the primary path so writer/reader/deleter agree on one entry per ref.
-function snapshotCacheKey(ref: string, storage?: TerminalScrollbackSnapshotStorage): string | null {
+export function snapshotCacheKey(
+  ref: string,
+  storage?: TerminalScrollbackSnapshotStorage
+): string | null {
   return snapshotPath(ref, getSnapshotRoot(storage))
 }
 
 // Derived at write time; equals exactly what readTrailingUtf8 returns for this file.
-function trailingReplayString(payloadBytes: Buffer): string {
+export function trailingReplayString(payloadBytes: Buffer): string {
   const length = Math.min(payloadBytes.length, TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT)
   if (length <= 0) {
     return ''
@@ -297,35 +303,4 @@ export function migrateWorkspaceSessionTerminalScrollbackSnapshots(
     return { session, changed: false }
   }
   return { session: { ...session, terminalLayoutsByTabId }, changed: true }
-}
-
-// Why: after a restart every persisted leaf carries a scrollback ref but the process-local
-// cache is cold, so the first reveal of each tab paid a synchronous disk read inside the
-// activation frame. Warming once from the freshly-loaded session moves those bytes onto
-// async fs before any pane mounts; misses simply fall back to today's disk-read behavior.
-export async function warmTerminalScrollbackSnapshotCache(
-  session: WorkspaceSessionState | undefined,
-  storage?: TerminalScrollbackSnapshotStorage
-): Promise<number> {
-  if (!session) {
-    return 0
-  }
-  let warmed = 0
-  for (const ref of collectTerminalScrollbackSnapshotRefs(session)) {
-    const cacheKey = snapshotCacheKey(ref, storage)
-    if (!cacheKey || snapshotPayloadCache.get(cacheKey) !== undefined) {
-      continue
-    }
-    for (const path of snapshotReadPaths(ref, storage)) {
-      try {
-        const bytes = await readFile(path)
-        snapshotPayloadCache.put(cacheKey, trailingReplayString(bytes))
-        warmed += 1
-        break
-      } catch {
-        // Missing or unreadable snapshot: hydrate falls through to its existing miss path.
-      }
-    }
-  }
-  return warmed
 }
