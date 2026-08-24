@@ -318,18 +318,6 @@ export const electronViteConfig: UserConfig = {
           popout: resolve('src/renderer/popout.html'),
           web: resolve('src/renderer/web-index.html')
         }
-        advancedChunks: {
-          groups: [
-            {
-              // Why: the markdown pipeline (react-markdown/unified/remark) is
-              // hover-and-pane-only UI, but rolldown's shared-chunk grouping kept
-              // it in a chunk the entry bare-imports, making ~336KB eager. An
-              // explicit group pins it behind its real dynamic importers.
-              name: 'markdown-ecosystem',
-              test: /node_modules[\\/](unified|remark-[^\\/]*|rehype-[^\\/]*|mdast-[^\\/]*|micromark[^\\/]*|hast-[^\\/]*|property-information|comma-separated-tokens|decode-named-character-references|character-entities[^\\/]*|zwitch|vfile[^\\/]*|estree-util-[^\\/]*)[\\/]/
-            }
-          ]
-        },
       }
     }
   }
