@@ -69,6 +69,18 @@ function createMockChildProcess(): EventEmitter & { kill: ReturnType<typeof vi.f
   return childProcess
 }
 
+function runWithPlatform(platform: NodeJS.Platform, run: () => void): void {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+  Object.defineProperty(process, 'platform', { configurable: true, value: platform })
+  try {
+    run()
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(process, 'platform', originalDescriptor)
+    }
+  }
+}
+
 describe('app icon selection', () => {
   beforeEach(() => {
     browserWindowGetAllWindowsMock.mockReset()
@@ -106,6 +118,30 @@ describe('app icon selection', () => {
       expect(dockSetIconMock).not.toHaveBeenCalled()
     }
     expect(windowSetIconMock).toHaveBeenCalledWith(image)
+  })
+
+  it.each(['win32', 'linux'] as const)(
+    'skips %s image decoding when no window can consume it',
+    (platform) => {
+      browserWindowGetAllWindowsMock.mockReturnValue([])
+
+      runWithPlatform(platform, () => applyAppIcon('watercolor'))
+
+      expect(createFromPathMock).not.toHaveBeenCalled()
+      expect(dockSetIconMock).not.toHaveBeenCalled()
+      expect(windowSetIconMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it('still decodes a pre-window icon for the macOS dock', () => {
+    const image = { isEmpty: () => false }
+    createFromPathMock.mockReturnValue(image)
+    browserWindowGetAllWindowsMock.mockReturnValue([])
+
+    runWithPlatform('darwin', () => applyAppIcon('watercolor'))
+
+    expect(createFromPathMock).toHaveBeenCalledWith('watercolor-icon')
+    expect(dockSetIconMock).toHaveBeenCalledWith(image)
   })
 
   it('persists a custom macOS dock icon to the app bundle for inactive Dock pins', async () => {

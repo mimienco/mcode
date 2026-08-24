@@ -288,6 +288,11 @@ export function persistMacDockIcon(value: unknown, options: PersistMacDockIconOp
 }
 
 export function applyAppIcon(value: unknown): void {
+  const liveWindows = BrowserWindow.getAllWindows().filter((window) => !window.isDestroyed())
+  // Why: before first-window creation, only the macOS dock can consume a decoded image.
+  if (process.platform !== 'darwin' && liveWindows.length === 0) {
+    return
+  }
   const image = createAppIconImage(value)
   if (image.isEmpty()) {
     return
@@ -295,10 +300,8 @@ export function applyAppIcon(value: unknown): void {
   if (process.platform === 'darwin') {
     app.dock?.setIcon(image)
   }
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.setIcon(image)
-    }
+  for (const window of liveWindows) {
+    window.setIcon(image)
   }
   persistMacDockIcon(value)
 }
