@@ -33,7 +33,7 @@ describe('renderer startup runtime routing', () => {
       return relativeIndex === -1 ? -1 : startupBlockStart + relativeIndex
     }
     const settingsIndex = indexInStartupBlock(
-      'actions.fetchSettings({ deferOwnerWorktreeVisibilityDefaults: true })'
+      'actions.ensureSettingsFresh({ deferOwnerWorktreeVisibilityDefaults: true })'
     )
     const uiGetIndex = indexInStartupBlock("timeRendererStartupStep('ui-get'")
     const hydrateUiIndex = indexInStartupBlock("timeRendererStartupSyncStep('hydrate-persisted-ui'")

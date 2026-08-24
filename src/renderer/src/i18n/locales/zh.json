@@ -111,6 +111,7 @@
       "c1cf0b0e4a": "折叠窗格",
       "8504ddf267": "应用仍在运行。请重试工作区界面，或通过菜单报告崩溃详情。",
       "df1d56bf87": "工作区界面遇到错误。",
+      "7c1f2d9a40": "加载中…",
       "9e0b441a91": "切换右侧边栏",
       "e81217c1b7": "隐藏应用名称",
       "5096cbbc86": "MCode",
@@ -10441,7 +10442,8 @@
             "6aeda362ed": "结果",
             "98c8435e36": "选择要搜索的工作区",
             "1ec640c9c7": "匹配",
-            "dcc294f28d": "（结果被截断）"
+            "dcc294f28d": "（结果被截断）",
+            "rgUnavailableHint": "未找到任何结果，因为未安装 ripgrep (rg) 或其不在 PATH 中。"
           },
           "SearchFilters": {
             "01e4671ccf": "要排除的文件（例如 *.min.js、dist/**）",
@@ -10450,7 +10452,7 @@
             "a69ee1bd0e": "要包含的文件"
           },
           "replace": {
-            "toggle": "替换",
+            "toggle": "切换替换",
             "placeholder": "替换",
             "all": "全部替换",
             "preserveCase": "保留大小写",
@@ -14410,6 +14412,8 @@
         "localAttachmentUnsupported": "远程会话不支持本地附件。",
         "removeAttachment": "移除附件",
         "pastedImageLabel": "粘贴的图片",
+        "previewAttachment": "预览图片",
+        "previewUnavailable": "预览不可用",
         "imagePasteFailed": "图片粘贴失败。",
         "worktreeNotReady": "工作树未就绪 — 请稍后重试。",
         "uploadingAttachments": "正在将 {{value0}} 个文件上传到远端…",

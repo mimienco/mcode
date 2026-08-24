@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { RepoIconGlyph } from '../repo/repo-icon'
 import { RepoForkIndicator } from '../repo/repo-fork-indicator'
 import { Button } from '../ui/button'
+import { findSectionEntry } from './settings-section-registry'
 import { Input } from '../ui/input'
 import { SetupGuideProgressRing } from '../setup-guide/SetupGuideProgressRing'
 import { useSettingsSetupGuideProgress } from './settings-setup-guide-progress'
@@ -251,8 +252,8 @@ export function SettingsSidebar({
                     return (
                       <button
                         key={section.id}
-                        aria-current={isActive ? 'page' : undefined}
-                        data-current={isActive ? 'true' : undefined}
+                        onPointerEnter={() => findSectionEntry(section.id)?.prefetch()}
+                        onFocus={() => findSectionEntry(section.id)?.prefetch()}
                         onClick={(event) =>
                           onSelectSection(section.id, {
                             metaKey: event.metaKey,
@@ -296,6 +297,8 @@ export function SettingsSidebar({
                       key={section.id}
                       aria-current={isActive ? 'page' : undefined}
                       data-current={isActive ? 'true' : undefined}
+                      onPointerEnter={() => findSectionEntry(section.id)?.prefetch()}
+                      onFocus={() => findSectionEntry(section.id)?.prefetch()}
                       onClick={(event) =>
                         onSelectSection(section.id, {
                           metaKey: event.metaKey,

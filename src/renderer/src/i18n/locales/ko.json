@@ -111,6 +111,7 @@
       "c1cf0b0e4a": "패널 접기",
       "8504ddf267": "앱이 아직 실행 중입니다. 셸을 다시 시도하거나 메뉴를 사용하여 크래시 세부정보를 보고하세요.",
       "df1d56bf87": "워크스페이스 셸에 오류가 발생했습니다.",
+      "7c1f2d9a40": "불러오는 중…",
       "9e0b441a91": "오른쪽 사이드바 표시/숨기기",
       "e81217c1b7": "앱 이름 숨기기",
       "5096cbbc86": "MCode",
@@ -10439,7 +10440,8 @@
             "6aeda362ed": "결과",
             "98c8435e36": "검색할 워크스페이스를 선택하세요",
             "1ec640c9c7": "일치",
-            "dcc294f28d": "(결과가 잘림)"
+            "dcc294f28d": "(결과가 잘림)",
+            "rgUnavailableHint": "ripgrep(rg)이 설치되지 않았거나 PATH에 없어 검색 결과가 없습니다."
           },
           "SearchFilters": {
             "01e4671ccf": "제외할 파일(예: *.min.js, dist/**)",
@@ -10448,7 +10450,7 @@
             "a69ee1bd0e": "포함할 파일"
           },
           "replace": {
-            "toggle": "바꾸기",
+            "toggle": "바꾸기 전환",
             "placeholder": "바꾸기",
             "all": "모두 바꾸기",
             "preserveCase": "대소문자 유지",
@@ -14419,6 +14421,8 @@
         "localAttachmentUnsupported": "원격 세션에는 로컬 첨부 파일을 사용할 수 없습니다.",
         "removeAttachment": "첨부파일 삭제",
         "pastedImageLabel": "붙여넣은 이미지",
+        "previewAttachment": "이미지 미리보기",
+        "previewUnavailable": "미리보기를 사용할 수 없음",
         "imagePasteFailed": "이미지 붙여넣기 실패.",
         "worktreeNotReady": "워크트리가 준비되지 않았습니다 — 잠시 후 다시 시도하세요.",
         "uploadingAttachments": "{{value0}}개 파일을 원격으로 업로드 중…",

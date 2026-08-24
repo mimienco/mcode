@@ -111,6 +111,7 @@
       "c1cf0b0e4a": "Contraer panel",
       "8504ddf267": "La aplicación sigue ejecutándose. Vuelve a intentar cargar el espacio de trabajo o usa el menú para informar los detalles del fallo.",
       "df1d56bf87": "La vista del espacio de trabajo tuvo un error.",
+      "7c1f2d9a40": "Cargando…",
       "9e0b441a91": "Alternar barra lateral derecha",
       "e81217c1b7": "Ocultar nombre de la aplicación",
       "5096cbbc86": "MCode",
@@ -10421,7 +10422,8 @@
             "6aeda362ed": "resultado",
             "98c8435e36": "Seleccione un espacio de trabajo para buscar",
             "1ec640c9c7": "coincidencia",
-            "dcc294f28d": "(resultados truncados)"
+            "dcc294f28d": "(resultados truncados)",
+            "rgUnavailableHint": "La búsqueda no encontró nada porque ripgrep (rg) no está instalado o no está en el PATH."
           },
           "SearchFilters": {
             "01e4671ccf": "archivos a excluir (por ejemplo, *.min.js, dist/**)",
@@ -10430,7 +10432,7 @@
             "a69ee1bd0e": "Archivos para incluir"
           },
           "replace": {
-            "toggle": "Reemplazar",
+            "toggle": "Alternar reemplazo",
             "placeholder": "Reemplazar",
             "all": "Reemplazar todo",
             "preserveCase": "Conservar mayúsculas y minúsculas",
@@ -14390,6 +14392,8 @@
         "localAttachmentUnsupported": "Los archivos adjuntos locales no están disponibles para sesiones remotas.",
         "removeAttachment": "Quitar archivo adjunto",
         "pastedImageLabel": "Imagen pegada",
+        "previewAttachment": "Previsualizar imagen",
+        "previewUnavailable": "Vista previa no disponible",
         "imagePasteFailed": "Error al pegar imagen.",
         "worktreeNotReady": "Worktree no está listo — intenta de nuevo en un momento.",
         "uploadingAttachments": "Subiendo {{value0}} archivo(s) al remoto…",

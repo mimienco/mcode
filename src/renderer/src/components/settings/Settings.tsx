@@ -37,45 +37,60 @@ import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId
 } from '../../../../shared/execution-host'
-import { GeneralPane } from './GeneralPane'
-import { BrowserPane } from './BrowserPane'
-import { AppearancePane } from './AppearancePane'
-import { InputPane } from './InputPane'
-import { ShortcutsPane } from './ShortcutsPane'
-import { TerminalPane } from './TerminalPane'
-import { FloatingWorkspacePane } from './FloatingWorkspacePane'
 import { useGhosttyImport } from './useGhosttyImport'
 import { useWarpThemeImport } from './useWarpThemeImport'
-import { RepositoryPane } from './RepositoryPane'
-import { GitPane } from './GitPane'
-import { CommitMessageAiPane } from './CommitMessageAiPane'
-import { GitProviderApiBudgetPane } from './GitProviderApiBudgetPane'
-import { NotificationsPane } from './NotificationsPane'
-import { VoicePane } from './VoicePane'
-import { SshPane } from './SshPane'
-import { ExperimentalPane } from './ExperimentalPane'
-import { PluginsSettingsSection } from './PluginsSettingsSection'
-import { AgentsPane } from './AgentsPane'
-import { OrchestrationPane } from './OrchestrationPane'
-import { ArtifactsSettingsPane } from './ArtifactsSettingsPane'
-import { ShareSkillsSettingsPane } from './ShareSkillsSettingsPane'
-import { AutomationsSettingsPane } from './AutomationsSettingsPane'
-import { MCodeAccountSettingsPane } from './MCodeAccountSettingsPane'
-import { LinearAgentSkillPane } from './LinearAgentSkillPane'
-import { AccountsPane } from './AccountsPane'
-import { StatsPane } from '../stats/StatsPane'
-import { IntegrationsPane } from './IntegrationsPane'
-import { TasksPane } from './TasksPane'
-import { QuickCommandsPane } from './QuickCommandsPane'
-import { DeveloperPermissionsPane } from './DeveloperPermissionsPane'
-import { ComputerUsePane } from './ComputerUsePane'
-import { MobileSettingsPane } from './MobileSettingsPane'
-import { MobileEmulatorSettingsPane } from './MobileEmulatorSettingsPane'
-import { RuntimeEnvironmentsPane } from './RuntimeEnvironmentsPane'
-import { PrivacyPane } from './PrivacyPane'
-import { AdvancedPane } from './AdvancedPane'
+import { findSectionEntry, prefetchDefaultSections } from './settings-section-registry'
+import { SettingsSectionSkeleton } from './settings-section-skeleton'
+// Why: PERF-03 stage B — panes load through the section registry so the
+// Settings shell chunk stays small; identifiers are preserved on purpose so
+// every render site below keeps its exact props and gating.
+function makeLazySettingsSection(
+  sectionId: string
+): React.LazyExoticComponent<React.ComponentType<Record<string, unknown>>> {
+  const sectionEntry = findSectionEntry(sectionId)
+  if (!sectionEntry) {
+    throw new Error(`No settings section registered for "${sectionId}"`)
+  }
+  return lazy(() => sectionEntry.load())
+}
+
+const GeneralPane = makeLazySettingsSection('general')
+const BrowserPane = makeLazySettingsSection('browser')
+const AppearancePane = makeLazySettingsSection('appearance')
+const InputPane = makeLazySettingsSection('input')
+const ShortcutsPane = makeLazySettingsSection('shortcuts')
+const TerminalPane = makeLazySettingsSection('terminal')
+const FloatingWorkspacePane = makeLazySettingsSection('floating-workspace')
+const RepositoryPane = makeLazySettingsSection('repository')
+const GitPane = makeLazySettingsSection('git')
+const NotificationsPane = makeLazySettingsSection('notifications')
+const VoicePane = makeLazySettingsSection('voice')
+const SshPane = makeLazySettingsSection('ssh')
+const ExperimentalPane = makeLazySettingsSection('experimental')
+const PluginsSettingsSection = makeLazySettingsSection('plugins')
+const AgentsPane = makeLazySettingsSection('agents')
+const OrchestrationPane = makeLazySettingsSection('orchestration')
+const ArtifactsSettingsPane = makeLazySettingsSection('artifacts')
+const ShareSkillsSettingsPane = makeLazySettingsSection('share-skills')
+const AutomationsSettingsPane = makeLazySettingsSection('automations')
+const MCodeAccountSettingsPane = makeLazySettingsSection('mcode-account')
+const LinearAgentSkillPane = makeLazySettingsSection('linear')
+const AccountsPane = makeLazySettingsSection('accounts')
+const StatsPane = makeLazySettingsSection('stats')
+const IntegrationsPane = makeLazySettingsSection('integrations')
+const TasksPane = makeLazySettingsSection('tasks')
+const QuickCommandsPane = makeLazySettingsSection('quick-commands')
+const DeveloperPermissionsPane = makeLazySettingsSection('developer-permissions')
+const ComputerUsePane = makeLazySettingsSection('computer-use')
+const MobileSettingsPane = makeLazySettingsSection('mobile')
+const MobileEmulatorSettingsPane = makeLazySettingsSection('mobile-emulator')
+const RuntimeEnvironmentsPane = makeLazySettingsSection('servers')
+const PrivacyPane = makeLazySettingsSection('privacy')
+const AdvancedPane = makeLazySettingsSection('advanced')
+const CommitMessageAiPane = makeLazySettingsSection('git')
+const GitProviderApiBudgetPane = makeLazySettingsSection('git')
+const SettingsSetupGuidePane = makeLazySettingsSection('setup-guide')
 import { SettingsSidebar } from './SettingsSidebar'
-import { SettingsSetupGuidePane } from './SettingsSetupGuidePane'
 import { ActiveSettingsSectionProvider, SettingsSection } from './SettingsSection'
 import { getSettingsSectionSearchEntries, rankSettingsSearchItems } from './settings-search'
 import { resolveAppearanceAccordionDeepLink } from './appearance-usage-percentage-search'
@@ -296,8 +311,8 @@ function Settings(): React.JSX.Element {
   const setActiveRuntimeEnvironmentPreference = useAppStore(
     (s) => s.setActiveRuntimeEnvironmentPreference
   )
-  const fetchSettings = useAppStore((s) => s.fetchSettings)
-  const fetchKeybindings = useAppStore((s) => s.fetchKeybindings)
+  const ensureSettingsFresh = useAppStore((s) => s.ensureSettingsFresh)
+  const ensureKeybindingsFresh = useAppStore((s) => s.ensureKeybindingsFresh)
   const closeSettingsPage = useAppStore((s) => s.closeSettingsPage)
   const repos = useAppStore((s) => s.repos)
   const projects = useAppStore((s) => s.projects)
@@ -530,10 +545,17 @@ function Settings(): React.JSX.Element {
     closeSettingsPage()
   }, [closeSettingsPage, confirmDiscardSourceControlAiPromptChanges])
 
+  // Why: PERF-17 — startup already hydrated these; only re-read when stale.
   useEffect(() => {
-    fetchSettings()
-    fetchKeybindings()
-  }, [fetchKeybindings, fetchSettings])
+    void ensureSettingsFresh()
+    void ensureKeybindingsFresh()
+  }, [ensureKeybindingsFresh, ensureSettingsFresh])
+
+  // Why: PERF-03 stage B — warm the default pane chunk while the user reads
+  // the shell; hover/focus on other nav items warms their chunks on demand.
+  useEffect(() => {
+    prefetchDefaultSections()
+  }, [])
 
   useEffect(() => {
     if (!showDesktopOnlySettings) {
@@ -1251,14 +1273,16 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('agents')}
                 >
                   {isSectionMounted('agents') ? (
-                    <AgentsPane
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      wslSupportedPlatform={localWslSupportedPlatform}
-                      wslAvailable={localWindowsRuntimeCapabilities.wslAvailable}
-                      wslDistros={localWindowsRuntimeCapabilities.wslDistros}
-                      wslCapabilitiesLoading={localWindowsRuntimeCapabilities.isLoading}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <AgentsPane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        wslSupportedPlatform={localWslSupportedPlatform}
+                        wslAvailable={localWindowsRuntimeCapabilities.wslAvailable}
+                        wslDistros={localWindowsRuntimeCapabilities.wslDistros}
+                        wslCapabilitiesLoading={localWindowsRuntimeCapabilities.isLoading}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1279,15 +1303,17 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('accounts')}
                 >
                   {isSectionMounted('accounts') ? (
-                    <AccountsPane
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      wslSupportedPlatform={runtimeWslSupportedPlatform}
-                      wslAvailable={windowsTerminalCapabilities.wslAvailable}
-                      wslDistros={windowsTerminalCapabilities.wslDistros}
-                      wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
-                      accountOwnerPlatform={windowsTerminalCapabilities.hostPlatform}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <AccountsPane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        wslSupportedPlatform={runtimeWslSupportedPlatform}
+                        wslAvailable={windowsTerminalCapabilities.wslAvailable}
+                        wslDistros={windowsTerminalCapabilities.wslDistros}
+                        wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
+                        accountOwnerPlatform={windowsTerminalCapabilities.hostPlatform}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1300,7 +1326,11 @@ function Settings(): React.JSX.Element {
                   )}
                   searchEntries={getSectionSearchEntries('orchestration')}
                 >
-                  {isSectionMounted('orchestration') ? <OrchestrationPane /> : null}
+                  {isSectionMounted('orchestration') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <OrchestrationPane />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 {linearConnected ? (
@@ -1313,7 +1343,11 @@ function Settings(): React.JSX.Element {
                     )}
                     searchEntries={getSectionSearchEntries('linear')}
                   >
-                    {isSectionMounted('linear') ? <LinearAgentSkillPane /> : null}
+                    {isSectionMounted('linear') ? (
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <LinearAgentSkillPane />
+                      </Suspense>
+                    ) : null}
                   </SettingsSection>
                 ) : null}
 
@@ -1331,7 +1365,11 @@ function Settings(): React.JSX.Element {
                       )}
                       searchEntries={getSectionSearchEntries('computer-use')}
                     >
-                      {isSectionMounted('computer-use') ? <ComputerUsePane /> : null}
+                      {isSectionMounted('computer-use') ? (
+                        <Suspense fallback={<SettingsSectionSkeleton />}>
+                          <ComputerUsePane />
+                        </Suspense>
+                      ) : null}
                     </SettingsSection>
 
                     <SettingsSection
@@ -1344,7 +1382,9 @@ function Settings(): React.JSX.Element {
                       searchEntries={getSectionSearchEntries('voice')}
                     >
                       {isSectionMounted('voice') ? (
-                        <VoicePane settings={settings} updateSettings={updateSettings} />
+                        <Suspense fallback={<SettingsSectionSkeleton />}>
+                          <VoicePane settings={settings} updateSettings={updateSettings} />
+                        </Suspense>
                       ) : null}
                     </SettingsSection>
                   </>
@@ -1353,14 +1393,21 @@ function Settings(): React.JSX.Element {
                 {showDesktopOnlySettings ? (
                   <SettingsSection
                     id="mcode-account"
-                    title={translate('auto.components.settings.mcodeAccount.title', 'MCode Account')}
+                    title={translate(
+                      'auto.components.settings.mcodeAccount.title',
+                      'MCode Account'
+                    )}
                     description={translate(
                       'auto.components.settings.mcodeAccount.description',
                       'Share work instantly and reach your desktop from MCode Mobile wherever you are.'
                     )}
                     searchEntries={getSectionSearchEntries('mcode-account')}
                   >
-                    {isSectionMounted('mcode-account') ? <MCodeAccountSettingsPane /> : null}
+                    {isSectionMounted('mcode-account') ? (
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <MCodeAccountSettingsPane />
+                      </Suspense>
+                    ) : null}
                   </SettingsSection>
                 ) : null}
 
@@ -1377,7 +1424,11 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('setup-guide')}
                   bodyClassName="overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none"
                 >
-                  {isSectionMounted('setup-guide') ? <SettingsSetupGuidePane /> : null}
+                  {isSectionMounted('setup-guide') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <SettingsSetupGuidePane />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 <SettingsSection
@@ -1390,17 +1441,19 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('general')}
                 >
                   {isSectionMounted('general') ? (
-                    <GeneralPane
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      updateSettingsOrThrow={updateSettingsOrThrow}
-                      fontSuggestions={terminalFontSuggestions}
-                      onRequestFontSuggestions={requestFontSuggestions}
-                      wslSupportedPlatform={localWslSupportedPlatform}
-                      wslAvailable={localWindowsRuntimeCapabilities.wslAvailable}
-                      wslDistros={localWindowsRuntimeCapabilities.wslDistros}
-                      wslCapabilitiesLoading={localWindowsRuntimeCapabilities.isLoading}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <GeneralPane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        updateSettingsOrThrow={updateSettingsOrThrow}
+                        fontSuggestions={terminalFontSuggestions}
+                        onRequestFontSuggestions={requestFontSuggestions}
+                        wslSupportedPlatform={localWslSupportedPlatform}
+                        wslAvailable={localWindowsRuntimeCapabilities.wslAvailable}
+                        wslDistros={localWindowsRuntimeCapabilities.wslDistros}
+                        wslCapabilitiesLoading={localWindowsRuntimeCapabilities.isLoading}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1414,7 +1467,11 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('integrations')}
                   bodyClassName="rounded-none border-0 bg-transparent p-0 shadow-none"
                 >
-                  {isSectionMounted('integrations') ? <IntegrationsPane /> : null}
+                  {isSectionMounted('integrations') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <IntegrationsPane />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 {showDesktopOnlySettings ? (
@@ -1428,7 +1485,11 @@ function Settings(): React.JSX.Element {
                     )}
                     searchEntries={getSectionSearchEntries('mobile')}
                   >
-                    {isSectionMounted('mobile') ? <MobileSettingsPane /> : null}
+                    {isSectionMounted('mobile') ? (
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <MobileSettingsPane />
+                      </Suspense>
+                    ) : null}
                   </SettingsSection>
                 ) : null}
 
@@ -1442,7 +1503,12 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('automations')}
                 >
                   {isSectionMounted('automations') ? (
-                    <AutomationsSettingsPane settings={settings} updateSettings={updateSettings} />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <AutomationsSettingsPane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1457,7 +1523,9 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('artifacts')}
                 >
                   {isSectionMounted('artifacts') ? (
-                    <ArtifactsSettingsPane settings={settings} updateSettings={updateSettings} />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <ArtifactsSettingsPane settings={settings} updateSettings={updateSettings} />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1471,7 +1539,11 @@ function Settings(): React.JSX.Element {
                   )}
                   searchEntries={getSectionSearchEntries('share-skills')}
                 >
-                  {isSectionMounted('share-skills') ? <ShareSkillsSettingsPane /> : null}
+                  {isSectionMounted('share-skills') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <ShareSkillsSettingsPane />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 <SettingsSection
@@ -1488,27 +1560,29 @@ function Settings(): React.JSX.Element {
                   forceVisible={hasUnsavedSourceControlAiPromptChanges}
                 >
                   {isSectionMounted('git') ? (
-                    <>
-                      <GitPane
-                        settings={settings}
-                        updateSettings={updateSettings}
-                        writeSourceControlAiSettings={writeSourceControlAiSettings}
-                        displayedGitUsername={displayedGitUsername}
-                        hasUnsavedBranchPromptChanges={hasUnsavedBranchPromptChanges}
-                        onBranchPromptDirtyChange={setHasUnsavedBranchPromptChanges}
-                        branchPromptDiscardSignal={sourceControlAiPromptDiscardSignal}
-                        settingsSearchQuery={settingsSearchQuery}
-                      />
-                      <CommitMessageAiPane
-                        settings={settings}
-                        updateSettings={updateSettings}
-                        writeSourceControlAiSettings={writeSourceControlAiSettings}
-                        onCustomPromptDirtyChange={setHasUnsavedCommitPromptChanges}
-                        customPromptDiscardSignal={sourceControlAiPromptDiscardSignal}
-                        settingsSearchQuery={settingsSearchQuery}
-                      />
-                      <GitProviderApiBudgetPane settingsSearchQuery={settingsSearchQuery} />
-                    </>
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <>
+                        <GitPane
+                          settings={settings}
+                          updateSettings={updateSettings}
+                          writeSourceControlAiSettings={writeSourceControlAiSettings}
+                          displayedGitUsername={displayedGitUsername}
+                          hasUnsavedBranchPromptChanges={hasUnsavedBranchPromptChanges}
+                          onBranchPromptDirtyChange={setHasUnsavedBranchPromptChanges}
+                          branchPromptDiscardSignal={sourceControlAiPromptDiscardSignal}
+                          settingsSearchQuery={settingsSearchQuery}
+                        />
+                        <CommitMessageAiPane
+                          settings={settings}
+                          updateSettings={updateSettings}
+                          writeSourceControlAiSettings={writeSourceControlAiSettings}
+                          onCustomPromptDirtyChange={setHasUnsavedCommitPromptChanges}
+                          customPromptDiscardSignal={sourceControlAiPromptDiscardSignal}
+                          settingsSearchQuery={settingsSearchQuery}
+                        />
+                        <GitProviderApiBudgetPane settingsSearchQuery={settingsSearchQuery} />
+                      </>
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1522,7 +1596,9 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('tasks')}
                 >
                   {isSectionMounted('tasks') ? (
-                    <TasksPane settings={settings} updateSettings={updateSettings} />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <TasksPane settings={settings} updateSettings={updateSettings} />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1536,18 +1612,20 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('terminal')}
                 >
                   {isSectionMounted('terminal') ? (
-                    <TerminalPane
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      scrollbackMode={scrollbackMode}
-                      setScrollbackMode={setScrollbackMode}
-                      wslAvailable={windowsTerminalCapabilities.wslAvailable}
-                      wslDistros={windowsTerminalCapabilities.wslDistros}
-                      wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
-                      pwshAvailable={windowsTerminalCapabilities.pwshAvailable}
-                      gitBashAvailable={windowsTerminalCapabilities.gitBashAvailable}
-                      isWindowsTerminalHost={isWindowsTerminalHost}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <TerminalPane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        scrollbackMode={scrollbackMode}
+                        setScrollbackMode={setScrollbackMode}
+                        wslAvailable={windowsTerminalCapabilities.wslAvailable}
+                        wslDistros={windowsTerminalCapabilities.wslDistros}
+                        wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
+                        pwshAvailable={windowsTerminalCapabilities.pwshAvailable}
+                        gitBashAvailable={windowsTerminalCapabilities.gitBashAvailable}
+                        isWindowsTerminalHost={isWindowsTerminalHost}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1564,10 +1642,12 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('quick-commands')}
                 >
                   {isSectionMounted('quick-commands') ? (
-                    <QuickCommandsPane
-                      settings={settings}
-                      addCommandIntentSignal={quickCommandAddIntentSignal}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <QuickCommandsPane
+                        settings={settings}
+                        addCommandIntentSignal={quickCommandAddIntentSignal}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1582,11 +1662,13 @@ function Settings(): React.JSX.Element {
                     searchEntries={getSectionSearchEntries('browser')}
                   >
                     {isSectionMounted('browser') ? (
-                      <BrowserPane
-                        settings={settings}
-                        updateSettings={updateSettings}
-                        onOpenComputerUse={openComputerUseFromBrowser}
-                      />
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <BrowserPane
+                          settings={settings}
+                          updateSettings={updateSettings}
+                          onOpenComputerUse={openComputerUseFromBrowser}
+                        />
+                      </Suspense>
                     ) : null}
                   </SettingsSection>
                 ) : null}
@@ -1605,10 +1687,12 @@ function Settings(): React.JSX.Element {
                     searchEntries={getSectionSearchEntries('mobile-emulator')}
                   >
                     {isSectionMounted('mobile-emulator') ? (
-                      <MobileEmulatorSettingsPane
-                        settings={settings}
-                        updateSettings={updateSettings}
-                      />
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <MobileEmulatorSettingsPane
+                          settings={settings}
+                          updateSettings={updateSettings}
+                        />
+                      </Suspense>
                     ) : null}
                   </SettingsSection>
                 ) : null}
@@ -1626,7 +1710,9 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('floating-workspace')}
                 >
                   {isSectionMounted('floating-workspace') ? (
-                    <FloatingWorkspacePane settings={settings} updateSettings={updateSettings} />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <FloatingWorkspacePane settings={settings} updateSettings={updateSettings} />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1640,17 +1726,19 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('appearance')}
                 >
                   {isSectionMounted('appearance') ? (
-                    <AppearancePane
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      applyTheme={applyTheme}
-                      fontSuggestions={fontSuggestions}
-                      terminalFontSuggestions={terminalFontSuggestions}
-                      onRequestFontSuggestions={requestFontSuggestions}
-                      systemPrefersDark={systemPrefersDark}
-                      ghostty={ghostty}
-                      warpThemes={warpThemes}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <AppearancePane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        applyTheme={applyTheme}
+                        fontSuggestions={fontSuggestions}
+                        terminalFontSuggestions={terminalFontSuggestions}
+                        onRequestFontSuggestions={requestFontSuggestions}
+                        systemPrefersDark={systemPrefersDark}
+                        ghostty={ghostty}
+                        warpThemes={warpThemes}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1683,7 +1771,9 @@ function Settings(): React.JSX.Element {
                     searchEntries={getSectionSearchEntries('notifications')}
                   >
                     {isSectionMounted('notifications') ? (
-                      <NotificationsPane settings={settings} updateSettings={updateSettings} />
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <NotificationsPane settings={settings} updateSettings={updateSettings} />
+                      </Suspense>
                     ) : null}
                   </SettingsSection>
                 ) : null}
@@ -1705,7 +1795,11 @@ function Settings(): React.JSX.Element {
                     isFocusedShortcutsPane ? 'min-h-0 flex-1 overflow-hidden' : undefined
                   }
                 >
-                  {isSectionMounted('shortcuts') ? <ShortcutsPane /> : null}
+                  {isSectionMounted('shortcuts') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <ShortcutsPane />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 <SettingsSection
@@ -1717,7 +1811,11 @@ function Settings(): React.JSX.Element {
                   )}
                   searchEntries={getSectionSearchEntries('stats')}
                 >
-                  {isSectionMounted('stats') ? <StatsPane /> : null}
+                  {isSectionMounted('stats') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <StatsPane />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 <SettingsSection
@@ -1741,13 +1839,17 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('servers')}
                 >
                   {isSectionMounted('servers') ? (
-                    <RuntimeEnvironmentsPane
-                      settings={settings}
-                      setActiveRuntimeEnvironmentPreference={setActiveRuntimeEnvironmentPreference}
-                      canGeneratePairingUrl={!isWebClient}
-                      allowLocalRuntime={!isWebClient}
-                      addServerIntentSignal={remoteServerAddIntentSignal}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <RuntimeEnvironmentsPane
+                        settings={settings}
+                        setActiveRuntimeEnvironmentPreference={
+                          setActiveRuntimeEnvironmentPreference
+                        }
+                        canGeneratePairingUrl={!isWebClient}
+                        allowLocalRuntime={!isWebClient}
+                        addServerIntentSignal={remoteServerAddIntentSignal}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
 
@@ -1762,7 +1864,9 @@ function Settings(): React.JSX.Element {
                     searchEntries={getSectionSearchEntries('ssh')}
                   >
                     {isSectionMounted('ssh') ? (
-                      <SshPane addTargetIntentSignal={sshHostAddIntentSignal} />
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <SshPane addTargetIntentSignal={sshHostAddIntentSignal} />
+                      </Suspense>
                     ) : null}
                   </SettingsSection>
                 ) : null}
@@ -1781,9 +1885,11 @@ function Settings(): React.JSX.Element {
                     searchEntries={getSectionSearchEntries('developer-permissions')}
                   >
                     {isSectionMounted('developer-permissions') ? (
-                      <DeveloperPermissionsPane
-                        highlightedSettingId={highlightedSettingsTargetId}
-                      />
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <DeveloperPermissionsPane
+                          highlightedSettingId={highlightedSettingsTargetId}
+                        />
+                      </Suspense>
                     ) : null}
                   </SettingsSection>
                 ) : null}
@@ -1800,7 +1906,11 @@ function Settings(): React.JSX.Element {
                   )}
                   searchEntries={getSectionSearchEntries('privacy')}
                 >
-                  {isSectionMounted('privacy') ? <PrivacyPane settings={settings} /> : null}
+                  {isSectionMounted('privacy') ? (
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <PrivacyPane settings={settings} />
+                    </Suspense>
+                  ) : null}
                 </SettingsSection>
 
                 {showDesktopOnlySettings ? (
@@ -1814,7 +1924,9 @@ function Settings(): React.JSX.Element {
                     searchEntries={getSectionSearchEntries('advanced')}
                   >
                     {isSectionMounted('advanced') ? (
-                      <AdvancedPane settings={settings} updateSettings={updateSettings} />
+                      <Suspense fallback={<SettingsSectionSkeleton />}>
+                        <AdvancedPane settings={settings} updateSettings={updateSettings} />
+                      </Suspense>
                     ) : null}
                   </SettingsSection>
                 ) : null}
@@ -1847,20 +1959,23 @@ function Settings(): React.JSX.Element {
                   searchEntries={getSectionSearchEntries('experimental')}
                 >
                   {isSectionMounted('experimental') ? (
-                    <ExperimentalPane
-                      settings={settings}
-                      updateSettings={updateSettings}
-                      hiddenExperimentalUnlocked={hiddenExperimentalUnlocked}
-                    />
+                    <Suspense fallback={<SettingsSectionSkeleton />}>
+                      <ExperimentalPane
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        hiddenExperimentalUnlocked={hiddenExperimentalUnlocked}
+                      />
+                    </Suspense>
                   ) : null}
                 </SettingsSection>
-
                 {showDesktopOnlySettings ? (
-                  <PluginsSettingsSection
-                    mounted={isSectionMounted('plugins')}
-                    settings={settings}
-                    updateSettings={updateSettingsOrThrow}
-                  />
+                  <Suspense fallback={<SettingsSectionSkeleton />}>
+                    <PluginsSettingsSection
+                      mounted={isSectionMounted('plugins')}
+                      settings={settings}
+                      updateSettings={updateSettingsOrThrow}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {settingsProjectList.map((settingsProject) => {
@@ -1893,28 +2008,30 @@ function Settings(): React.JSX.Element {
                     >
                       {isSectionMounted(repoSectionId) ? (
                         // Why: re-key per host so same-id hosts don't reuse the prior host's drafts/effects.
-                        <RepositoryPane
-                          key={repoHostIdentity}
-                          repo={repo}
-                          yamlHooks={repoHooksState?.hooks ?? null}
-                          hasHooksFile={repoHooksState?.hasHooks ?? false}
-                          hooksInspectionReady={Boolean(repoHooksState)}
-                          mayNeedUpdate={repoHooksState?.mayNeedUpdate ?? false}
-                          updateRepo={updateRepo}
-                          removeProject={() => void removeProjectAllHosts(settingsProject.setups)}
-                          project={project}
-                          selectedProjectSetupId={
-                            settingsProjectSetupSelection[settingsProject.projectId]
-                          }
-                          isLocalWindowsProject={
-                            getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
-                            isWindowsTerminalHost
-                          }
-                          wslAvailable={windowsTerminalCapabilities.wslAvailable}
-                          wslDistros={windowsTerminalCapabilities.wslDistros}
-                          wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
-                          updateProject={updateProject}
-                        />
+                        <Suspense fallback={<SettingsSectionSkeleton />}>
+                          <RepositoryPane
+                            key={repoHostIdentity}
+                            repo={repo}
+                            yamlHooks={repoHooksState?.hooks ?? null}
+                            hasHooksFile={repoHooksState?.hasHooks ?? false}
+                            hooksInspectionReady={Boolean(repoHooksState)}
+                            mayNeedUpdate={repoHooksState?.mayNeedUpdate ?? false}
+                            updateRepo={updateRepo}
+                            removeProject={() => void removeProjectAllHosts(settingsProject.setups)}
+                            project={project}
+                            selectedProjectSetupId={
+                              settingsProjectSetupSelection[settingsProject.projectId]
+                            }
+                            isLocalWindowsProject={
+                              getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
+                              isWindowsTerminalHost
+                            }
+                            wslAvailable={windowsTerminalCapabilities.wslAvailable}
+                            wslDistros={windowsTerminalCapabilities.wslDistros}
+                            wslCapabilitiesLoading={windowsTerminalCapabilities.isLoading}
+                            updateProject={updateProject}
+                          />
+                        </Suspense>
                       ) : null}
                     </SettingsSection>
                   )

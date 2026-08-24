@@ -178,6 +178,7 @@
       "c1cf0b0e4a": "Collapse pane",
       "8504ddf267": "The app is still running. Retry the shell or use the menu to report the crash details.",
       "df1d56bf87": "The workspace shell hit an error.",
+      "7c1f2d9a40": "Loading…",
       "9e0b441a91": "Toggle right sidebar",
       "e81217c1b7": "Hide App Name",
       "5096cbbc86": "MCode",
@@ -3133,6 +3134,20 @@
           },
           "TabGroupDropOverlay": {
             "paneColumnLabel": "New split"
+          },
+          "TabGroupEmptyState": {
+            "installPageFailed": "Could not open the {{value0}} installation page.",
+            "newTerminal": "Terminal",
+            "newBrowser": "Browser",
+            "newMarkdown": "Markdown",
+            "newSimulator": "Simulator",
+            "3f9c81d2ae": "This pane is empty",
+            "b2d74e05c1": "Launch agents side by side, or open a terminal, browser, or note.",
+            "detectingAgents": "Detecting agents…",
+            "launchAgentTooltip": "Launch {{value0}} × {{value1}}",
+            "sessionCountLabel": "Sessions to open",
+            "decrementSessions": "Fewer {{value0}} sessions",
+            "incrementSessions": "More {{value0}} sessions"
           }
         },
         "bar": {
@@ -5983,6 +5998,14 @@
           "projectOnly": "Added in this project only.",
           "useGlobalFor": "Use global for {{value0}}",
           "useGlobal": "Use global"
+        },
+        "CompactAgentRow": {
+          "colorCycle": {
+            "title": "Agent color — click to cycle"
+          },
+          "rename": {
+            "input": "Agent display name"
+          }
         }
       },
       "shared": {
@@ -7246,6 +7269,8 @@
           "591fe605b9": "Terminal Bell",
           "55f901a59b": "A coding agent finishes and becomes idle.",
           "ca76d06fd2": "Agent Task Complete",
+          "automationRunComplete.label": "Automation Run Complete",
+          "automationRunComplete.description": "A scheduled automation run finishes or fails.",
           "deff6d30da": "Native system notifications for background events.",
           "841c8c549f": "Enable Notifications",
           "0fadad17ce": "Notification sound could not be played",
@@ -11322,6 +11347,9 @@
         },
         "shortcutDefinitionCatalog": {
           "missionControlConflict": "Blocked by Mission Control. Remap here or change it in System Settings."
+        },
+        "SettingsSectionSkeleton": {
+          "1a2b3c4d5e": "Loading section…"
         }
       },
       "right": {
@@ -11589,7 +11617,8 @@
             "6aeda362ed": "result",
             "98c8435e36": "Select a workspace to search",
             "1ec640c9c7": "match",
-            "dcc294f28d": "(results truncated)"
+            "dcc294f28d": "(results truncated)",
+            "rgUnavailableHint": "Search found nothing because ripgrep (rg) is not installed or not on PATH."
           },
           "SearchFilters": {
             "01e4671ccf": "files to exclude (e.g. *.min.js, dist/**)",
@@ -11598,7 +11627,7 @@
             "a69ee1bd0e": "Files To Include"
           },
           "replace": {
-            "toggle": "Replace",
+            "toggle": "Toggle replace",
             "placeholder": "Replace",
             "all": "Replace All",
             "preserveCase": "Preserve case",
@@ -12230,6 +12259,7 @@
             "allPassed": "All {{value0}} tests passed",
             "checkFailed": "Check failed",
             "clear": "Clear diagnostics",
+            "commandTool": "Command",
             "emptyDescription": "Run tests, typecheck, or lint in a terminal. Failures will appear here automatically.",
             "emptyTitle": "No diagnostics yet",
             "failedCount": "{{value0}} failed",
@@ -12241,6 +12271,7 @@
             "noSourceLocation": "The check exited unsuccessfully without a source location.",
             "passedCount": "{{value0}} passed",
             "showOutput": "Show output",
+            "showCommandOutput": "Show output for “{{value0}}”",
             "showToolOutput": "Show {{value0}} output",
             "unknownTool": "Diagnostics",
             "warning": "{{value0}} warning",
@@ -15432,6 +15463,15 @@
         "AutomationListSortHeader": {
           "sortedAscending": "{{value0}}, sorted ascending",
           "sortedDescending": "{{value0}}, sorted descending"
+        },
+        "AutomationSafetyRailFields": {
+          "costCap": {
+            "label": "Cost cap per run",
+            "placeholder": "Unlimited"
+          },
+          "autoPush": {
+            "label": "Agent may push and open PRs"
+          }
         }
       },
       "agent": {
@@ -16016,6 +16056,8 @@
         "localAttachmentUnsupported": "Local attachments are not available for remote sessions.",
         "removeAttachment": "Remove attachment",
         "pastedImageLabel": "Pasted image",
+        "previewAttachment": "Preview image",
+        "previewUnavailable": "Preview unavailable",
         "imagePasteFailed": "Image paste failed.",
         "worktreeNotReady": "Worktree not ready — try again in a moment.",
         "uploadingAttachments": "Uploading {{value0}} file(s) to remote…",
@@ -16420,7 +16462,8 @@
     "view": {
       "label": "Dashboard view",
       "board": "Dashboard",
-      "map": "Agent Map"
+      "map": "Agent Map",
+      "mission": "Mission Control"
     },
     "map": {
       "host": {
@@ -16565,6 +16608,39 @@
       "ssh": "SSH host",
       "remoteNamed": "Remote MCode host · {{host}}",
       "remote": "Remote MCode host"
+    },
+    "mission": {
+      "title": "Mission Control",
+      "state": {
+        "attention": "Needs you",
+        "failed": "Failed",
+        "working": "Working",
+        "completed": "Completed",
+        "idle": "Idle"
+      },
+      "summary": {
+        "live": "Visible runs",
+        "decisions": "Needs you",
+        "active": "In progress",
+        "completed": "Visible results"
+      },
+      "inbox": {
+        "title": "Decision Inbox",
+        "empty": "No decisions are waiting.",
+        "review": "Review decision: {{title}}",
+        "new": "New"
+      },
+      "list": {
+        "title": "Missions",
+        "scope": "Visible dispatched work",
+        "empty": "No visible mission runs yet.",
+        "emptyHint": "Missions appear when a dispatched agent reports an orchestration run.",
+        "openAgent": "Open an agent to dispatch work",
+        "openAgentMap": "Open Agent Map to start an agent"
+      },
+      "task": {
+        "open": "Open task: {{title}}"
+      }
     }
   },
   "dashboard": {
