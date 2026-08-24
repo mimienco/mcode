@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- Why: persistence keeps schema defaults, migration, and load/save/flush in one file so the storage contract reviews as a unit. */
+import { substituteSecretSentinels } from './state-secret-substitution'
 import {
   readFileSync,
   writeFileSync,
@@ -18,7 +19,7 @@ import {
 } from '../../durable-file-write'
 import { dirname } from 'node:path'
 import { homedir } from 'node:os'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import type {
   Automation,
   AutomationCreateInput,
@@ -1879,21 +1880,14 @@ export class Store {
     // Why compact: ~20% fewer bytes and less serialize time; all readers JSON.parse so formatting is irrelevant.
     // One full-state stringify; secret slots currently hold sentinels.
     const serialized = JSON.stringify(stateToSave)
-    // Substitute each unique sentinel exactly once: ciphertext for the on-disk
-    // payload, a stable normalized value for the guard hash. Function-form
-    // replacement keeps `$` inert; both sides read the sentinel as JSON-escaped
-    // in `serialized`, so each replace is byte-for-byte position-exact.
-    let payload = serialized
-    let hashInput = serialized
-    for (const { sentinel, blob, hashValue } of secretSubs) {
-      const escapedSentinel = JSON.stringify(sentinel).slice(1, -1)
-      payload = payload.replace(escapedSentinel, () => JSON.stringify(blob).slice(1, -1))
-      hashInput = hashInput.replace(escapedSentinel, () => JSON.stringify(hashValue).slice(1, -1))
-    }
-    const stateHash = createHash('sha1')
-      .update(protectedStorageDegraded ? 'safeStorage-degraded\0' : '')
-      .update(hashInput)
-      .digest('hex')
+    // Why: PERF-08 — single forward pass substitutes every sentinel into the
+    // payload and assembles the hash input side by side (was 2 full-string
+    // replacements per secret plus a separate hash-input copy).
+    const { payload, stateHash } = substituteSecretSentinels({
+      serialized,
+      secretSubs,
+      protectedStorageDegraded
+    })
     return { payload, stateHash, protectedSecretUpdates }
   }
 
