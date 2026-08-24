@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- Why: persistence keeps schema defaults, migration, and load/save/flush in one file so the storage contract reviews as a unit. */
-import { substituteSecretSentinels } from './state-secret-substitution'
+import { splitSerializedAtSentinels, type SecretSubstitution } from './state-secret-substitution'
+import {
+  createSerializeSplitClient,
+  resolveStateSerializeWorkerPath
+} from './state-serialize-split-client'
 import {
   readFileSync,
   writeFileSync,
@@ -19,7 +23,8 @@ import {
 } from '../../durable-file-write'
 import { dirname } from 'node:path'
 import { homedir } from 'node:os'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { Worker } from 'node:worker_threads'
 import type {
   Automation,
   AutomationCreateInput,
@@ -562,6 +567,38 @@ export class Store {
   private uiChangeListeners = new Set<(ui: PersistedState['ui']) => void>()
 
   constructor(options: StoreOptions = {}) {
+    // Why: PERF-08 — offload the multi-MB sentinel scan; any failure falls back to sync inside buildStateToSave.
+    this.serializeSplitClient = createSerializeSplitClient(
+      {
+        resolveWorkerPath: () => {
+          try {
+            const electron = require('electron') as {
+              app?: { getAppPath(): string; isPackaged: boolean }
+            }
+            const electronApp = electron.app
+            if (!electronApp) {
+              return null
+            }
+            return resolveStateSerializeWorkerPath(electronApp.getAppPath(), electronApp.isPackaged)
+          } catch {
+            return null
+          }
+        },
+        spawnWorker: (workerPath) => {
+          try {
+            const worker = new Worker(workerPath)
+            return {
+              post: (request) => worker.postMessage(request),
+              terminate: () => void worker.terminate(),
+              onResult: (handler) => worker.on('message', handler)
+            }
+          } catch {
+            return null
+          }
+        }
+      },
+      { timeoutMs: 1_500 }
+    )
     // Why: profile switching yields multiple state paths; capture per Store so late async writes can't follow a global path.
     this.dataFile = options.dataFile ?? getDataFile()
     this.staleTempCleanup = removeStaleDurableWriteTempFiles(this.dataFile, {
@@ -1802,10 +1839,22 @@ export class Store {
   }
 
   // Why: build payload synchronously so hash and bytes reflect one state tick. A degraded prefix makes the first healthy retry durable even when plaintext state is unchanged.
-  private buildStateToSave(): {
-    payload: string
-    stateHash: string
+  // Why: PERF-08 — lazily created; null when Electron app path is unavailable (tests).
+  private serializeSplitClient: {
+    split: (
+      serialized: string,
+      escapedSentinels: readonly string[]
+    ) => Promise<{
+      segments: string[]
+      starts: number[]
+    }>
+  } | null = null
+
+  private buildSerializedStateWithSecrets(): {
+    serialized: string
+    secretSubs: SecretSubstitution[]
     protectedSecretUpdates: ProtectedSecretRetentionUpdate[]
+    protectedStorageDegraded: boolean
   } {
     // Why sentinels (not a blob/key string match): the substitution must be
     // position-exact. A plain search for the ciphertext — or even for a
@@ -1877,18 +1926,94 @@ export class Store {
         )
       }
     }
-    // Why compact: ~20% fewer bytes and less serialize time; all readers JSON.parse so formatting is irrelevant.
-    // One full-state stringify; secret slots currently hold sentinels.
     const serialized = JSON.stringify(stateToSave)
-    // Why: PERF-08 — single forward pass substitutes every sentinel into the
-    // payload and assembles the hash input side by side (was 2 full-string
-    // replacements per secret plus a separate hash-input copy).
-    const { payload, stateHash } = substituteSecretSentinels({
-      serialized,
-      secretSubs,
-      protectedStorageDegraded
-    })
-    return { payload, stateHash, protectedSecretUpdates }
+    return { serialized, secretSubs, protectedStorageDegraded, protectedSecretUpdates }
+  }
+
+  private finalizeBuiltState(
+    built: {
+      serialized: string
+      secretSubs: SecretSubstitution[]
+      protectedStorageDegraded: boolean
+    },
+    segments: string[]
+  ): { payload: string; stateHash: string } {
+    // Why: assemble both outputs from the shared split — payload embeds the
+    // ciphertext blobs, hash input the normalized guard values.
+    const payloadBuilder: string[] = []
+    const hashBuilder: string[] = []
+    for (let index = 0; index < segments.length; index += 1) {
+      payloadBuilder.push(segments[index])
+      hashBuilder.push(segments[index])
+      const sub = built.secretSubs[index]
+      if (sub === undefined) {
+        continue
+      }
+      payloadBuilder.push(JSON.stringify(sub.blob).slice(1, -1))
+      hashBuilder.push(JSON.stringify(sub.hashValue).slice(1, -1))
+    }
+    const payload = payloadBuilder.join('')
+    const stateHash = createHash('sha1')
+      .update(built.protectedStorageDegraded ? 'safeStorage-degraded\0' : '')
+      .update(hashBuilder.join(''))
+      .digest('hex')
+    return { payload, stateHash }
+  }
+
+  private async buildStateToSave(
+    options: {
+      offloadSplit?: (
+        serialized: string,
+        sentinels: readonly string[]
+      ) => Promise<{ segments: string[] }>
+    } = {}
+  ): Promise<{
+    payload: string
+    stateHash: string
+    protectedSecretUpdates: ProtectedSecretRetentionUpdate[]
+  }> {
+    const built = this.buildSerializedStateWithSecrets()
+    const escapedSentinels = built.secretSubs.map((sub) =>
+      JSON.stringify(sub.sentinel).slice(1, -1)
+    )
+    if (options.offloadSplit) {
+      try {
+        const { segments } = await options.offloadSplit(built.serialized, escapedSentinels)
+        const finalized = this.finalizeBuiltState(built, segments)
+        return {
+          payload: finalized.payload,
+          stateHash: finalized.stateHash,
+          protectedSecretUpdates: built.protectedSecretUpdates
+        }
+      } catch {
+        // Why: any worker failure (spawn/timeout/error) falls back to the identical sync split below.
+      }
+    }
+    const { segments } = splitSerializedAtSentinels(built.serialized, escapedSentinels)
+    const finalized = this.finalizeBuiltState(built, segments)
+    return {
+      payload: finalized.payload,
+      stateHash: finalized.stateHash,
+      protectedSecretUpdates: built.protectedSecretUpdates
+    }
+  }
+
+  private buildStateToSaveSync(): {
+    payload: string
+    stateHash: string
+    protectedSecretUpdates: ProtectedSecretRetentionUpdate[]
+  } {
+    const built = this.buildSerializedStateWithSecrets()
+    const escapedSentinels = built.secretSubs.map((sub) =>
+      JSON.stringify(sub.sentinel).slice(1, -1)
+    )
+    const { segments } = splitSerializedAtSentinels(built.serialized, escapedSentinels)
+    const finalized = this.finalizeBuiltState(built, segments)
+    return {
+      payload: finalized.payload,
+      stateHash: finalized.stateHash,
+      protectedSecretUpdates: built.protectedSecretUpdates
+    }
   }
 
   // Why: async writes avoid blocking the main Electron thread on every debounced save.
@@ -1904,7 +2029,12 @@ export class Store {
       return
     }
     this.saveRequestsSinceLastPersist = 0
-    const { payload, stateHash, protectedSecretUpdates } = this.buildStateToSave()
+    const splitClient = this.serializeSplitClient
+    const { payload, stateHash, protectedSecretUpdates } = await this.buildStateToSave({
+      offloadSplit: splitClient
+        ? (serialized, sentinels) => splitClient.split(serialized, sentinels)
+        : undefined
+    })
     // Why: don't rewrite a byte-identical multi-MB file when state nets out to already-persisted.
     if (stateHash === this.lastWrittenStateHash) {
       this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
@@ -1978,7 +2108,7 @@ export class Store {
     // thread outside shutdown; when it stalls, every queued IPC stalls with it. The
     // breakdown separates CPU stringify from durable-write fsync from backup rotation.
     const flushStartedAtMs = Date.now()
-    const { payload, stateHash, protectedSecretUpdates } = this.buildStateToSave()
+    const { payload, stateHash, protectedSecretUpdates } = this.buildStateToSaveSync()
     const buildMs = Date.now() - flushStartedAtMs
     // Why: matching hash means the file already holds this state; force overrides when an async rename may be racing past the gen check.
     if (!opts.force && stateHash === this.lastWrittenStateHash) {

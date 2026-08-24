@@ -32,54 +32,62 @@ function escapeForEmbedding(value: string): string {
   return JSON.stringify(value).slice(1, -1)
 }
 
+export type SerializedSplit = {
+  /** segments.length === secretSubs.length + 1 */
+  segments: string[]
+  /** Source index of each sentinel occurrence, in submission order. */
+  starts: number[]
+}
+
+/** Single forward scan locating every escaped sentinel. No secret material
+ *  crosses this boundary — safe to run inside a worker_threads entry. */
+export function splitSerializedAtSentinels(
+  serialized: string,
+  escapedSentinels: readonly string[]
+): SerializedSplit {
+  const segments: string[] = []
+  const starts: number[] = []
+  let cursor = 0
+  let searchFrom = 0
+  for (const escapedSentinel of escapedSentinels) {
+    const index = serialized.indexOf(escapedSentinel, searchFrom)
+    if (index === -1) {
+      throw new Error(
+        `[persistence] secret sentinel not found during substitution (${escapedSentinel.slice(0, 24)}…)!`
+      )
+    }
+    segments.push(serialized.slice(cursor, index))
+    starts.push(index)
+    cursor = index + escapedSentinel.length
+    searchFrom = index + escapedSentinel.length
+  }
+  segments.push(serialized.slice(cursor))
+  return { segments, starts }
+}
+
 export function substituteSecretSentinels({
   serialized,
   secretSubs,
   protectedStorageDegraded
 }: SubstituteSecretSentinelsArgs): SubstitutedState {
-  // Why: each sentinel is a fresh UUID minted immediately before serialization,
-  // so it occurs exactly once; the walk stays strictly forward per secret.
-  const located: {
-    escapedSentinelLength: number
-    index: number
-    blobEmbedded: string
-    hashValueEmbedded: string
-  }[] = []
-  let searchFrom = 0
-  for (const sub of secretSubs) {
-    const escapedSentinel = escapeForEmbedding(sub.sentinel)
-    const index = serialized.indexOf(escapedSentinel, searchFrom)
-    if (index === -1) {
-      throw new Error(
-        `[persistence] secret sentinel not found during substitution (${sub.sentinel.slice(0, 24)}…)`
-      )
-    }
-    located.push({
-      escapedSentinelLength: escapedSentinel.length,
-      index,
-      blobEmbedded: JSON.stringify(sub.blob).slice(1, -1),
-      hashValueEmbedded: JSON.stringify(sub.hashValue).slice(1, -1)
-    })
-    searchFrom = index + escapedSentinel.length
-  }
+  const escaped = secretSubs.map((sub) => escapeForEmbedding(sub.sentinel))
+  const { segments } = splitSerializedAtSentinels(serialized, escaped)
 
-  // Why: build both outputs in one walk — every sentinel position splits the
-  // string once for the payload (ciphertext) and once for the hash input
-  // (normalized guard value). Function-form embedding keeps `$` inert.
+  // Why: assemble both outputs from the shared split — payload embeds the
+  // ciphertext blobs, hash input the normalized guard values; function-form
+  // embedding keeps `$` inert exactly like the legacy replace loop.
   const payloadBuilder: string[] = []
   const hashBuilder: string[] = []
-  let writeCursor = 0
-  for (const hit of located) {
-    const segmentEnd = hit.index
-    payloadBuilder.push(serialized.slice(writeCursor, segmentEnd))
-    hashBuilder.push(serialized.slice(writeCursor, segmentEnd))
-    writeCursor = segmentEnd + hit.escapedSentinelLength
-    payloadBuilder.push(hit.blobEmbedded)
-    hashBuilder.push(hit.hashValueEmbedded)
+  for (let index = 0; index < segments.length; index += 1) {
+    payloadBuilder.push(segments[index])
+    hashBuilder.push(segments[index])
+    const sub = secretSubs[index]
+    if (sub === undefined) {
+      continue
+    }
+    payloadBuilder.push(JSON.stringify(sub.blob).slice(1, -1))
+    hashBuilder.push(JSON.stringify(sub.hashValue).slice(1, -1))
   }
-  payloadBuilder.push(serialized.slice(writeCursor))
-  hashBuilder.push(serialized.slice(writeCursor))
-
   const stateHash = createHash('sha1')
     .update(protectedStorageDegraded ? 'safeStorage-degraded\0' : '')
     .update(hashBuilder.join(''))

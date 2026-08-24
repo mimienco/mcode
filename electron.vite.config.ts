@@ -239,6 +239,11 @@ export const electronViteConfig: UserConfig = {
           'main-thread-hang-watchdog-entry': resolve(
             'src/main/hang-watchdog/main-thread-hang-watchdog-entry.ts'
           ),
+          // Why: PERF-08 — the sentinel scan over multi-MB serialized state
+          // runs off the main thread during debounced saves.
+          'persistence/state-serialize-worker-entry': resolve(
+            'src/main/persistence/loading-store/state-serialize-worker-entry.ts'
+          ),
           // Why: run under ELECTRON_RUN_AS_NODE while the caller blocks on
           // spawnSync — codex app-server trust grants need a live event loop
           // but must finish before a Codex pane launch proceeds.
