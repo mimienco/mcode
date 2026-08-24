@@ -152,6 +152,72 @@ function formatMiniMaxRelativeRefresh(updatedAt: number, now: number): string {
   return formatUiRelativeTime(-diffMs)
 }
 
+type AccountDraftTextFieldProps = {
+  value: string
+  onSave: (next: string) => void
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>
+
+/**
+ * Why: PERF-11 — persist on blur/Enter instead of every keystroke; each IPC
+ * round-trip serializes the whole settings object. Blur is the single commit
+ * owner; Enter only blurs (same seam as AgentsPane draft inputs).
+ */
+export function AccountDraftTextField({
+  value,
+  onSave,
+  ...inputProps
+}: AccountDraftTextFieldProps): React.JSX.Element {
+  const [draft, setDraft] = useState(value)
+  const [focused, setFocused] = useState(false)
+  // Why: cookies are whitespace-sensitive — compare and save without trimming.
+  // The ref mirror lets blur/Escape commit the latest draft synchronously,
+  // before React re-renders with restored state.
+  const draftRef = useRef(value)
+  const lastCommittedRef = useRef(value)
+  useEffect(() => {
+    lastCommittedRef.current = value
+    if (!focused) {
+      draftRef.current = value
+      setDraft(value)
+    }
+  }, [value, focused])
+
+  const commit = (): void => {
+    if (draftRef.current === lastCommittedRef.current) {
+      return
+    }
+    lastCommittedRef.current = draftRef.current
+    onSave(draftRef.current)
+  }
+
+  const updateDraft = (next: string): void => {
+    draftRef.current = next
+    setDraft(next)
+  }
+
+  return (
+    <Input
+      {...inputProps}
+      value={draft}
+      onChange={(e) => updateDraft(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false)
+        commit()
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.currentTarget.blur()
+        }
+        if (e.key === 'Escape') {
+          updateDraft(lastCommittedRef.current)
+          e.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 function MiniMaxCookieHelpPopover(): React.JSX.Element {
   const steps = [
     translate(
@@ -1644,12 +1710,12 @@ export function AccountsPane({
             )}
           </Label>
           <div className="flex gap-2">
-            <Input
+            <AccountDraftTextField
               type="password"
               value={settings.opencodeSessionCookie}
-              onChange={(e) => {
+              onSave={(next) => {
                 recordOpenCodeSettingEdit('cookie')
-                updateSettings({ opencodeSessionCookie: e.target.value })
+                updateSettings({ opencodeSessionCookie: next })
               }}
               placeholder={translate(
                 'auto.components.settings.AccountsPane.a7e38affcd',
@@ -1710,12 +1776,12 @@ export function AccountsPane({
             {translate('auto.components.settings.AccountsPane.dbdb0b0bd8', 'Workspace ID override')}
           </Label>
           <div className="flex gap-2">
-            <Input
+            <AccountDraftTextField
               type="text"
               value={settings.opencodeWorkspaceId}
-              onChange={(e) => {
+              onSave={(next) => {
                 recordOpenCodeSettingEdit('workspaceId')
-                updateSettings({ opencodeWorkspaceId: e.target.value })
+                updateSettings({ opencodeWorkspaceId: next })
               }}
               placeholder={translate(
                 'auto.components.settings.AccountsPane.a122332371',
@@ -1943,10 +2009,10 @@ export function AccountsPane({
             <Label>
               {translate('auto.components.settings.AccountsPane.bf160bb6c0', 'Group ID override')}
             </Label>
-            <Input
+            <AccountDraftTextField
               type="text"
               value={settings.minimaxGroupId}
-              onChange={(e) => updateSettings({ minimaxGroupId: e.target.value })}
+              onSave={(next) => updateSettings({ minimaxGroupId: next })}
               placeholder={translate(
                 'auto.components.settings.AccountsPane.0747d6391a',
                 'Use group ID from cookie'
@@ -1971,10 +2037,10 @@ export function AccountsPane({
             <Label>
               {translate('auto.components.settings.AccountsPane.4ff2af7524', 'Usage model names')}
             </Label>
-            <Input
+            <AccountDraftTextField
               type="text"
               value={settings.minimaxUsageModels}
-              onChange={(e) => updateSettings({ minimaxUsageModels: e.target.value })}
+              onSave={(next) => updateSettings({ minimaxUsageModels: next })}
               placeholder={translate('auto.components.settings.AccountsPane.3c92b0d31c', 'general')}
               spellCheck={false}
               className="text-xs"
