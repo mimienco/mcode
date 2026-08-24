@@ -14,6 +14,7 @@ import type { NativeChatLiveSession } from './use-native-chat-live-session'
 import { orderNativeChatMessages } from './native-chat-message-grouping'
 import { stripNoiseMessages } from './native-chat-noise'
 import { foldToolMessages, splitNativeChatBlocks } from './native-chat-tool-fold'
+import { ShowEarlierInWindowButton, useWindowedTranscript } from './use-windowed-transcript'
 import { isNearBottom, shouldShowJumpToLatest, type ScrollGeometry } from './native-chat-autoscroll'
 import { splitNativeChatSessionContext } from './native-chat-context-disclosure'
 import { NativeChatSessionContextDisclosure } from './NativeChatSessionContextDisclosure'
@@ -301,6 +302,11 @@ export function NativeChatMessageList({
     () => foldToolMessages(orderNativeChatMessages(stripNoiseMessages(session.messages))),
     [session.messages]
   )
+  // Why: PERF-07 — bounded tail window keeps per-frame DOM diffs small.
+  const { visibleMessages, hiddenCount, showEarlierInWindow } = useWindowedTranscript(
+    messages,
+    scrollRef
+  )
   const showTypingIndicator =
     isWorking && !messages.some((message) => message.id === NATIVE_CHAT_STREAMING_ID)
 
@@ -432,18 +438,24 @@ export function NativeChatMessageList({
               </button>
             </div>
           ) : null}
-          {messages.map((message, index) => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              previousRole={messages[index - 1]?.role}
-              expandSignal={expandSignal}
-              onScrollMessageToTop={scrollMessageToTop}
-              onLinkClick={onLinkClick}
-              allowFileUriLinks={allowFileUriLinks}
-              deliveryFailed={failedDeliveryMessageIds?.has(message.id) === true}
-            />
-          ))}
+          <ShowEarlierInWindowButton count={hiddenCount} onClick={showEarlierInWindow} />
+          {visibleMessages.map((message, index) => {
+            const absoluteIndex = messages.length - visibleMessages.length + index
+            return (
+              <MessageRow
+                key={message.id}
+                message={message}
+                previousRole={
+                  index > 0 ? visibleMessages[index - 1].role : messages[absoluteIndex - 1]?.role
+                }
+                expandSignal={expandSignal}
+                onScrollMessageToTop={scrollMessageToTop}
+                onLinkClick={onLinkClick}
+                allowFileUriLinks={allowFileUriLinks}
+                deliveryFailed={failedDeliveryMessageIds?.has(message.id) === true}
+              />
+            )
+          })}
           {showTypingIndicator ? <TypingIndicatorRow /> : null}
         </div>
       </div>
