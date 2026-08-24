@@ -144,8 +144,15 @@ export function loadWindowsTerminalCapabilities(
     return Promise.resolve(cached.capabilities)
   }
   const pendingCapabilities = pendingCapabilitiesByOwnerKey.get(ownerKey)
-  if (pendingCapabilities && !options.force) {
-    return pendingCapabilities
+  if (pendingCapabilities) {
+    if (!options.force) {
+      return pendingCapabilities
+    }
+    // Why: PERF-10 — force joins the identical in-flight read and schedules at
+    // most one revalidation afterwards instead of launching a duplicate probe.
+    return pendingCapabilities.then(() =>
+      loadWindowsTerminalCapabilities({ ...options, now: Date.now() })
+    )
   }
 
   // Why: Settings, status bar, and paired web tab bars need one shared answer.
