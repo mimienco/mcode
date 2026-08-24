@@ -4251,6 +4251,18 @@ export class MCodeRuntimeService {
     this.scheduleRestoredMessageRepoints()
   }
 
+  /** Why: PERF-02 — cheap inventory probe so renderer startup recovery can
+   * skip entirely when no legacy candidates exist. Unclear inventory (error)
+   * reports candidates so recovery is attempted, never silently skipped. */
+  hasLegacyWorkerTerminalRecoveryCandidates(): boolean {
+    try {
+      return this.getLegacyWorkerTerminalRecoveryPlan().candidates.length > 0
+    } catch (error) {
+      console.warn('[orchestration] legacy worker candidate probe failed', error)
+      return true
+    }
+  }
+
   private getLegacyWorkerTerminalRecoveryPlan(): LegacyWorkerTerminalRecoveryPlan {
     try {
       return planLegacyWorkerTerminalRecovery(
@@ -37234,7 +37246,9 @@ export class MCodeRuntimeService {
           'linear_invalid_parent',
           'The reply target is not a comment on this issue.',
           {
-            nextSteps: ['Run `mcode linear issue <id> --comments --json` to list valid comment ids.']
+            nextSteps: [
+              'Run `mcode linear issue <id> --comments --json` to list valid comment ids.'
+            ]
           }
         )
       }

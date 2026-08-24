@@ -142,6 +142,7 @@ import { registerFilesystemDownloadFolderHandlers } from './filesystem-download-
 import { getWorktreeSharedLinkPaths } from '../git/worktree-shared-directories'
 import { createSenderScopedRequestCancellations } from './sender-scoped-request-cancellation'
 import { QuickOpenPathRanker, type QuickOpenMatchMode } from '../../shared/quick-open-path-search'
+import { searchQuickOpenFilePaths } from './filesystem-search-file-paths'
 import {
   applyGitStatusUpstreamRefWatchRequest,
   type GitStatusUpstreamRefWatchRequest
@@ -510,6 +511,17 @@ export function registerFilesystemHandlers(
 ): void {
   const activeTextSearches = new Map<string, ChildProcess>()
   const downloadSessions = new Map<string, DownloadSession>()
+  // Why: PERF-14 — one destroyed-listener per sender, not one per transfer.
+  const senderDestroyedCleanups = new Map<number, () => void>()
+
+  function detachSenderDestroyedCleanup(senderId: number): void {
+    const detach = senderDestroyedCleanups.get(senderId)
+    if (!detach) {
+      return
+    }
+    senderDestroyedCleanups.delete(senderId)
+    detach()
+  }
 
   async function closeDownloadSession(
     transferId: string,
@@ -520,6 +532,10 @@ export function registerFilesystemHandlers(
       return null
     }
     downloadSessions.delete(transferId)
+    // Why: the last session for a sender releases its destroyed-listener slot.
+    if (![...downloadSessions.values()].some((s) => s.senderId === session.senderId)) {
+      detachSenderDestroyedCleanup(session.senderId)
+    }
     clearTimeout(session.cleanupTimer)
     await session.handle.close().catch(() => {})
     if (cleanupTemp) {
@@ -763,7 +779,13 @@ export function registerFilesystemHandlers(
           cleanupTimer,
           senderId
         })
-        event.sender.once?.('destroyed', () => cleanupDownloadSessionsForSender(senderId))
+        if (!senderDestroyedCleanups.has(senderId) && typeof event.sender.once === 'function') {
+          const onSenderDestroyed = (): void => cleanupDownloadSessionsForSender(senderId)
+          event.sender.once('destroyed', onSenderDestroyed)
+          senderDestroyedCleanups.set(senderId, () => {
+            event.sender.removeListener?.('destroyed', onSenderDestroyed)
+          })
+        }
         return { canceled: false, transferId, destinationPath }
       } catch (error) {
         await cleanupLocalTransferPath(tempPath)
@@ -1169,7 +1191,24 @@ export function registerFilesystemHandlers(
             signal: controller?.signal
           })
         }
-        return await listQuickOpenFiles(args.rootPath, store, args.excludePaths, controller?.signal)
+        if (args.searchQuery !== undefined) {
+          const search = await searchQuickOpenFilePaths(args.rootPath, store, {
+            query: args.searchQuery,
+            // Why: match the SSH legacy floor so a missing limit still bounds the scan.
+            limit: args.maxResults ?? QUICK_OPEN_SSH_LEGACY_RESULT_LIMIT,
+            ...(args.searchMatchMode === undefined ? {} : { matchMode: args.searchMatchMode }),
+            excludePaths: args.excludePaths,
+            signal: controller?.signal
+          })
+          return search.paths
+        }
+        return await listQuickOpenFiles(
+          args.rootPath,
+          store,
+          args.excludePaths,
+          controller?.signal,
+          args.maxResults
+        )
       } catch (error) {
         // Why: a superseded scan's rejection is normal control flow (a newer
         // request owns the UI now) — returning [] keeps Electron from logging it
