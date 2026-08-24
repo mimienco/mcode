@@ -22,6 +22,10 @@ import {
 } from '../../../../shared/runtime-environments'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import {
+  RUNTIME_STATUS_PROBE_PARALLELISM,
+  runWithPool
+} from '../../store/slices/runtime-status-probe-pool'
+import {
   describeRuntimeCompatBlock,
   evaluateRuntimeCompat,
   type RuntimeCompatVerdict
@@ -89,6 +93,23 @@ export function evaluateHostDetails(status: RuntimeStatus): RuntimeCompatVerdict
     serverMinCompatibleClientProtocolVersion:
       status.minCompatibleRuntimeClientVersion ?? status.minCompatibleMobileVersion
   })
+}
+
+// Why: PERF-09 — matches the settings/keybindings query gates; statuses newer
+// than this are served from the store instead of re-probed on section return.
+const RUNTIME_STATUS_FRESH_MS = 30_000
+
+function seedDetailsFromStore(environmentId: string): RuntimeHostDetails | null {
+  const stored = useAppStore.getState().runtimeStatusByEnvironmentId.get(environmentId)
+  if (!stored || stored.status === null) {
+    return null
+  }
+  return {
+    status: 'ready',
+    runtimeStatus: stored.status,
+    compatibility: evaluateHostDetails(stored.status),
+    error: null
+  }
 }
 
 export function getHostDetailsSummary(details: RuntimeHostDetails | undefined): string {
@@ -313,7 +334,10 @@ export function RuntimeEnvironmentsPane({
     : getWebRuntimeEnvironmentsSearchEntry()
 
   const loadEnvironments = useCallback(
-    async (verified?: { environmentId: string; runtimeStatus: RuntimeStatus }): Promise<void> => {
+    async (
+      verified?: { environmentId: string; runtimeStatus: RuntimeStatus },
+      options?: { force?: boolean }
+    ): Promise<void> => {
       if (mountedRef.current) {
         setIsLoading(true)
       }
@@ -342,7 +366,10 @@ export function RuntimeEnvironmentsPane({
                       compatibility: evaluateHostDetails(verified.runtimeStatus),
                       error: null
                     }
-                  : (current[environment.id] ?? {
+                  : (current[environment.id] ??
+                    // Why: PERF-09 — a fresh store status seeds 'ready' so a
+                    // section return neither flashes empty nor re-probes.
+                    seedDetailsFromStore(environment.id) ?? {
                       status: 'loading',
                       runtimeStatus: null,
                       compatibility: null,
@@ -352,56 +379,67 @@ export function RuntimeEnvironmentsPane({
             return next
           })
         }
-        await Promise.allSettled(
-          visibleEnvironments
-            .filter((environment) => environment.id !== verified?.environmentId)
-            .map(async (environment) => {
-              try {
-                const response = await window.api.runtimeEnvironments.getStatus({
-                  selector: environment.id,
-                  timeoutMs: 10_000
-                })
-                const runtimeStatus = unwrapRuntimeRpcResult<RuntimeStatus>(response)
-                // Why: feed the live status into the store so sidebar host pickers
-                // reflect manual refreshes, not just the settings pane.
-                useAppStore.getState().setRuntimeEnvironmentStatus(environment.id, {
-                  status: runtimeStatus,
-                  checkedAt: Date.now()
-                })
-                if (!mountedRef.current) {
-                  return
-                }
-                setDetailsByEnvironmentId((current) => ({
-                  ...current,
-                  [environment.id]: {
-                    status: 'ready',
-                    runtimeStatus,
-                    compatibility: evaluateHostDetails(runtimeStatus),
-                    error: null
-                  }
-                }))
-              } catch (error) {
-                // Why: record the failed probe (null status) so the sidebar can
-                // distinguish unreachable from never-checked.
-                useAppStore.getState().setRuntimeEnvironmentStatus(environment.id, {
-                  status: null,
-                  checkedAt: Date.now()
-                })
-                if (!mountedRef.current) {
-                  return
-                }
-                setDetailsByEnvironmentId((current) => ({
-                  ...current,
-                  [environment.id]: {
-                    status: 'error',
-                    runtimeStatus: null,
-                    compatibility: null,
-                    error: error instanceof Error ? error.message : String(error)
-                  }
-                }))
-              }
+        const statuses = useAppStore.getState().runtimeStatusByEnvironmentId
+        const probeIds = visibleEnvironments
+          .filter((environment) => {
+            if (environment.id === verified?.environmentId) {
+              return false
+            }
+            if (options?.force) {
+              return true
+            }
+            const stored = statuses.get(environment.id)
+            // Why: PERF-09 — skip servers whose status was checked moments ago;
+            // remounts and catalog refreshes must not re-probe fresh hosts.
+            return !stored || Date.now() - stored.checkedAt >= RUNTIME_STATUS_FRESH_MS
+          })
+          .map((environment) => environment.id)
+        await runWithPool(probeIds, RUNTIME_STATUS_PROBE_PARALLELISM, async (id) => {
+          try {
+            const response = await window.api.runtimeEnvironments.getStatus({
+              selector: id,
+              timeoutMs: 10_000
             })
-        )
+            const runtimeStatus = unwrapRuntimeRpcResult<RuntimeStatus>(response)
+            // Why: feed the live status into the store so sidebar host pickers
+            // reflect manual refreshes, not just the settings pane.
+            useAppStore.getState().setRuntimeEnvironmentStatus(id, {
+              status: runtimeStatus,
+              checkedAt: Date.now()
+            })
+            if (!mountedRef.current) {
+              return
+            }
+            setDetailsByEnvironmentId((current) => ({
+              ...current,
+              [id]: {
+                status: 'ready',
+                runtimeStatus,
+                compatibility: evaluateHostDetails(runtimeStatus),
+                error: null
+              }
+            }))
+          } catch (error) {
+            // Why: record the failed probe (null status) so the sidebar can
+            // distinguish unreachable from never-checked.
+            useAppStore.getState().setRuntimeEnvironmentStatus(id, {
+              status: null,
+              checkedAt: Date.now()
+            })
+            if (!mountedRef.current) {
+              return
+            }
+            setDetailsByEnvironmentId((current) => ({
+              ...current,
+              [id]: {
+                status: 'error',
+                runtimeStatus: null,
+                compatibility: null,
+                error: error instanceof Error ? error.message : String(error)
+              }
+            }))
+          }
+        })
       } catch (error) {
         if (mountedRef.current) {
           toast.error(
@@ -427,7 +465,15 @@ export function RuntimeEnvironmentsPane({
   }, [loadEnvironments])
 
   const environmentIdsKey = environments.map((environment) => environment.id).join('\n')
+  // Why: PERF-09 — the initial empty key must not fire a refresh; otherwise the
+  // post-catalog run duplicates it (the duplicate is silently dropped by the
+  // checking guard, leaving no follow-up).
+  const consumedEnvironmentIdsKeyRef = useRef<string | null>(null)
   useEffect(() => {
+    if (!environmentIdsKey || consumedEnvironmentIdsKeyRef.current === environmentIdsKey) {
+      return
+    }
+    consumedEnvironmentIdsKeyRef.current = environmentIdsKey
     void refreshRemoteServerUpdates()
   }, [environmentIdsKey, refreshRemoteServerUpdates])
   useEffect(() => {
@@ -1227,7 +1273,7 @@ export function RuntimeEnvironmentsPane({
                     'auto.components.settings.RuntimeEnvironmentsPane.6ce4664003',
                     'Refresh servers'
                   )}
-                  onClick={() => void loadEnvironments()}
+                  onClick={() => void loadEnvironments(undefined, { force: true })}
                   disabled={isLoading || isBusy}
                 >
                   {isLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}

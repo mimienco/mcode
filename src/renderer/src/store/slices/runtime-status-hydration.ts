@@ -1,4 +1,5 @@
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
+import { RUNTIME_STATUS_PROBE_PARALLELISM, runWithPool } from './runtime-status-probe-pool'
 
 /** Matches the renderer's other catalog-style cache TTLs (checks, work items, Jira). */
 export const RUNTIME_CATALOG_STALE_MS = 60_000
@@ -91,9 +92,9 @@ export function createRuntimeStatusHydration({
         }
         expectedRevisions = environmentRevisions(environments)
         publishEnvironments(environments)
-        await Promise.allSettled(
-          environments.map((environment) => refreshEnvironmentStatus(environment.id))
-        )
+        await runWithPool(environments, RUNTIME_STATUS_PROBE_PARALLELISM, async (environment) => {
+          await refreshEnvironmentStatus(environment.id)
+        })
       } while (
         rerunRequested ||
         (expectedRevisions && !revisionsMatch(getCurrentEnvironments(), expectedRevisions))
