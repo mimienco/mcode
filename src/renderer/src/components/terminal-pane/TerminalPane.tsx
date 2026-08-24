@@ -253,6 +253,7 @@ import {
   resyncTerminalFocusForWindowFocus,
   setRegularTerminalInputFocusAttribute
 } from './regular-terminal-focus-ownership'
+import { windowTerminalFocusCoordinator } from './window-terminal-focus-coordinator'
 import { useTerminalQuickCommandHosts } from '@/hooks/use-terminal-quick-command-hosts'
 import { refreshTerminalImeInputContext } from './terminal-ime-input-context-refresh'
 
@@ -1889,15 +1890,17 @@ function TerminalPane(
     }
     container.addEventListener('focusin', onFocusIn)
     container.addEventListener('focusout', onFocusOut)
-    document.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('blur', onWindowBlur)
-    window.addEventListener('focus', onWindowFocus)
+    // Why: PERF-12 — one shared global listener set fans events out to every
+    // registered pane instead of pinning three globals per pane instance.
+    const releaseFocusCoordinator = windowTerminalFocusCoordinator.acquire({
+      onPointerDown,
+      onWindowBlur: onWindowBlur,
+      onWindowFocus: onWindowFocus
+    })
     return () => {
+      releaseFocusCoordinator()
       container.removeEventListener('focusin', onFocusIn)
       container.removeEventListener('focusout', onFocusOut)
-      document.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('blur', onWindowBlur)
-      window.removeEventListener('focus', onWindowFocus)
       // Why: the helper textarea may be gone before cleanup reads document.activeElement, so clear by this pane's mirrored ownership.
       if (ownsRegularTerminalFocus) {
         syncFocused(false)
