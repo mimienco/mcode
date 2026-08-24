@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
@@ -17,6 +17,10 @@ import {
   TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT,
   TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT
 } from '../shared/terminal-scrollback-limits'
+import {
+  decodeTrailingUtf8,
+  terminalScrollbackSnapshotCache as snapshotPayloadCache
+} from './terminal-scrollback-snapshot-cache'
 
 const SNAPSHOT_DIR_NAME = 'terminal-scrollback'
 const REF_PREFIX = 'v1'
@@ -89,11 +93,21 @@ function readTrailingUtf8(path: string, maxBytes: number): string {
   } finally {
     closeSync(fd)
   }
-  let start = 0
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) {
-    start++
+  return decodeTrailingUtf8(bytes)
+}
+
+// Cache keys resolve to the primary path so writer/reader/deleter agree on one entry per ref.
+function snapshotCacheKey(ref: string, storage?: TerminalScrollbackSnapshotStorage): string | null {
+  return snapshotPath(ref, getSnapshotRoot(storage))
+}
+
+// Derived at write time; equals exactly what readTrailingUtf8 returns for this file.
+function trailingReplayString(payloadBytes: Buffer): string {
+  const length = Math.min(payloadBytes.length, TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT)
+  if (length <= 0) {
+    return ''
   }
-  return bytes.subarray(start).toString('utf-8')
+  return decodeTrailingUtf8(payloadBytes.subarray(payloadBytes.length - length))
 }
 
 export function writeTerminalScrollbackSnapshotSync(args: {
@@ -125,6 +139,8 @@ export function writeTerminalScrollbackSnapshotSync(args: {
         rmSync(tmpPath, { force: true })
       }
     }
+    // Why write-through: the next reveal's synchronous hydrate must not re-read these bytes from disk.
+    snapshotPayloadCache.put(path, trailingReplayString(bytes))
     return ref
   } catch (err) {
     console.warn(
@@ -156,7 +172,7 @@ export async function writeTerminalScrollbackSnapshot(args: {
     const bytes = trailingUtf8Bytes(args.buffer, TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT)
     await writeFile(tmpPath, bytes, { mode: 0o600 })
     await rename(tmpPath, path)
-    renamed = true
+    snapshotPayloadCache.put(path, trailingReplayString(bytes))
     return ref
   } catch (err) {
     console.warn(
@@ -174,9 +190,18 @@ export function readTerminalScrollbackSnapshotSync(
   ref: string,
   storage?: TerminalScrollbackSnapshotStorage
 ): string | null {
+  const cacheKey = snapshotCacheKey(ref, storage)
+  const cached = cacheKey === null ? undefined : snapshotPayloadCache.get(cacheKey)
+  if (cached !== undefined) {
+    return cached
+  }
   for (const path of snapshotReadPaths(ref, storage)) {
     try {
-      return readTrailingUtf8(path, TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT)
+      const payload = readTrailingUtf8(path, TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT)
+      if (cacheKey) {
+        snapshotPayloadCache.put(cacheKey, payload)
+      }
+      return payload
     } catch {
       // Try the legacy/global fallback when a profile-local snapshot is absent.
     }
@@ -188,6 +213,11 @@ export function deleteTerminalScrollbackSnapshotSync(
   ref: string,
   storage?: TerminalScrollbackSnapshotStorage
 ): void {
+  const cacheKey = snapshotCacheKey(ref, storage)
+  if (cacheKey) {
+    // Why: a deleted ref must never be answered from memory, or purged sessions resurrect stale scrollback.
+    snapshotPayloadCache.invalidate(cacheKey)
+  }
   for (const path of snapshotReadPaths(ref, storage)) {
     try {
       rmSync(path, { force: true })
@@ -201,6 +231,10 @@ export async function deleteTerminalScrollbackSnapshot(
   ref: string,
   storage?: TerminalScrollbackSnapshotStorage
 ): Promise<void> {
+  const cacheKey = snapshotCacheKey(ref, storage)
+  if (cacheKey) {
+    snapshotPayloadCache.invalidate(cacheKey)
+  }
   await Promise.all(
     snapshotReadPaths(ref, storage).map((path) => rm(path, { force: true }).catch(() => {}))
   )
@@ -263,4 +297,35 @@ export function migrateWorkspaceSessionTerminalScrollbackSnapshots(
     return { session, changed: false }
   }
   return { session: { ...session, terminalLayoutsByTabId }, changed: true }
+}
+
+// Why: after a restart every persisted leaf carries a scrollback ref but the process-local
+// cache is cold, so the first reveal of each tab paid a synchronous disk read inside the
+// activation frame. Warming once from the freshly-loaded session moves those bytes onto
+// async fs before any pane mounts; misses simply fall back to today's disk-read behavior.
+export async function warmTerminalScrollbackSnapshotCache(
+  session: WorkspaceSessionState | undefined,
+  storage?: TerminalScrollbackSnapshotStorage
+): Promise<number> {
+  if (!session) {
+    return 0
+  }
+  let warmed = 0
+  for (const ref of collectTerminalScrollbackSnapshotRefs(session)) {
+    const cacheKey = snapshotCacheKey(ref, storage)
+    if (!cacheKey || snapshotPayloadCache.get(cacheKey) !== undefined) {
+      continue
+    }
+    for (const path of snapshotReadPaths(ref, storage)) {
+      try {
+        const bytes = await readFile(path)
+        snapshotPayloadCache.put(cacheKey, trailingReplayString(bytes))
+        warmed += 1
+        break
+      } catch {
+        // Missing or unreadable snapshot: hydrate falls through to its existing miss path.
+      }
+    }
+  }
+  return warmed
 }

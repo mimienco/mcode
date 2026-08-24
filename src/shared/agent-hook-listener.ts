@@ -4059,8 +4059,8 @@ function normalizePiCompatibleEvent(
   paneKey: string,
   hookPayload: Record<string, unknown>
 ): ParsedAgentStatusPayload | null {
-  if (agentType !== 'omp' && eventName === 'session_start') {
-    // Why: Pi's session_start fires on TUI open/resume; discard stale turn details, no working row before user activity.
+  if (eventName === 'session_start') {
+    // Why: Pi-compatible session_start fires on TUI open/resume; discard stale turn details, no working row before user activity.
     clearPaneTurnCacheState(state, paneKey)
     return null
   }
@@ -4593,7 +4593,7 @@ export function normalizeHookPayload(
   }
 
   const providerSessionOnly =
-    (source === 'pi' || source === 'prime-agent') &&
+    (source === 'pi' || source === 'omp' || source === 'prime-agent') &&
     eventName === 'session_start' &&
     providerSession !== null
   // Why: transcript session_start carries resume identity while idle; receivers discard the placeholder row.

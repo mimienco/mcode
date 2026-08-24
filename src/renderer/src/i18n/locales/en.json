@@ -182,6 +182,8 @@
       "e81217c1b7": "Hide App Name",
       "5096cbbc86": "MCode",
       "8b0b8eb54f": "Application menu",
+      "a27f8dd81a": "Hide sidebar",
+      "18d43bd86c": "Show sidebar",
       "caea5b51b9": "Restart now",
       "0a9e810705": "Changes won't be saved until restart. Your previous tabs are safe on disk.",
       "12e77cf12b": "Session restore failed",
@@ -205,7 +207,9 @@
       "064bd07810": "Go back",
       "ce37cf5279": "Toggle sidebar ({{value0}})",
       "e4b9e7dff7": "Toggle sidebar",
-      "pluginCommandFailed": "Could not run the plugin command."
+      "pluginCommandFailed": "Could not run the plugin command.",
+      "4c2e91fa07": "The sidebar hit an error.",
+      "9d7f3a2b81": "The rest of the app is still running. Retry to reload the sidebar."
     },
     "web": {
       "WebConnect": {
@@ -1335,6 +1339,7 @@
         "ec43b38ba7": "Starred on GitHub",
         "157bb5ecbb": "Open GitHub",
         "preflightDismiss": "Dismiss",
+        "headline": "Every agent. One bench.",
         "quickChatEmptyHint": "Start a chat now, or add a project when you need repository context.",
         "newChat": "New Chat",
         "newTarget": "New {{target}}",
@@ -3166,7 +3171,9 @@
             "ec2adf093e": "Launch {{value0}} in a new terminal",
             "465e432ef1": "Could not build launch command for {{value0}}.",
             "e518f544b1": "No agents detected",
-            "8dea9b5cdf": "No enabled agents"
+            "8dea9b5cdf": "No enabled agents",
+            "kimiCodeCliLabel": "Kimi Code CLI",
+            "installPageFailed": "Could not open the {{value0}} installation page."
           },
           "RecentTabSwitcher": {
             "329638ff6f": "Switch Tab",
@@ -5355,7 +5362,9 @@
           "failedNestWorkspace": "Failed to nest workspace",
           "sidebarRowMissing": "Target no longer exists",
           "failedUnnestWorkspace": "Failed to unnest workspace",
-          "quickChatEmptyHint": "Start a chat now. Add a project when you need repository context."
+          "quickChatEmptyHint": "Start a chat now. Add a project when you need repository context.",
+          "emptyHint": "Spin up your first agent workspace.",
+          "newWorkspace": "New workspace"
         },
         "WorktreeMetaDialog": {
           "3db0a2a593": "Cancel",
@@ -6259,7 +6268,13 @@
           "3f1bdf3cb4": "Environment text is too large to parse safely.",
           "codexSessionSource": "Codex home to import from",
           "codexSessionSourceInfo": "About importing Codex history",
-          "codexSessionSourceTooltip": "MCode runs Codex in an isolated home. Point this at your existing Codex home to import that session history. Empty uses ~/.codex."
+          "codexSessionSourceTooltip": "MCode runs Codex in an isolated home. Point this at your existing Codex home to import that session history. Empty uses ~/.codex.",
+          "agentPermissionsAsk": "Ask",
+          "agentPermissionsAutoEdits": "Auto-accept edits",
+          "agentPermissionsBypass": "Bypass",
+          "confirmBypassPermissionsTitle": "Bypass permissions for new sessions?",
+          "confirmBypassPermissions": "This removes provider approval prompts and sandbox restrictions where supported. Use it only in an externally isolated environment.",
+          "confirmBypassPermissionsAction": "Bypass permissions"
         },
         "AppIconSelector": {
           "d5a112dc9b": "Next icon",
@@ -11444,7 +11459,8 @@
             "3161c4e425": "folder",
             "e887fa4b2e": "Open in Terminal",
             "1d8e182c32": "View File",
-            "clipboardStagingUnavailable": "Could not copy the file because MCode's temporary storage is unavailable"
+            "clipboardStagingUnavailable": "Could not copy the file because MCode's temporary storage is unavailable",
+            "replace-current-tab": "Replace Current Tab"
           },
           "FileExplorerToolbar": {
             "d238264654": "Show Git Ignored Files",
@@ -11580,6 +11596,22 @@
             "0a6412a895": "Files To Exclude",
             "8a77efcbd1": "files to include (e.g. *.ts, src/**)",
             "a69ee1bd0e": "Files To Include"
+          },
+          "replace": {
+            "toggle": "Replace",
+            "placeholder": "Replace",
+            "all": "Replace All",
+            "preserveCase": "Preserve case",
+            "confirm": {
+              "root": "Replace {{value0}} occurrence(s)?",
+              "yes": "Replace",
+              "no": "Cancel"
+            },
+            "summary": {
+              "written": "Replaced {{value0}} in {{value1}} file(s)",
+              "skipped": "{{value0}} skipped (unsaved editor changes)",
+              "failed": "{{value0}} failed"
+            }
           },
           "SearchHeader": {
             "6234a5ef85": "Use Regular Expression",
@@ -12198,7 +12230,6 @@
             "allPassed": "All {{value0}} tests passed",
             "checkFailed": "Check failed",
             "clear": "Clear diagnostics",
-            "commandTool": "Command",
             "emptyDescription": "Run tests, typecheck, or lint in a terminal. Failures will appear here automatically.",
             "emptyTitle": "No diagnostics yet",
             "failedCount": "{{value0}} failed",
@@ -12210,7 +12241,6 @@
             "noSourceLocation": "The check exited unsuccessfully without a source location.",
             "passedCount": "{{value0}} passed",
             "showOutput": "Show output",
-            "showCommandOutput": "Show output for “{{value0}}”",
             "showToolOutput": "Show {{value0}} output",
             "unknownTool": "Diagnostics",
             "warning": "{{value0}} warning",
@@ -15964,7 +15994,6 @@
         "noPty": "No live terminal — toggle back to reconnect.",
         "locked": "Input is held by another device.",
         "placeholder": "Send a message…",
-        "mentionHint": "Referencing file:",
         "attach": "Attach file",
         "startDictation": "Start dictation",
         "stopDictation": "Stop dictation",
@@ -15997,6 +16026,8 @@
         "options": "Options",
         "sessionOptions": "Session options",
         "chooseInAgentPicker": "Choose in agent picker…",
+        "chooseModelInTerminal": "Choose model in Terminal…",
+        "directModelSwitchUnavailable": "Direct model switching is unavailable for this session. Choose in Terminal or start a new Codex session.",
         "toggleOption": "Toggle {{value0}}",
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueUnknown": "Current value unknown — pick On or Off",
@@ -16015,21 +16046,53 @@
           "ultra": "Ultra",
           "on": "On",
           "off": "Off"
-        }
+        },
+        "loadingFiles": "Loading files...",
+        "fileMatchCount": "Matching files: {{resultCount}}",
+        "moreFileMatches": "More matches available. Keep typing to narrow the list.",
+        "noFiles": "No matching files",
+        "typeToSearchFiles": "Type to search workspace files",
+        "mentionFiles": "Workspace files",
+        "inputLabel": "Message to agent",
+        "runProfile": "Run profile",
+        "availableChoices": "Available choices",
+        "chooseModelFirst": "Choose a model first.",
+        "knownModels": "Known models",
+        "modelAvailabilityNote": "Codex decides which models your account can select. Open the agent picker to check.",
+        "valueUnknownShort": "?",
+        "deliveryFailed": "Message not sent. Your draft was restored; try again.",
+        "confirmBypassPermissionsTitle": "Bypass permissions?",
+        "confirmBypassPermissions": "This removes the provider sandbox and approval prompts where supported. Use it only in an externally isolated environment.",
+        "confirmBypassPermissionsAction": "Bypass permissions",
+        "appliesNextSession": "Applies to new sessions",
+        "appliesCurrentSession": "Applies to this task",
+        "changeAfterTurn": "Change this after the current turn finishes"
       },
       "tool": {
         "running": "Running…",
         "result": "Result",
         "countOne": "1 tool call",
-        "countN": "{{value0}} tool calls"
+        "countN": "{{value0}} tool calls",
+        "truncated": "Showing the first {{value0}} characters",
+        "copyFullOutput": "Copy full output"
       },
       "status": {
         "responding": "Agent is responding"
+      },
+      "message": {
+        "sending": "Sending…"
+      },
+      "transcript": {
+        "label": "Conversation"
       },
       "jumpToLatest": "Jump to latest",
       "toggle": {
         "showTerminal": "Show terminal",
         "showChat": "Show chat view",
+        "terminal": "Terminal",
+        "chat": "Chat",
+        "viewSwitcher": "Session view",
+        "paneLabel": "Pane {{value0}}",
         "noProject": "No project"
       },
       "state": {
@@ -16039,7 +16102,9 @@
         },
         "error": {
           "title": "Could not load conversation",
-          "subtitle": "The transcript could not be read. Toggle back to the terminal to keep working."
+          "subtitle": "The transcript could not be read. Toggle back to the terminal to keep working.",
+          "action": "Open Terminal",
+          "retry": "Retry"
         },
         "pairHost": "Pair a host to view agent chat history.",
         "notAgent": {
@@ -16048,15 +16113,20 @@
         },
         "empty": {
           "title": "Start a chat with {{value0}}",
-          "subtitle": "Ask {{value0}} to inspect code, explain output, or make a change."
+          "subtitle": "Ask {{value0}} to inspect code, explain output, or make a change.",
+          "shortcuts": "Use @ for workspace files or / for commands."
         }
       },
       "stop": "Stop the agent",
       "copyMessage": {
         "copied": "Copied",
-        "copy": "Copy message"
+        "copy": "Copy message",
+        "failed": "Could not copy message"
       },
       "scrollMessageToTop": "Scroll this message to top",
+      "reasoningDisclosure": "Reasoning",
+      "sessionContext": "Session context",
+      "sessionContextSections": "· {{value0}} sections",
       "loadingEarlier": "Loading…",
       "loadEarlier": "Load earlier messages",
       "question": {
@@ -16067,14 +16137,45 @@
         "send": "Submit",
         "next": "Next",
         "skip": "Skip",
-        "sending": "Sending…"
+        "sending": "Sending…",
+        "regionLabel": "Agent question",
+        "otherLabel": "Custom answer",
+        "deliveryFailed": "The answer was not delivered. Your selections are preserved; try again.",
+        "stepsLabel": "Questions",
+        "progress": "Question {{value0}} of {{value1}}"
       },
       "approval": {
         "title": "Allow {{value0}}?",
         "allow": "Allow",
-        "deny": "Deny"
+        "allowOnce": "Allow once",
+        "deny": "Deny",
+        "regionLabel": "Permission request",
+        "onceDescription": "Approval applies to this request only.",
+        "deliveryFailed": "The choice was not delivered. Try again or review it in Terminal.",
+        "sending": "Sending…"
       },
-      "launchPromptNotDelivered": "Not delivered — check the terminal"
+      "terminalAttention": {
+        "auth": {
+          "title": "{{value0}} session expired",
+          "description": "Log in again to continue. Your draft is preserved.",
+          "action": "Log in in Terminal",
+          "copied": "Copied /login",
+          "copyFailed": "Could not copy /login"
+        },
+        "hooksReview": {
+          "title": "Codex needs a security review",
+          "description": "Review new or changed hooks before Chat can continue.",
+          "action": "Review in Terminal"
+        }
+      },
+      "launchPromptNotDelivered": "Not delivered — check the terminal",
+      "effort": {
+        "chooseLevel": "Choose level",
+        "sliderLabel": "Effort",
+        "sliderLabelWithValue": "Effort: {{value}}",
+        "sliderTitle": "Effort"
+      },
+      "messageActions": "Message actions"
     },
     "tab": {
       "bar": {

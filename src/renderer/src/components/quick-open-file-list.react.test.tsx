@@ -98,14 +98,18 @@ function HookProbe({
   enabled,
   onState,
   query,
+  matchMode,
+  resultLimit,
   worktreeId
 }: {
   enabled: boolean
   onState: (state: RuntimeFileListState) => void
   query?: string
+  matchMode?: 'fuzzy' | 'substring'
+  resultLimit?: number
   worktreeId: string | null
 }): null {
-  onState(useRuntimeFileListForWorktree({ enabled, worktreeId, query }))
+  onState(useRuntimeFileListForWorktree({ enabled, worktreeId, query, matchMode, resultLimit }))
   return null
 }
 
@@ -130,6 +134,8 @@ async function renderProbe(args: {
   enabled: boolean
   onState: (state: RuntimeFileListState) => void
   query?: string
+  matchMode?: 'fuzzy' | 'substring'
+  resultLimit?: number
   worktreeId: string | null
 }): Promise<Root> {
   const container = document.createElement('div')
@@ -382,6 +388,30 @@ describe('useRuntimeFileListForWorktree', () => {
         loading: false,
         truncated: true
       })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('forwards mention exactness and its larger result limit', async () => {
+    vi.useFakeTimers()
+    seedRemoteWorktree()
+
+    try {
+      await renderProbe({
+        enabled: true,
+        onState: () => {},
+        query: 'target',
+        matchMode: 'substring',
+        resultLimit: 50,
+        worktreeId: 'wt-remote'
+      })
+      await act(async () => vi.advanceTimersByTimeAsync(120))
+
+      expect(searchRuntimeFilePathsMock).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ query: 'target', limit: 50, matchMode: 'substring' })
+      )
     } finally {
       vi.useRealTimers()
     }

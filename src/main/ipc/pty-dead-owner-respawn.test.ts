@@ -3,6 +3,14 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { registerPtyHandlers, setLocalPtyProvider } from './pty'
 
+const codexLiveSessionBridgeRegistryMock = vi.hoisted(() => ({
+  prepare: vi.fn(async ({ command }: { command: string }) => ({ command: `bridged:${command}` })),
+  adopt: vi.fn(),
+  dispose: vi.fn(),
+  readySnapshot: vi.fn(() => ({ available: false })),
+  update: vi.fn(() => ({ outcome: 'unavailable' }))
+}))
+
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
 vi.mock('node-pty', () => import('./pty-ipc-mock-registry').then((m) => m.nodePtyModuleMock()))
@@ -46,11 +54,14 @@ vi.mock('../codex/codex-pane-account-registry', () =>
 vi.mock('../codex/codex-state-db-backfill-recovery', () =>
   import('./pty-ipc-mock-registry').then((m) => m.codexBackfillRecoveryModuleMock())
 )
+vi.mock('../codex/codex-live-session-bridge', () => ({
+  codexLiveSessionBridgeRegistry: codexLiveSessionBridgeRegistryMock
+}))
 
 describe('registerPtyHandlers', () => {
   const { handlers, mainWindow } = setupPtyIpcSuite()
 
-  it('still retires and respawns when the routed provider confirms absence', async () => {
+  it('retires and respawns a stable pane whose prior session was explicitly killed', async () => {
     const worktreeId = 'repo-1::/tmp/proven-absent-owner'
     const cwd = '/tmp/proven-absent-owner'
     const tabId = 'tab-proven-absent-owner'
@@ -59,7 +70,7 @@ describe('registerPtyHandlers', () => {
     const providerSpawn = vi.fn(
       async (options: { attachOnly?: boolean; command?: string; sessionId?: string }) => {
         if (options.attachOnly) {
-          throw new Error('Session not found: pty-proven-absent-owner')
+          throw new Error('Session "pty-proven-absent-owner" was explicitly killed')
         }
         return { id: 'pty-fresh-proven', incarnationId: 'inc-fresh-proven' }
       }
@@ -146,6 +157,7 @@ describe('registerPtyHandlers', () => {
       rows: 24,
       cwd,
       command: 'codex resume proven-absent-session',
+      launchAgent: 'codex',
       worktreeId,
       tabId,
       leafId,
@@ -159,8 +171,13 @@ describe('registerPtyHandlers', () => {
     expect(mounted).toMatchObject({ id: 'pty-fresh-proven' })
     expect(providerSpawn).toHaveBeenCalledTimes(2)
     expect(providerSpawn.mock.calls[1]?.[0]).toMatchObject({
-      command: 'codex resume proven-absent-session'
+      command: 'bridged:codex resume proven-absent-session'
     })
+    expect(codexLiveSessionBridgeRegistryMock.prepare).toHaveBeenCalledOnce()
+    expect(codexLiveSessionBridgeRegistryMock.adopt).toHaveBeenCalledWith(
+      expect.any(String),
+      'pty-fresh-proven'
+    )
     expect(runtime.onPtyExit).toHaveBeenCalledWith(
       'pty-proven-absent-owner',
       0,

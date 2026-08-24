@@ -20,6 +20,12 @@ function DropdownMenuTrigger({
   return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
+function DropdownMenuArrow({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Arrow>) {
+  return <DropdownMenuPrimitive.Arrow data-slot="dropdown-menu-arrow" {...props} />
+}
+
 function DropdownMenuContent({
   className,
   sideOffset = 4,
@@ -224,6 +230,7 @@ export {
   DropdownMenu,
   DropdownMenuPortal,
   DropdownMenuTrigger,
+  DropdownMenuArrow,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuItem,

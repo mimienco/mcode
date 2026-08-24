@@ -66,7 +66,7 @@ export const SEARCH_JSON_STRUCTURE_LIMITS = {
 } as const
 
 // Why: keep search cheaper than opening a file; the editor read path has a larger cap (Monaco large-file handling).
-const SEARCH_MAX_FILE_SIZE = 5 * 1024 * 1024
+export const SEARCH_MAX_FILE_SIZE = 5 * 1024 * 1024
 
 // Why: mega-byte lines (minified/generated files) × 2000-match caps blow past the 16MB SSH relay MAX_MESSAGE_SIZE; clamp each match's context.
 export const MAX_LINE_CONTENT_LENGTH = 500

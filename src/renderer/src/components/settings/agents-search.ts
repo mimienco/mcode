@@ -126,7 +126,7 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
     ),
     description: translate(
       'auto.components.settings.agents.search.agentPermissionsDescription',
-      'Switch agent permission defaults between Yolo and Manual.'
+      'Choose Ask approval, Auto-accept edits, or Bypass permissions for agent launches.'
     ),
     keywords: [
       ...translateSearchKeyword('auto.components.settings.agents.search.permission', 'permission'),
@@ -134,6 +134,13 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
         'auto.components.settings.agents.search.permissions',
         'permissions'
       ),
+      ...translateSearchKeyword('auto.components.settings.agents.search.ask', 'ask approval'),
+      ...translateSearchKeyword(
+        'auto.components.settings.agents.search.autoAcceptEdits',
+        'auto-accept edits'
+      ),
+      ...translateSearchKeyword('auto.components.settings.agents.search.bypass', 'bypass'),
+      // Keep legacy vocabulary discoverable for existing users.
       ...translateSearchKeyword('auto.components.settings.agents.search.yolo', 'yolo'),
       ...translateSearchKeyword('auto.components.settings.agents.search.manual', 'manual'),
       ...translateSearchKeyword('auto.components.settings.agents.search.skip', 'skip'),

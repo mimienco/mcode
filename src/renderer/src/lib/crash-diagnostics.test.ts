@@ -11,10 +11,12 @@ describe('renderer crash diagnostics', () => {
   let setIntervalMock: ReturnType<typeof vi.fn>
   let clearIntervalMock: ReturnType<typeof vi.fn>
   let removeEventListenerMock: ReturnType<typeof vi.fn>
+  let systemResumeListener: (() => void) | undefined
 
   beforeEach(async () => {
     vi.resetModules()
     listeners = new Map()
+    systemResumeListener = undefined
     recordBreadcrumbMock = vi.fn()
     setIntervalMock = vi.fn(() => 1)
     clearIntervalMock = vi.fn()
@@ -28,6 +30,12 @@ describe('renderer crash diagnostics', () => {
       api: {
         crashReports: {
           recordBreadcrumb: recordBreadcrumbMock
+        },
+        ui: {
+          onSystemResumed: vi.fn((listener: () => void) => {
+            systemResumeListener = listener
+            return vi.fn()
+          })
         }
       },
       addEventListener: vi.fn((type: string, listener: Listener) => {
@@ -73,7 +81,7 @@ describe('renderer crash diagnostics', () => {
     diagnostics.installRendererCrashDiagnostics()
 
     expect(window.addEventListener).toHaveBeenCalledTimes(2)
-    expect(setIntervalMock).toHaveBeenCalledTimes(1)
+    expect(setIntervalMock).toHaveBeenCalledTimes(2)
     expect(recordBreadcrumbMock).toHaveBeenCalledWith({
       name: 'renderer_memory',
       data: {
@@ -117,6 +125,72 @@ describe('renderer crash diagnostics', () => {
         reasonMessage: 'missing startup dependency'
       }
     })
+  })
+
+  it('records a visible renderer event-loop stall with workload context', () => {
+    let now = 0
+    ;(window.performance as unknown as { now: () => number }).now = () => now
+    vi.stubGlobal('document', {
+      visibilityState: 'visible',
+      getElementsByTagName: () => ({ length: 7 }),
+      querySelectorAll: () => ({ length: 2 })
+    })
+
+    diagnostics.installRendererCrashDiagnostics()
+    recordBreadcrumbMock.mockClear()
+    now = 1_501
+    const stallTick = setIntervalMock.mock.calls[1][0] as () => void
+    stallTick()
+
+    expect(recordBreadcrumbMock).toHaveBeenCalledWith({
+      name: 'renderer_event_loop_stall',
+      data: expect.objectContaining({
+        rendererSurface: 'main',
+        gapMs: 1_501,
+        blockedMs: 1_251,
+        visibilityState: 'visible',
+        usedHeapMB: 32,
+        terminalElements: 2
+      })
+    })
+  })
+
+  it('does not report timer suspension while the document is hidden', () => {
+    let now = 0
+    ;(window.performance as unknown as { now: () => number }).now = () => now
+    vi.stubGlobal('document', {
+      visibilityState: 'hidden',
+      getElementsByTagName: () => ({ length: 0 }),
+      querySelectorAll: () => ({ length: 0 })
+    })
+
+    diagnostics.installRendererCrashDiagnostics()
+    recordBreadcrumbMock.mockClear()
+    now = 5_000
+    const stallTick = setIntervalMock.mock.calls[1][0] as () => void
+    stallTick()
+
+    expect(recordBreadcrumbMock).not.toHaveBeenCalled()
+  })
+
+  it('resets the event-loop clock on system resume', () => {
+    let now = 0
+    ;(window.performance as unknown as { now: () => number }).now = () => now
+    vi.stubGlobal('document', {
+      visibilityState: 'visible',
+      getElementsByTagName: () => ({ length: 0 }),
+      querySelectorAll: () => ({ length: 0 })
+    })
+
+    diagnostics.installRendererCrashDiagnostics()
+    recordBreadcrumbMock.mockClear()
+    now = 30_000
+    systemResumeListener?.()
+    now = 30_250
+    const stallTick = setIntervalMock.mock.calls[1][0] as () => void
+    stallTick()
+
+    expect(recordBreadcrumbMock).not.toHaveBeenCalled()
   })
 
   it('suppresses benign ResizeObserver loop errors instead of recording them', () => {

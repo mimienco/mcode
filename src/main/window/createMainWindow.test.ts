@@ -74,6 +74,51 @@ describe('createMainWindow', () => {
     expect(browserWindowInstance.loadURL).not.toHaveBeenCalled()
   })
 
+  it('keeps the native identity when the renderer document reports its own title', () => {
+    const windowHandlers: Record<string, (...args: any[]) => void> = {}
+    const webContents = {
+      on: vi.fn(),
+      setZoomLevel: vi.fn(),
+      setBackgroundThrottling: vi.fn(),
+      invalidate: vi.fn(),
+      setWindowOpenHandler: vi.fn(),
+      send: vi.fn(),
+      isDevToolsOpened: vi.fn(),
+      openDevTools: vi.fn(),
+      closeDevTools: vi.fn()
+    }
+    const browserWindowInstance = {
+      webContents,
+      on: vi.fn((event, handler) => {
+        windowHandlers[event] = handler
+      }),
+      isDestroyed: vi.fn(() => false),
+      isMaximized: vi.fn(() => true),
+      isFullScreen: vi.fn(() => false),
+      getSize: vi.fn(() => [1200, 800]),
+      setSize: vi.fn(),
+      setTitle: vi.fn(),
+      maximize: vi.fn(),
+      show: vi.fn(),
+      loadFile: vi.fn(),
+      loadURL: vi.fn()
+    }
+    browserWindowMock.mockImplementation(function () {
+      return browserWindowInstance
+    })
+
+    createMainWindow(null, { deferLoad: true, title: 'MCode: feature/foo' })
+
+    const preventDefault = vi.fn()
+    windowHandlers['page-title-updated']({ preventDefault }, 'MCode')
+
+    expect(preventDefault).toHaveBeenCalledOnce()
+    expect(browserWindowInstance.setTitle).toHaveBeenCalledWith('MCode: feature/foo')
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'MCode: feature/foo' })
+    )
+  })
+
   it('enables renderer sandboxing and opens external links safely', () => {
     const windowHandlers: Record<string, (...args: any[]) => void> = {}
     const webContents = {

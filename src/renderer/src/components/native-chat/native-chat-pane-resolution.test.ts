@@ -78,6 +78,70 @@ describe('resolveNativeChatSession', () => {
     ).toEqual({ agent: 'claude', sessionId: null, transcriptPath: null, ptyId: 'pty-1', paneKey })
   })
 
+  it('restores a persisted conversation when live hook state is absent after restart', () => {
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    expect(
+      resolveNativeChatSession({
+        paneKey,
+        resolvedAgent: 'codex',
+        persistedSession: { agent: 'codex', sessionId: 'persisted-codex-session' },
+        ptyId: 'pty-1'
+      })
+    ).toEqual({
+      agent: 'codex',
+      sessionId: 'persisted-codex-session',
+      transcriptPath: null,
+      ptyId: 'pty-1',
+      paneKey
+    })
+  })
+
+  it('resolves OMP from its retained identity-only session event', () => {
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    expect(
+      resolveNativeChatSession({
+        paneKey,
+        launchAgent: 'omp',
+        retainedSession: {
+          agent: 'omp',
+          sessionId: 'omp-session-1'
+        },
+        ptyId: 'pty-1'
+      })
+    ).toEqual({
+      agent: 'omp',
+      sessionId: 'omp-session-1',
+      transcriptPath: null,
+      ptyId: 'pty-1',
+      paneKey
+    })
+  })
+
+  it('does not reuse retained identity while a new live session is starting', () => {
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    expect(
+      resolveNativeChatSession({
+        paneKey,
+        agentStatusEntry: entry({ paneKey, agentType: 'omp' }),
+        retainedSession: { agent: 'omp', sessionId: 'old-omp-session' },
+        ptyId: 'pty-1'
+      })
+    ).toMatchObject({ sessionId: null })
+  })
+
+  it('does not reuse a persisted conversation while a live session is starting', () => {
+    const paneKey = 'tab-1:11111111-1111-4111-8111-111111111111'
+    expect(
+      resolveNativeChatSession({
+        paneKey,
+        agentStatusEntry: entry({ paneKey, agentType: 'codex' }),
+        resolvedAgent: 'codex',
+        persistedSession: { agent: 'codex', sessionId: 'old-codex-session' },
+        ptyId: 'pty-1'
+      })
+    ).toMatchObject({ sessionId: null })
+  })
+
   it('resolves two split leaves independently to their own values', () => {
     const leftKey = 'tab-1:11111111-1111-4111-8111-111111111111'
     const rightKey = 'tab-1:22222222-2222-4222-8222-222222222222'

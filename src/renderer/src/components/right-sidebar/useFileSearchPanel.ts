@@ -11,6 +11,7 @@ import { buildSearchRows } from './search-rows'
 import { cancelRevealFrame, openMatchResult } from './search-match-open'
 import type { SearchQueryRowProps } from './SearchQueryRow'
 import type { SearchFiltersProps } from './SearchFilters'
+import { useFileSearchReplace, type FileSearchReplaceModel } from './use-file-search-replace'
 import { useFileSearchRunner } from './useFileSearchRunner'
 
 const EMPTY_COLLAPSED_FILES = new Set<string>()
@@ -19,6 +20,7 @@ export type FileSearchPanelModel = {
   activeWorktreeId: string | null
   queryRowProps: SearchQueryRowProps
   filtersProps: SearchFiltersProps
+  replaceRowProps: FileSearchReplaceModel
   resultsProps: {
     results: SearchResult | null
     hasCommittedResults: boolean
@@ -199,6 +201,17 @@ export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearch
     }
   }, [executeSearch, activeWorktreeId])
 
+  const replaceRow = useFileSearchReplace({
+    activeWorktreeId,
+    worktreePath,
+    results: deferredSearchResults.results,
+    query: fileSearchQuery,
+    caseSensitive: fileSearchCaseSensitive,
+    wholeWord: fileSearchWholeWord,
+    useRegex: fileSearchUseRegex,
+    rerunSearch
+  })
+
   const handleQueryChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value
@@ -289,6 +302,7 @@ export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearch
       onToggleCollapsedFile: toggleActiveCollapsedFile,
       onMatchClick: handleMatchClick
     },
+    replaceRowProps: replaceRow,
     focusQueryInput
   }
 }

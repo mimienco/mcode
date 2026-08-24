@@ -21,6 +21,13 @@ import {
 
 export type { CodexSessionIndexHealPaths } from './codex-session-index-heal-state'
 
+// Why: spawn ENOENT means the codex CLI isn't installed at all. Reuse the
+// unsupported-CLI path (marker + backoff) so the heal stops aborting every pass
+// with 'spawn codex ENOENT'; installing codex re-probes via the retry interval.
+function isCodexBinaryMissingError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
+}
+
 // Why: Codex's own sqlite metadata backfill is one-shot (backfill_state is
 // stamped `complete` on first app-server startup), so rollouts that MCode's
 // session backfill hardlinks in later never reach the state DB on their own.
@@ -173,13 +180,16 @@ export async function runCodexSessionIndexHeal(
         }
       )
     } catch (error) {
-      if (isCodexAppServerUnsupportedError(error)) {
+      if (isCodexAppServerUnsupportedError(error) || isCodexBinaryMissingError(error)) {
         if (shouldStop()) {
           summary.outcome = 'stopped'
           return summary
         }
-        // Why: no retry churn on old CLIs — remember unsupported and re-probe
-        // after the retry interval or a version bump; nothing is marked healed.
+        // Why: no retry churn on old/missing CLIs — remember unsupported and
+        // re-probe after the retry interval or a version bump; nothing is marked
+        // healed. A missing codex binary (spawn ENOENT) behaves the same: the
+        // marker backs off until codex is installed, instead of aborting every
+        // pass with 'spawn codex ENOENT'.
         writeHealMarker(paths, auditBytes, summary, { unsupportedAt: Date.now() })
         summary.outcome = 'unsupported'
         return summary

@@ -24,6 +24,7 @@ import {
 } from './AgentsPane'
 import { matchesSettingsSearch } from './settings-search'
 import { TooltipProvider } from '../ui/tooltip'
+import { ConfirmationDialogProvider } from '../confirmation-dialog'
 
 const detectedAgentsMock = vi.hoisted(() => ({
   detectedIds: ['claude'] as TuiAgent[] | null,
@@ -89,13 +90,17 @@ function renderPane(
 ): string {
   return renderToStaticMarkup(
     React.createElement(
-      TooltipProvider,
+      ConfirmationDialogProvider,
       null,
-      React.createElement(AgentsPane, {
-        settings,
-        updateSettings: vi.fn(),
-        ...props
-      })
+      React.createElement(
+        TooltipProvider,
+        null,
+        React.createElement(AgentsPane, {
+          settings,
+          updateSettings: vi.fn(),
+          ...props
+        })
+      )
     )
   )
 }
@@ -410,26 +415,30 @@ describe('AgentsPane', () => {
 
   it('includes agent permission search metadata', () => {
     expect(matchesSettingsSearch('permission', getAgentsPaneSearchEntries())).toBe(true)
-    expect(matchesSettingsSearch('yolo', getAgentsPaneSearchEntries())).toBe(true)
-    expect(matchesSettingsSearch('manual', getAgentsPaneSearchEntries())).toBe(true)
+    expect(matchesSettingsSearch('auto-accept edits', getAgentsPaneSearchEntries())).toBe(true)
+    expect(matchesSettingsSearch('bypass', getAgentsPaneSearchEntries())).toBe(true)
   })
 
   it('applies the selected agent permission mode from settings without a mixed segment', () => {
     const onChange = vi.fn()
     const element = AgentPermissionsSetting({ mode: 'mixed', onChange })
     const props = element.props.children.props.action.props as {
-      value: 'yolo'
-      onChange: (value: 'yolo' | 'manual' | 'mixed') => void
+      value: 'ask'
+      onChange: (value: 'ask' | 'auto-edits' | 'bypass' | 'mixed') => void
       options: { value: string }[]
     }
 
-    expect(props.value).toBe('yolo')
-    expect(props.options.map((option) => option.value)).toEqual(['yolo', 'manual'])
+    expect(props.value).toBe('ask')
+    expect(props.options.map((option) => option.value)).toEqual([
+      'ask',
+      'auto-edits',
+      'bypass'
+    ])
     props.onChange('mixed')
     expect(onChange).not.toHaveBeenCalled()
 
-    props.onChange('manual')
-    expect(onChange).toHaveBeenCalledWith('manual')
+    props.onChange('auto-edits')
+    expect(onChange).toHaveBeenCalledWith('auto-edits')
   })
 
   it('keeps catalog agent ids, labels, and commands discoverable in settings search', () => {

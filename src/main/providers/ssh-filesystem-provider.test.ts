@@ -500,16 +500,16 @@ describe('SshFilesystemProvider', () => {
   it('listFiles forwards listing and query options', async () => {
     await provider.listFiles('/home/user/project', {
       excludePaths: ['/home/user/project/worktrees/b'],
-      maxResults: 20_000,
-      searchQuery: 'target'
+      searchQuery: 'target',
+      searchMatchMode: 'substring'
     })
     expect(mux.request).toHaveBeenCalledWith(
       'fs.listFiles',
       {
         rootPath: '/home/user/project',
         excludePaths: ['/home/user/project/worktrees/b'],
-        maxResults: 20_000,
-        searchQuery: 'target'
+        searchQuery: 'target',
+        searchMatchMode: 'substring'
       },
       { signal: undefined }
     )

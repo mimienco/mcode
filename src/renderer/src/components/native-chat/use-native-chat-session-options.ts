@@ -28,6 +28,8 @@ import {
   resolveNativeChatModelDiscoveryContext
 } from './native-chat-session-option-discovery'
 import { readClaudeSessionOptionsFromTerminalScreen } from './claude-terminal-session-options'
+import { useCodexLiveSessionOptions } from './use-codex-live-session-options'
+import { useNativeChatRunProfile } from './use-native-chat-run-profile'
 
 const EMPTY_SNAPSHOT: SessionOptionDescriptor[] = []
 const subscribeEmpty = (): (() => void) => () => {}
@@ -99,6 +101,8 @@ export function useNativeChatSessionOptions(args: {
   // The screen text that last parsed into reported values, so a later model
   // discovery can re-resolve it against the host's real ids.
   const reportedScreenRef = useRef<string | null>(null)
+  const codexLive = useCodexLiveSessionOptions({ agent, targetPtyId, dispatchCommand })
+  const codexLiveSnapshot = codexLive.snapshot
   const discoveryContext = useMemo(
     () => resolveNativeChatModelDiscoveryContext(terminalTabId),
     [terminalTabId]
@@ -113,13 +117,16 @@ export function useNativeChatSessionOptions(args: {
     const discoveredModels = discoveryContext
       ? readNativeChatEnrichedModels(agent, discoveryContext.hostKey)
       : null
+    const liveCodexModels = codexLive.models
     const reportedValues =
       agent === 'claude'
         ? readClaudeSessionOptionsFromTerminalScreen(
             readTerminalScreen?.(),
             discoveredModels ?? undefined
           )
-        : null
+        : agent === 'codex'
+          ? codexLive.reportedValues
+          : null
     return createNativeChatPtySessionOptions({
       agent,
       scopeKey,
@@ -127,10 +134,15 @@ export function useNativeChatSessionOptions(args: {
       // Why: the catalog seed carries version-neutral family labels, so it is
       // safe on every host while the once-per-host probe runs or after it fails
       // — without it the whole picker would pop in late or never appear.
-      ...(discoveryContext ? { initialModels: discoveredModels ?? undefined } : {}),
+      ...(liveCodexModels
+        ? { initialModels: liveCodexModels }
+        : discoveryContext
+          ? { initialModels: discoveredModels ?? undefined }
+          : {}),
       mode: targetPtyId ? 'live' : 'draft',
       reportedValues,
-      dispatchCommand,
+      dispatchCommand: codexLive.dispatchCommand,
+      directCodexSessionOptions: agent === 'codex' && codexLiveSnapshot.available,
       onAgentPicker,
       persistSelection: ({ modelId, optionId, value, adoptModelAsLaunchDefault }) =>
         enqueueSessionOptionSettingsWrite((persisted) =>
@@ -146,7 +158,10 @@ export function useNativeChatSessionOptions(args: {
     })
   }, [
     agent,
-    dispatchCommand,
+    codexLiveSnapshot,
+    codexLive.dispatchCommand,
+    codexLive.models,
+    codexLive.reportedValues,
     discoveryContext,
     onAgentPicker,
     readTerminalScreen,
@@ -203,7 +218,7 @@ export function useNativeChatSessionOptions(args: {
   }, [agent, discoveryContext, readTerminalScreen, surface, targetPtyId])
 
   useEffect(() => {
-    if (!surface || !discoveryContext) {
+    if (!surface || !discoveryContext || (agent === 'codex' && codexLiveSnapshot.available)) {
       return
     }
     const unsubscribe = subscribeNativeChatEnrichedModels(
@@ -234,12 +249,22 @@ export function useNativeChatSessionOptions(args: {
       discover: () => discoverNativeChatCatalogModels(agent, discoveryContext.runtime)
     })
     return unsubscribe
-  }, [agent, discoveryContext, surface])
+  }, [agent, codexLiveSnapshot.available, discoveryContext, surface])
 
-  const snapshot = useSyncExternalStore(
+  const modelSnapshot = useSyncExternalStore(
     surface?.subscribe ?? subscribeEmpty,
     surface?.getSnapshot ?? getEmptySnapshot,
     surface?.getSnapshot ?? getEmptySnapshot
   )
-  return { surface, snapshot }
+  const runProfile = useNativeChatRunProfile({
+    agent,
+    targetPtyId,
+    codexLiveSnapshot,
+    setCodexLiveSnapshot: codexLive.setSnapshot,
+    modelSurface: surface
+  })
+  return {
+    surface: runProfile.surface,
+    snapshot: [...modelSnapshot, ...runProfile.snapshot]
+  }
 }

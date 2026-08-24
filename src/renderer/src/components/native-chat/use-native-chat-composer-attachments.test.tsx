@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import {
   clearNativeChatAttachmentCacheForTests,
   readNativeChatAttachmentCache,
+  readNativeChatFileReferenceCache,
   useNativeChatComposerAttachments
 } from './use-native-chat-composer-attachments'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
@@ -30,17 +31,12 @@ function Probe({
   scopeKey: string
   onReady: (api: ProbeApi) => void
 }): React.JSX.Element {
-  const [caret, setCaret] = useState(0)
-  const [, setDraftValue] = useState('')
   const [, setNotice] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const api = useNativeChatComposerAttachments({
     attachmentScopeKey: scopeKey,
-    caret,
     resolveTarget: () => target,
     textareaRef,
-    setCaret,
-    setDraft: (updater) => setDraftValue((previous) => updater(previous)),
     setNotice
   })
   onReady(api)
@@ -127,6 +123,35 @@ describe('useNativeChatComposerAttachments', () => {
     act(() => probe.root.unmount())
   })
 
+  it('holds selected files as deduplicated, removable references', async () => {
+    const probe = await renderProbe('pty-1')
+    await act(async () => {
+      probe.latest().appendFileReferences(['src/App.tsx', 'src/App.tsx'])
+    })
+
+    expect(probe.latest().fileReferences).toMatchObject([{ path: 'src/App.tsx' }])
+    expect(readNativeChatFileReferenceCache('pty-1')).toMatchObject([{ path: 'src/App.tsx' }])
+
+    const id = probe.latest().fileReferences[0]?.id
+    await act(async () => {
+      probe.latest().removeFileReference(id as string)
+    })
+    expect(probe.latest().fileReferences).toEqual([])
+    expect(readNativeChatFileReferenceCache('pty-1')).toEqual([])
+    act(() => probe.root.unmount())
+  })
+
+  it('turns ordinary picked files into chips instead of inserting textarea text', async () => {
+    const probe = await renderProbe('pty-1')
+    await act(async () => {
+      probe.latest().attachResolvedPaths(['/tmp/notes.md'])
+    })
+
+    expect(probe.latest().fileReferences).toMatchObject([{ path: '/tmp/notes.md' }])
+    expect(probe.latest().imageAttachments).toEqual([])
+    act(() => probe.root.unmount())
+  })
+
   it('rescopes attachments when the scope key changes (composer reused for another pane)', async () => {
     const probe = await renderProbe('pty-1')
     await act(async () => {
@@ -140,6 +165,7 @@ describe('useNativeChatComposerAttachments', () => {
     // otherwise be submitted to pane-2's target now that images defer to submit).
     await probe.rerender('pty-2')
     expect(probe.latest().imageAttachments).toMatchObject([])
+    expect(probe.latest().fileReferences).toMatchObject([])
 
     // Switching back restores pane-1's still-cached chip.
     await probe.rerender('pty-1')

@@ -3,7 +3,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 function readSource(relativePath: string): string {
-  return readFileSync(join(process.cwd(), relativePath), 'utf8')
+  // Why: Windows checkouts use CRLF (core.autocrlf), and multi-line needles below
+  // use \n — normalize so structural assertions pass on every platform.
+  return readFileSync(join(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n')
 }
 
 const APP_PATH = 'src/renderer/src/App.tsx'

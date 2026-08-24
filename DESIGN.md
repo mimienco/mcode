@@ -49,6 +49,23 @@ the trace palette (+ violet spare `#9E86FF`), so branch color == channel color.
 - Contrast floor: body text ≥4.5:1 in both themes (muted `#9BA5B4` on `#1A1F28`
   dark, `#5B6270` on `#FAF9F6` light).
 
+### Composer option popups
+
+- Model and effort controls share one compact floating material: token-driven
+  popover surface, foreground and border; a 10px radius; a bordered 16×8 arrow;
+  and `0 10px 24px rgb(0 0 0 / 0.18)` elevation in both themes. Do not add blur,
+  glass, or a feature-specific popup palette.
+- Model choice is preview-first. The real current model appears first with its
+  descriptor-provided description and a white selection dot on a contrasting
+  token surface (`primary` in light, `muted` in dark). Alternatives begin after
+  a hairline divider and compact uppercase section label.
+- Model rows render the session's real choice data. When direct switching is not
+  supported, retain the explicit Terminal handoff rather than simulating an
+  in-app selection.
+- Effort is a calibrated signal, not a generic select: a left-to-right waveform
+  and its cyan-to-warm-to-heat progression increase with the chosen reasoning
+  level while the text label keeps the setting explicit.
+
 ## Do not
 
 - Do not introduce glow/neon edges (the category rut this world refuses).

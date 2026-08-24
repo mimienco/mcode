@@ -8,6 +8,7 @@ import { useShortcutLabel } from '../hooks/useShortcutLabel'
 import { useAppStore } from '../store'
 import { hasCustomTitleBar } from './app-window-chrome'
 import type { AppChromeLayout } from './use-app-chrome-layout'
+import { WorktreeHistoryControls } from './WorktreeHistoryControls'
 
 export function RightSidebarToggle(): React.JSX.Element {
   const toggleRightSidebar = useAppStore((s) => s.toggleRightSidebar)
@@ -47,6 +48,16 @@ export function TitlebarMainStrip({ layout }: { layout: AppChromeLayout }): Reac
 
   return (
     <>
+      {layout.leftTitlebarChromeLayout.isFloating ? (
+        <div
+          aria-hidden
+          className="shrink-0"
+          style={{ width: 'var(--collapsed-sidebar-header-width)' }}
+        />
+      ) : null}
+      {!layout.creationLayoutActive ? (
+        <WorktreeHistoryControls activeView={layout.activeView} />
+      ) : null}
       {layout.activeView === 'activity' ? (
         <ActivityTitlebarControls />
       ) : layout.creationLayoutActive ? null : (

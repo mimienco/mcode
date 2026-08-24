@@ -115,6 +115,8 @@
       "e81217c1b7": "앱 이름 숨기기",
       "5096cbbc86": "MCode",
       "8b0b8eb54f": "애플리케이션 메뉴",
+      "a27f8dd81a": "사이드바 숨기기",
+      "18d43bd86c": "사이드바 표시",
       "caea5b51b9": "지금 재시작",
       "0a9e810705": "다시 시작할 때까지 변경사항이 저장되지 않습니다. 이전 탭은 디스크에 안전합니다.",
       "12e77cf12b": "세션 복원 실패",
@@ -10445,6 +10447,22 @@
             "8a77efcbd1": "포함할 파일(예: *.ts, src/**)",
             "a69ee1bd0e": "포함할 파일"
           },
+          "replace": {
+            "toggle": "바꾸기",
+            "placeholder": "바꾸기",
+            "all": "모두 바꾸기",
+            "preserveCase": "대소문자 유지",
+            "confirm": {
+              "root": "{{value0}}개 항목을 바꾸시겠습니까?",
+              "yes": "바꾸기",
+              "no": "취소"
+            },
+            "summary": {
+              "written": "{{value1}}개 파일에서 {{value0}}개 바꿈",
+              "skipped": "{{value0}}개 건너뜀(편집기에 저장되지 않은 변경 있음)",
+              "failed": "{{value0}}개 실패"
+            }
+          },
           "SearchHeader": {
             "6234a5ef85": "정규식 사용",
             "4567e6e0b6": "전체 단어 일치",
@@ -14394,7 +14412,6 @@
         "noPty": "라이브 terminal이 없습니다. 다시 연결하려면 다시 전환하세요.",
         "locked": "입력이 다른 장치에 의해 보류됩니다.",
         "placeholder": "메시지 보내기…",
-        "mentionHint": "참조 파일:",
         "attach": "파일첨부",
         "startDictation": "받아쓰기 시작",
         "stopDictation": "받아쓰기 중지",
@@ -14412,6 +14429,8 @@
         "options": "옵션",
         "sessionOptions": "세션 옵션",
         "chooseInAgentPicker": "에이전트 선택기에서 선택…",
+        "chooseModelInTerminal": "터미널에서 모델 선택…",
+        "directModelSwitchUnavailable": "이 세션에서는 모델을 직접 변경할 수 없습니다. 터미널에서 선택하거나 새 Codex 세션을 시작하세요.",
         "toggleOption": "{{value0}} 전환",
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueUnknown": "현재 값을 알 수 없음 — 켜짐 또는 꺼짐을 선택하세요",
@@ -14445,7 +14464,13 @@
         "skillScopeBuiltIn": "내장",
         "skillScopePlugin": "플러그인",
         "skillsLoaded": "스킬 로드 완료",
-        "noCommands": "일치하는 명령어가 없습니다"
+        "noCommands": "일치하는 명령어가 없습니다",
+        "loadingFiles": "파일 불러오는 중...",
+        "fileMatchCount": "일치하는 파일: {{resultCount}}개",
+        "moreFileMatches": "일치 항목이 더 있습니다. 계속 입력하여 목록을 좁히세요.",
+        "noFiles": "일치하는 파일 없음",
+        "typeToSearchFiles": "입력하여 워크스페이스 파일 검색",
+        "mentionFiles": "워크스페이스 파일"
       },
       "tool": {
         "running": "실행 중…",

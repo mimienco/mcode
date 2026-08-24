@@ -235,6 +235,24 @@ export function createAppCommandHandlers(
           : false
     ],
     [
+      'search.toggleReplace',
+      () => {
+        const store = useAppStore.getState()
+        const activeWorktreeId = store.activeWorktreeId
+        if (!canRevealRightSidebar || !activeWorktreeId) {
+          return false
+        }
+        return claim('search.toggleReplace', () => {
+          actions.showRightSidebarSearch()
+          const state = useAppStore.getState()
+          const current = state.fileSearchStateByWorktree[activeWorktreeId]
+          state.updateFileSearchState(activeWorktreeId, {
+            replaceOpen: !(current?.replaceOpen ?? false)
+          })
+        })
+      }
+    ],
+    [
       'sidebar.sourceControl.toggle',
       () =>
         // Why: the terminal's own find bar owns this chord while it is open.

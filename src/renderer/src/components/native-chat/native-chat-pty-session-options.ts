@@ -50,6 +50,7 @@ export type CreateNativeChatPtySessionOptionsArgs = {
   mode: NativeChatSessionOptionMode
   reportedValues?: Record<string, SessionOptionValue> | null
   dispatchCommand: NativeChatSessionOptionDispatchCommand
+  directCodexSessionOptions?: boolean
   onAgentPicker?: () => void
   persistSelection?: PersistSelection
   onDraftValuesChanged?: (values: Record<string, SessionOptionValue>) => void
@@ -94,22 +95,27 @@ export function createNativeChatPtySessionOptions(
     writeNativeChatSessionOptionCache(args.scopeKey, record)
   }
   const activeModels = (): CatalogModel[] => withTrackedNativeChatModel(catalog, models, record)
-  let snapshot = buildNativeChatSessionOptionSnapshot({
-    catalog,
-    models: activeModels(),
-    record,
-    mode: args.mode
-  })
-  const listeners = new Set<(value: SessionOptionDescriptor[]) => void>()
-
-  const publish = (): SessionOptionDescriptor[] => {
-    writeNativeChatSessionOptionCache(args.scopeKey, record)
-    snapshot = buildNativeChatSessionOptionSnapshot({
+  const buildSnapshot = (): SessionOptionDescriptor[] => {
+    const next = buildNativeChatSessionOptionSnapshot({
       catalog,
       models: activeModels(),
       record,
       mode: args.mode
     })
+    return args.directCodexSessionOptions && args.agent === 'codex' && args.mode === 'live'
+      ? next.map((descriptor) =>
+          descriptor.action?.type === 'agent-picker'
+            ? { ...descriptor, action: undefined }
+            : descriptor
+        )
+      : next
+  }
+  let snapshot = buildSnapshot()
+  const listeners = new Set<(value: SessionOptionDescriptor[]) => void>()
+
+  const publish = (): SessionOptionDescriptor[] => {
+    writeNativeChatSessionOptionCache(args.scopeKey, record)
+    snapshot = buildSnapshot()
     for (const listener of listeners) {
       listener(snapshot)
     }
@@ -164,6 +170,7 @@ export function createNativeChatPtySessionOptions(
     getModels: activeModels,
     getRecord: () => record,
     dispatchCommand: args.dispatchCommand,
+    directCodexSessionOptions: args.directCodexSessionOptions,
     onAgentPicker: args.onAgentPicker,
     persist,
     onDraftValuesChanged: args.onDraftValuesChanged,

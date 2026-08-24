@@ -71,14 +71,12 @@ describe('installMainThreadHangWatchdog', () => {
     delete process.env.MCODE_HANG_WATCHDOG_CHECK_INTERVAL_MS
   })
 
-  it('is a no-op off macOS', () => {
+  it.each(['win32', 'linux', 'darwin'] as const)('runs on %s packaged builds', (platform) => {
+    workerState.instance = fakeWorker()
     expect(
-      withPlatform('win32', () => installMainThreadHangWatchdog({ userDataPath: '/ud' }))
-    ).toBeNull()
-    expect(
-      withPlatform('linux', () => installMainThreadHangWatchdog({ userDataPath: '/ud' }))
-    ).toBeNull()
-    expect(workerState.calls).toHaveLength(0)
+      withPlatform(platform, () => installMainThreadHangWatchdog({ userDataPath: '/ud' }))
+    ).not.toBeNull()
+    expect(workerState.calls).toHaveLength(1)
   })
 
   it('is a no-op in unpackaged builds unless forced', () => {
@@ -119,8 +117,8 @@ describe('installMainThreadHangWatchdog', () => {
     expect(options.workerData).toMatchObject({
       parentPid: process.pid,
       markerPath: join('/ud', 'main-thread-hang.json'),
-      timeoutMs: 45_000,
-      checkIntervalMs: 5_000
+      timeoutMs: 5_000,
+      checkIntervalMs: 500
     })
     expect(worker.unref).toHaveBeenCalled()
   })
@@ -133,7 +131,7 @@ describe('installMainThreadHangWatchdog', () => {
     )
     vi.advanceTimersByTime(6_000)
     const heartbeats = worker.postMessage.mock.calls.filter(([m]) => m.type === 'heartbeat')
-    expect(heartbeats.length).toBe(3)
+    expect(heartbeats.length).toBe(12)
 
     handle?.stop()
     expect(worker.postMessage.mock.calls.some(([m]) => m.type === 'shutdown')).toBe(true)
@@ -146,7 +144,7 @@ describe('installMainThreadHangWatchdog', () => {
     const heartbeatsAfterStop = worker.postMessage.mock.calls.filter(
       ([m]) => m.type === 'heartbeat'
     )
-    expect(heartbeatsAfterStop.length).toBe(3)
+    expect(heartbeatsAfterStop.length).toBe(12)
   })
 
   it('passes test timing overrides to the worker', () => {
@@ -164,6 +162,26 @@ describe('installMainThreadHangWatchdog', () => {
     workerState.instance = fakeWorker()
     withPlatform('darwin', () => installMainThreadHangWatchdog({ userDataPath: '/ud' }))
     expect(appMock.on).toHaveBeenCalledWith('will-quit', expect.any(Function))
+  })
+
+  it('forwards validated worker observations', () => {
+    const worker = fakeWorker()
+    workerState.instance = worker
+    const onObservation = vi.fn()
+    withPlatform('win32', () =>
+      installMainThreadHangWatchdog({ userDataPath: '/ud', onObservation })
+    )
+    const listener = worker.on.mock.calls.find(([event]) => event === 'message')?.[1]
+
+    listener({ type: 'hang-detected', unresponsiveMs: 5_250, observedAt: 12_000 })
+    listener({ type: 'unknown', unresponsiveMs: 8_000, observedAt: 13_000 })
+
+    expect(onObservation).toHaveBeenCalledOnce()
+    expect(onObservation).toHaveBeenCalledWith({
+      type: 'hang-detected',
+      unresponsiveMs: 5_250,
+      observedAt: 12_000
+    })
   })
 
   it('stops heartbeat work when the worker exits', () => {

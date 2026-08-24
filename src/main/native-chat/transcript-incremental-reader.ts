@@ -1,7 +1,7 @@
 import type { NativeChatMessage, NativeChatTurnLifecycle } from '../../shared/native-chat-types'
 import { transcriptFallbackId } from './transcript-fallback-id'
 import {
-  MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES,
+  nativeChatTranscriptRecordByteLimit,
   type NativeChatLineDecoder
 } from './transcript-tail-reader'
 import { openTranscriptReadStream, wslGatedStat } from './wsl-transcript-fs-access'
@@ -77,7 +77,7 @@ export async function readIncrementalTranscriptMessages(
       return
     }
     state.pendingBytes += part.length
-    if (state.pendingBytes > MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES) {
+    if (state.pendingBytes > nativeChatTranscriptRecordByteLimit(state.pendingChunks, part)) {
       state.pendingChunks.length = 0
       state.droppingOversizedRecord = true
       return

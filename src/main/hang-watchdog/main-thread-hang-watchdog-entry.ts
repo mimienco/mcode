@@ -3,11 +3,13 @@ import { createHangWatchdogDetectionLoop } from './hang-watchdog-detection-loop'
 import { writeHangDetectionMarker } from './hang-detection-marker'
 import type {
   HangWatchdogWorkerData,
+  HangWatchdogWorkerToMainMessage,
   MainToHangWatchdogWorkerMessage
 } from './hang-watchdog-worker-protocol'
 
 type HangWatchdogPort = {
   on: (event: 'message', listener: (message: MainToHangWatchdogWorkerMessage) => void) => unknown
+  postMessage?: (message: HangWatchdogWorkerToMainMessage) => void
   close: () => void
 }
 
@@ -44,21 +46,25 @@ export function runWatchdog(
     timeoutMs: config.timeoutMs,
     checkIntervalMs: config.checkIntervalMs,
     now: () => Date.now(),
-    onHangDetected: (unresponsiveMs) =>
+    onHangDetected: (unresponsiveMs) => {
       recordHangObservation({
         parentPid: config.parentPid,
         markerPath: config.markerPath,
         unresponsiveMs,
         selfRecovered: false
-      }),
+      })
+      port.postMessage?.({ type: 'hang-detected', unresponsiveMs, observedAt: Date.now() })
+    },
     // Why: rewriting the marker keeps one observation per stall rather than two rows to reconcile.
-    onHangResolved: (unresponsiveMs) =>
+    onHangResolved: (unresponsiveMs) => {
       recordHangObservation({
         parentPid: config.parentPid,
         markerPath: config.markerPath,
         unresponsiveMs,
         selfRecovered: true
       })
+      port.postMessage?.({ type: 'hang-resolved', unresponsiveMs, observedAt: Date.now() })
+    }
   })
 
   let checkTimer: ReturnType<typeof setInterval> | null = setInterval(

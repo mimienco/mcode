@@ -23,6 +23,7 @@ import type { TerminalPaneSplitSource } from '../shared/feature-education-teleme
 import type { TerminalTabCreateReply } from '../shared/terminal-reveal-identity'
 import type { ProjectExecutionRuntimeResolution } from '../shared/project-execution-runtime'
 import type { StartupCommandDelivery } from '../shared/codex-startup-delivery'
+import type { CodexLiveSessionOptionsUpdate } from '../shared/codex-live-session-options'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
@@ -68,6 +69,7 @@ import type {
   BrowserWebAuthnAccountResponse
 } from '../shared/browser-webauthn-account'
 import type { SearchResult } from '../shared/code-search-types'
+import type { ReplaceSummary } from '../shared/code-replace-types'
 import type {
   FilesystemPathFlavor,
   FsChangedPayload,
@@ -1054,6 +1056,10 @@ const api = {
     },
     writeAccepted: (id: string, data: string): Promise<boolean> =>
       ipcRenderer.invoke('pty:writeAccepted', { id, data }),
+    getCodexSessionOptions: (id: string) =>
+      ipcRenderer.invoke('pty:codexSessionOptions:get', { id }),
+    setCodexSessionOptions: (id: string, update: CodexLiveSessionOptionsUpdate) =>
+      ipcRenderer.invoke('pty:codexSessionOptions:set', { id, update }),
     onWriteUnavailable: (callback: (payload: { id: string }) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: { id: string }): void =>
         callback(payload)
@@ -3387,6 +3393,7 @@ const api = {
       requestToken?: string
       maxResults?: number
       searchQuery?: string
+      searchMatchMode?: 'fuzzy' | 'substring'
     }): Promise<string[]> => ipcRenderer.invoke('fs:listFiles', args),
     cancelListFiles: (args: { requestToken: string }): Promise<void> =>
       ipcRenderer.invoke('fs:cancelListFiles', args),
@@ -3401,6 +3408,22 @@ const api = {
       maxResults?: number
       connectionId?: string
     }): Promise<SearchResult> => ipcRenderer.invoke('fs:search', args),
+    searchReplace: (args: {
+      rootPath: string
+      query: string
+      replacement: string
+      options?: {
+        caseSensitive?: boolean
+        wholeWord?: boolean
+        useRegex?: boolean
+        preserveCase?: 'none' | 'match'
+      }
+      targets: { filePath: string; relativePath: string }[]
+      requestId?: string
+      skipPaths?: string[]
+    }): Promise<ReplaceSummary> => ipcRenderer.invoke('fs:searchReplace', args),
+    cancelSearchReplace: (args: { requestId: string }): Promise<void> =>
+      ipcRenderer.invoke('fs:cancelSearchReplace', args),
     importExternalPaths: (
       args: {
         sourcePaths: string[]

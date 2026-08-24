@@ -137,4 +137,27 @@ describe('NativeChatQuestionCard', () => {
 
     expect(onAnswer).toHaveBeenCalledWith([{ indices: [], other: 'four spaces' }])
   })
+
+  it('uses roving focus and arrow keys across question tabs', () => {
+    render(
+      {
+        questions: [
+          { question: 'First?', header: 'First', multiSelect: false, options: [] },
+          { question: 'Second?', header: 'Second', multiSelect: false, options: [] }
+        ]
+      },
+      vi.fn()
+    )
+    const tabs = container.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    expect(tabs[0]?.tabIndex).toBe(0)
+    expect(tabs[1]?.tabIndex).toBe(-1)
+
+    act(() =>
+      tabs[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    )
+
+    expect(tabs[0]?.getAttribute('aria-selected')).toBe('false')
+    expect(tabs[1]?.getAttribute('aria-selected')).toBe('true')
+    expect(tabs[1]?.tabIndex).toBe(0)
+  })
 })

@@ -33,6 +33,7 @@ const isWinAdhoc = process.env.MCODE_WIN_ADHOC === '1'
 const isWinDevChannel = isWinHourly || isWinDaily || isWinAdhoc
 const isMacRelease = process.env.MCODE_MAC_RELEASE === '1' || isMacHourly || isMacDaily || isMacAdhoc
 const isLinuxArm64Release = process.env.MCODE_LINUX_ARM64_RELEASE === '1'
+const isProductionBuildLane = process.env.MCODE_BUILD_LANE === 'production'
 const localBuildVersion =
   isMacRelease || isWinDevChannel ? undefined : process.env.MCODE_LOCAL_BUILD_VERSION
 const isHourlyChannel = isMacHourly || isWinHourly
@@ -111,6 +112,7 @@ module.exports = {
       ? { extraMetadata: { version: localBuildVersion } }
       : {}),
   directories: {
+    ...(isProductionBuildLane ? { output: join('dist', 'prod') } : {}),
     buildResources: 'resources/build'
   },
   files: [
@@ -137,6 +139,9 @@ module.exports = {
     // it is gitignored, but exclude it defensively so a stray local capture at
     // package time never bloats app.asar.
     '!pr-evidence{,/**/*}',
+    // Why: .bug-hunter/ is local agent evidence, not an application runtime input;
+    // excluding it also prevents a concurrent local scan from racing packaging.
+    '!.bug-hunter{,/**/*}',
     '!Casks{,/**/*}',
     '!{AGENTS.md,CLAUDE.md,DEVELOPING.md,bundle-size-progress.md,ORCHESTRATION_IMPLEMENTATION_CHECKLIST.md,ORCHESTRATION_STRUCTURED_OUTPUT_DESIGN.md}',
     '!out/**/*.test.js',
@@ -161,7 +166,13 @@ module.exports = {
     // app.asar too lets asarUnpack:['resources/**'] extract a second copy at
     // app.asar.unpacked/resources/win32/bin/mcode.cmd with no adjacent mcode.exe,
     // which fails to launch the CLI (#7351).
-    '!resources/win32{,/**/*}'
+    '!resources/win32{,/**/*}',
+    // Why: only the target platform's sherpa-onnx package is copied through
+    // extraResources; optional packages for other platforms can be partial on
+    // a local install and must not be traversed by the Windows packager.
+    '!node_modules/sherpa-onnx-darwin-*/**',
+    '!node_modules/sherpa-onnx-linux-*/**',
+    '!node_modules/sherpa-onnx-android-*/**'
   ],
   // Why: the CLI entry-point lives in out/cli/ but imports shared modules
   // from out/shared/ and local hook mutators from out/main/. These paths must be
@@ -315,6 +326,10 @@ module.exports = {
   },
   win: {
     executableName: 'MCode',
+    icon: 'resources/build/icon.ico',
+    // Keep resource editing enabled for unsigned local builds as well. Without this,
+    // electron-builder can leave Electron's stock icon and version metadata on MCode.exe.
+    signAndEditExecutable: true,
     // Why: Windows installers are signed after electron-builder packaging by
     // SignPath, so the packager cannot infer the updater publisherName.
     //
@@ -357,6 +372,8 @@ module.exports = {
     shortcutName: '${productName}',
     uninstallDisplayName: '${productName}',
     createDesktopShortcut: 'always',
+    // Why: production updates replace program files, never the durable profile under userData.
+    deleteAppDataOnUninstall: false,
     // Why: on a real uninstall, stop and remove the relocated terminal daemon
     // (which lives outside the install dir under LOCALAPPDATA by design). Guarded
     // by ${isUpdated} inside so it never runs during an update's uninstallOldVersion.

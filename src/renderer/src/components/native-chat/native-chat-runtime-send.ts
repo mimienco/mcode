@@ -1,6 +1,5 @@
-// Runtime send for native chat: clear any unsubmitted TUI line, write the framed
-// body, then Enter as a SEPARATE delayed pty write. Kept apart from the pure
-// byte builders in native-chat-send.ts so those stay IO-free and unit-testable.
+// Runtime sends clear the TUI line, write a framed body, then Enter separately.
+// IO stays apart from the pure byte builders in native-chat-send.ts.
 
 import {
   sendRuntimePtyInput,
@@ -26,12 +25,11 @@ import {
 import {
   cancelNativeChatPtySends,
   enqueueNativeChatPtySend,
-  resetNativeChatPtySendQueuesForTests,
   waitForNativeChatPtyIdle
 } from './native-chat-pty-send-queue'
 
 export { NATIVE_CHAT_ADVANCE_BUFFER_MS, NATIVE_CHAT_QUESTION_STEP_MS, NATIVE_CHAT_SUBMIT_DELAY_MS }
-export { resetNativeChatPtySendQueuesForTests }
+export { resetNativeChatPtySendQueuesForTests } from './native-chat-pty-send-queue'
 
 export const NATIVE_CHAT_IMAGE_ATTACHMENT_SETTLE_MS = 300
 
@@ -69,6 +67,8 @@ export type NativeChatSendHandle = {
   settleAfterMs: number
   /** Actual completion, which can outlive the nominal schedule if the renderer stalls. */
   settled?: Promise<void>
+  /** Runtime acknowledgement for user-visible sends. False includes cancellation. */
+  delivery?: Promise<boolean>
 }
 
 type RuntimeSettings = ReturnType<typeof getSettingsForAgentTabRuntimeOwner>

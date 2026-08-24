@@ -19,9 +19,13 @@ describe('NativeChatToolRun', () => {
       }
     ]
 
-    render(<NativeChatToolRun blocks={blocks} expandSignal />)
+    const { container } = render(<NativeChatToolRun blocks={blocks} expandSignal />)
 
     expect(screen.getByTitle('src/index.ts')).toHaveTextContent('src/index.ts')
     expect(screen.queryByTitle('{"file_path":"src/index.ts","offset":10}')).toBeNull()
+    expect(container.querySelector('[data-native-chat-tool-run]')).toHaveClass(
+      'border-border/60',
+      'bg-muted/25'
+    )
   })
 })

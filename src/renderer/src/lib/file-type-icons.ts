@@ -57,3 +57,37 @@ export function getFileTypeIcon(filePath: string | undefined | null): LucideIcon
   // where OS-native file associations are not available.
   return FILE_ICON_BY_EXTENSION[getExtension(filename)] ?? File
 }
+
+// Why: a small category bucket (not per-extension) keeps this table maintainable;
+// anything unmapped falls back to the menu's muted foreground.
+const FILE_ICON_COLOR_GROUPS: readonly (readonly [string, readonly string[]])[] = [
+  ['text-file-icon-typescript', ['ts', 'tsx', 'mts', 'cts', 'd.ts']],
+  ['text-file-icon-javascript', ['js', 'jsx', 'mjs', 'cjs']],
+  ['text-file-icon-config', ['json', 'jsonc', 'yaml', 'yml', 'toml', 'lock']],
+  ['text-file-icon-docs', ['md', 'mdx', 'txt', 'rst', 'adoc']],
+  ['text-file-icon-styles', ['css', 'scss', 'sass', 'less', 'html', 'htm', 'vue', 'svelte']],
+  ['text-file-icon-dynamic', ['py', 'rb']],
+  ['text-file-icon-rust', ['rs']],
+  ['text-file-icon-go', ['go']],
+  ['text-file-icon-media', ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'avif', 'bmp']],
+  ['text-file-icon-shell', ['sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd']],
+  ['text-file-icon-secret', ['env']]
+]
+
+const FILE_ICON_COLOR_BY_EXTENSION: Record<string, string> = Object.fromEntries(
+  FILE_ICON_COLOR_GROUPS.flatMap(([color, extensions]) =>
+    extensions.map((extension) => [extension, color] as const)
+  )
+)
+
+/** Tailwind text-color class matching {@link getFileTypeIcon} for the same path. */
+export function getFileTypeIconColorClass(filePath: string | undefined | null): string {
+  const filename = getFilename(filePath)
+  if (!filename) {
+    return ''
+  }
+  if (filename.toLowerCase().startsWith('.env')) {
+    return FILE_ICON_COLOR_BY_EXTENSION['env']
+  }
+  return FILE_ICON_COLOR_BY_EXTENSION[getExtension(filename)] ?? ''
+}

@@ -21,11 +21,12 @@ import {
 } from '../../../../shared/agent-title-owner'
 import { resolvePaneAgentOwner } from '../../../../shared/pane-agent-owner'
 import { isClaudeIdentityFrameTitle } from '../../../../shared/terminal-title-agent-type'
+import {
+  buildPendingLaunchAgentRow,
+  TITLE_DERIVED_AGENT_ROW_AUTHORITY_ID
+} from './worktree-pending-launch-agent-row'
 
-/** Fixed, not per-process: title rows are a pure projection of the current title, so they are
- *  comparable across restarts in a way a sequenced authority's rows are not. Ordering against
- *  any other authority's rows is undefined — see agent-status-observation.ts. */
-export const TITLE_DERIVED_AGENT_ROW_AUTHORITY_ID = 'renderer-title-projection'
+export { TITLE_DERIVED_AGENT_ROW_AUTHORITY_ID } from './worktree-pending-launch-agent-row'
 
 const EMPTY_RUNTIME_TITLES: Record<string, Record<number, string>> = {}
 const EMPTY_LIVE_PTY_IDS: Record<string, string[]> = {}
@@ -67,6 +68,16 @@ export function buildTitleDerivedAgentRows(args: {
 
   for (const tab of args.tabs) {
     if (!tabHasLivePty(ptyIdsByTabId, tab.id)) {
+      const pendingLaunchRow = buildPendingLaunchAgentRow({
+        tab,
+        layout: terminalLayoutsByTabId[tab.id],
+        seenPaneKeys: args.seenPaneKeys,
+        now: args.now
+      })
+      if (pendingLaunchRow) {
+        rows.push(pendingLaunchRow)
+        args.seenPaneKeys.add(pendingLaunchRow.paneKey)
+      }
       continue
     }
     const layout = terminalLayoutsByTabId[tab.id]
@@ -149,10 +160,28 @@ function buildTitleDerivedAgentRow(args: {
   // Why (cursor): the native `cursor agent` literal is deliberately status-less so a
   // redraw cannot stomp hook state — but it still identifies a live pane, so the row
   // reads idle instead of vanishing (#10258).
-  const status = isClaudeAgentsTitle
+  const titleStatus = isClaudeAgentsTitle
     ? 'idle'
     : (classifyTitleActivity(title) ?? (isCursorAgentTitle(title) ? 'idle' : null))
-  const label = isClaudeAgentsTitle ? 'Claude Code' : resolveTitleActivityLabel(title)
+  const titleLabel = isClaudeAgentsTitle ? 'Claude Code' : resolveTitleActivityLabel(title)
+  // Why: a freshly mounted agent PTY initially keeps the workspace name as its
+  // title and emits no hook status. Single-pane launch intent still proves its
+  // identity, so keep the already-started agent visible as idle during that gap.
+  const normalizedTabTitle = normalizeCompatibleAgentTitleForOwner(
+    args.tab.title,
+    args.tab.launchAgent
+  )
+  const usesOwnerIdleFallback =
+    !titleStatus &&
+    !titleLabel &&
+    Boolean(args.ownerAgentType) &&
+    title === normalizedTabTitle
+  const status = titleStatus ?? (usesOwnerIdleFallback ? 'idle' : null)
+  const label =
+    titleLabel ??
+    (usesOwnerIdleFallback && args.ownerAgentType
+      ? formatAgentTypeLabel(args.ownerAgentType)
+      : null)
   if (!status || !label) {
     return null
   }
@@ -163,7 +192,9 @@ function buildTitleDerivedAgentRow(args: {
   const orchestration = args.runtimeAgentOrchestrationByPaneKey?.[paneKey]
   const titleAgentType = isClaudeAgentsTitle
     ? 'claude'
-    : resolveTitleDerivedAgentType(title, label, args.ownerAgentType)
+    : usesOwnerIdleFallback
+      ? null
+      : resolveTitleDerivedAgentType(title, label, args.ownerAgentType)
   // Why: a status frame proves activity, not identity, so the resolver drops it.
   // Hook-less agents over SSH (Codex, #8711; OpenCode's '. '/'* ' frames, #8940)
   // surface only decorated task titles; fall back to the pane's known owner instead

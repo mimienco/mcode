@@ -11,7 +11,7 @@ export type NativeChatLaunchPromptDelivery = 'auto-submit' | 'draft' | 'submit-a
 
 /**
  * Decide the initial `viewMode` for a newly launched agent tab from the
- * opt-in `openAgentTabsInChatByDefault` setting.
+ * `openAgentTabsInChatByDefault` setting.
  *
  * Returns `'chat'` only when the setting is explicitly on and the launched
  * agent has a native-chat renderer. A draft launch opens in chat only when its

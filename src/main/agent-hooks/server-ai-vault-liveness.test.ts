@@ -69,4 +69,39 @@ describe('AgentHookServer AI Vault liveness identity', () => {
       await rm(userDataPath, { recursive: true, force: true })
     }
   })
+
+  it('hydrates OMP session-start identity after an app restart', async () => {
+    const userDataPath = await mkdtemp(join(tmpdir(), 'mcode-omp-session-identity-'))
+    const first = new AgentHookServer()
+    try {
+      await first.start({ env: 'production', userDataPath })
+      first.ingestRemote(
+        {
+          paneKey: PANE,
+          providerSession: { key: 'session_id', id: 'omp-session-1' },
+          providerSessionOnly: true,
+          payload: { state: 'done', prompt: '', agentType: 'omp' }
+        },
+        'seed-connection'
+      )
+      first.flushStatusPersistSync()
+      first.stop()
+
+      const second = new AgentHookServer()
+      await second.start({ env: 'production', userDataPath })
+      try {
+        expect(second.getStatusSnapshot()).toEqual([
+          expect.objectContaining({
+            providerSession: { key: 'session_id', id: 'omp-session-1' },
+            providerSessionOnly: true
+          })
+        ])
+      } finally {
+        second.stop()
+      }
+    } finally {
+      first.stop()
+      await rm(userDataPath, { recursive: true, force: true })
+    }
+  })
 })

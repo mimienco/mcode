@@ -115,6 +115,8 @@
       "e81217c1b7": "アプリ名を非表示",
       "5096cbbc86": "MCode",
       "8b0b8eb54f": "アプリケーションメニュー",
+      "a27f8dd81a": "サイドバーを非表示",
+      "18d43bd86c": "サイドバーを表示",
       "caea5b51b9": "今すぐ再起動",
       "0a9e810705": "変更は再起動するまで保存されません。以前のタブはディスク上に安全に保存されています。",
       "12e77cf12b": "セッションの復元に失敗しました",
@@ -10427,6 +10429,22 @@
             "8a77efcbd1": "インクルードするファイル (例: *.ts、src/**)",
             "a69ee1bd0e": "含めるファイル"
           },
+          "replace": {
+            "toggle": "置換",
+            "placeholder": "置換",
+            "all": "すべて置換",
+            "preserveCase": "大文字小文字を保持",
+            "confirm": {
+              "root": "{{value0}} 件を置換しますか？",
+              "yes": "置換",
+              "no": "キャンセル"
+            },
+            "summary": {
+              "written": "{{value1}} ファイルで {{value0}} 件置換",
+              "skipped": "{{value0}} 件スキップ（未保存のエディタ変更）",
+              "failed": "{{value0}} 件失敗"
+            }
+          },
           "SearchHeader": {
             "6234a5ef85": "正規表現を使用する",
             "4567e6e0b6": "単語全体に一致",
@@ -14365,7 +14383,6 @@
         "noPty": "ライブターミナルがありません - 再接続するには元に切り替えてください。",
         "locked": "入力は別のデバイスによって保持されます。",
         "placeholder": "メッセージを送信してください…",
-        "mentionHint": "参照ファイル:",
         "attach": "ファイルを添付する",
         "startDictation": "ディクテーションを開始する",
         "stopDictation": "ディクテーションを停止する",
@@ -14383,6 +14400,8 @@
         "options": "オプション",
         "sessionOptions": "セッションオプション",
         "chooseInAgentPicker": "Agent の選択画面で選ぶ…",
+        "chooseModelInTerminal": "ターミナルでモデルを選択…",
+        "directModelSwitchUnavailable": "このセッションではモデルを直接切り替えられません。ターミナルで選択するか、新しい Codex セッションを開始してください。",
         "toggleOption": "{{value0}}を切り替える",
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueUnknown": "現在の値が不明です — オンまたはオフを選んでください",
@@ -14416,7 +14435,13 @@
         "skillScopeBuiltIn": "組み込み",
         "skillScopePlugin": "プラグイン",
         "skillsLoaded": "スキルを読み込みました",
-        "noCommands": "一致するコマンドがありません"
+        "noCommands": "一致するコマンドがありません",
+        "loadingFiles": "ファイルを読み込み中…",
+        "fileMatchCount": "一致するファイル: {{resultCount}} 件",
+        "moreFileMatches": "さらに一致する項目があります。入力を続けて絞り込んでください。",
+        "noFiles": "一致するファイルはありません",
+        "typeToSearchFiles": "入力してワークスペースのファイルを検索",
+        "mentionFiles": "ワークスペースのファイル"
       },
       "tool": {
         "running": "実行中…",

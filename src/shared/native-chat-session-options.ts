@@ -4,6 +4,8 @@ export type SessionOptionSelectChoice = {
   value: string
   label: string
   description?: string
+  disabled?: boolean
+  disabledReason?: string
 }
 
 /** `default` is the catalog's own value shown before anything is observed —
@@ -23,7 +25,7 @@ export type SessionOptionDescriptor = {
   id: string
   label: string
   description?: string
-  category?: 'model' | 'thought_level' | 'model_config' | 'mode'
+  category?: 'model' | 'thought_level' | 'model_config' | 'mode' | 'permission' | 'interaction_mode'
   kind:
     | {
         type: 'select'
@@ -35,6 +37,8 @@ export type SessionOptionDescriptor = {
         currentValue?: boolean
       }
   valueSource: SessionOptionValueSource
+  /** Whether the shown value controls this task now or only future launches. */
+  applyScope?: 'current-session' | 'next-session'
   settable: boolean
   disabledReason?: SessionOptionDisabledReason
   /** Why: picker-only and toggle-only PTY commands cannot be represented as

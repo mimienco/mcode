@@ -189,6 +189,23 @@ Generation-aware **latest-wins single-flight** for exclusive host focus:
 - `restart-proxy` does **not** kill MCode; it runs `mcode open` + refresh RPCs only.
 - Manual capture if UI fully freezes: `sample MCode 5 -file ~/Desktop/mcode-freeze-sample.txt`
 
+### Local stall evidence
+
+Packaged builds persist stall breadcrumbs in `logs/main.trace.ndjson` under the MCode user-data
+directory (`%APPDATA%\mcode` on Windows):
+
+| Breadcrumb                    | Meaning                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `renderer_event_loop_stall`   | Visible renderer timer was blocked for at least 1s; includes workload size |
+| `renderer_unresponsive`       | Electron emitted the native event behind Windows “Not responding”         |
+| `renderer_responsive`         | Native renderer stall recovered; includes episode duration and metrics     |
+| `main_thread_unresponsive`    | The out-of-thread watchdog missed main-process heartbeats for at least 5s  |
+| `main_thread_responsive`      | Main-process heartbeats resumed                                            |
+| `main_thread_hang_detected`   | Prior-run watchdog marker consumed after restart                           |
+
+The Windows AppHang repro summary groups these into `trace.stallSummary`, separating renderer,
+native-window, and main-thread stalls without relying on console output from the blocked process.
+
 The scripts honor `MCODE_CLI_COMMAND`, then use `mcode-dev` in a dev runtime, `mcode-ide` on Linux, and `mcode` elsewhere.
 
 PowerShell equivalent for the first example:

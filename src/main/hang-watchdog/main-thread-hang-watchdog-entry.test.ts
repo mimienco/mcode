@@ -147,6 +147,7 @@ describe('watchdog worker entry', () => {
           onMessage = listener
         }
       ),
+      postMessage: vi.fn(),
       close: vi.fn()
     }
     try {
@@ -165,9 +166,19 @@ describe('watchdog worker entry', () => {
       expect(consumeHangDetectionMarker(markerPath)).toBeNull()
       vi.advanceTimersByTime(50)
       expect(consumeHangDetectionMarker(markerPath)).toMatchObject({ selfRecovered: false })
+      expect(port.postMessage).toHaveBeenCalledWith({
+        type: 'hang-detected',
+        unresponsiveMs: 125,
+        observedAt: 200
+      })
 
       onMessage?.({ type: 'heartbeat' })
       expect(consumeHangDetectionMarker(markerPath)).toMatchObject({ selfRecovered: true })
+      expect(port.postMessage).toHaveBeenCalledWith({
+        type: 'hang-resolved',
+        unresponsiveMs: 125,
+        observedAt: 200
+      })
       onMessage?.({ type: 'shutdown' })
       expect(port.close).toHaveBeenCalledOnce()
       vi.advanceTimersByTime(1_000)

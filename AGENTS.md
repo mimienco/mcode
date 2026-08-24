@@ -2,6 +2,13 @@
 
 All UI work — layout, color, typography, spacing, component selection, UX behavior — must follow [`docs/STYLEGUIDE.md`](./docs/STYLEGUIDE.md). Use the tokens defined in `src/renderer/src/assets/main.css` (the canonical source) and the shadcn primitives in `src/renderer/src/components/ui/`. Don't invent new color values, font sizes, or shadow tiers when a documented one already covers the role. When STYLEGUIDE.md is silent, follow the resolution order in its final section.
 
+## Development and production lanes
+
+- “Start dev” means `pnpm app:dev`. It uses the MCode Dev identity and a fresh disposable userData profile for every launch.
+- “Run prod” means `pnpm app:prod`. It launches only the packaged artifact under `dist/prod`; never use `pnpm start` as production.
+- “Build prod” means `pnpm app:prod:build`. Production userData under the packaged MCode identity must never be reset by dev tooling.
+- Use `pnpm app:dev:persistent` only when explicitly testing dev-profile persistence or migrations.
+
 ## Electron UI Validation
 
 Use the `$electron` skill and Playwright CDP for rendered MCode UI checks. Do not use computer-use for MCode UI validation.

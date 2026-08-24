@@ -114,4 +114,48 @@ describe('legacy worker renderer recovery', () => {
     resolveProvider()
     await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
   })
+
+  it('retries a terminal_liveness_unavailable startup race without reporting an error', async () => {
+    const livenessError = new Error('terminal_liveness_unavailable')
+    const reconcile = vi.fn().mockRejectedValueOnce(livenessError).mockResolvedValueOnce(undefined)
+    const onDeferredRecoveryError = vi.fn()
+
+    await recoverLegacyWorkerTerminalsForRendererStartup({
+      firstWindowStartupServicesReady: Promise.resolve(),
+      managedWslCliStartupBarrierReady: Promise.resolve(),
+      localPtyProviderStartupReady: Promise.resolve(),
+      reconcile,
+      onDeferredRecoveryError
+    })
+
+    // Why 3: the immediate lane retries once after the liveness race clears (2 calls)
+    // and the deferred provider-ready lane reconciles once more.
+    await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(3))
+    expect(onDeferredRecoveryError).not.toHaveBeenCalled()
+  })
+
+  it('reports through the normal path once liveness retries are exhausted', async () => {
+    // Why: fake timers — real 500ms backoffs would stall the suite.
+    vi.useFakeTimers()
+    try {
+      const livenessError = new Error('terminal_liveness_unavailable')
+      const reconcile = vi.fn().mockRejectedValue(livenessError)
+      const onDeferredRecoveryError = vi.fn()
+
+      const startup = recoverLegacyWorkerTerminalsForRendererStartup({
+        firstWindowStartupServicesReady: Promise.resolve(),
+        managedWslCliStartupBarrierReady: Promise.resolve(),
+        localPtyProviderStartupReady: Promise.resolve(),
+        reconcile,
+        onDeferredRecoveryError
+      })
+      await vi.runAllTimersAsync()
+      await startup
+
+      expect(reconcile).toHaveBeenCalledTimes(12)
+      expect(onDeferredRecoveryError).toHaveBeenCalledWith(livenessError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

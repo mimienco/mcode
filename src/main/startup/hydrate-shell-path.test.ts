@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { delimiter } from 'node:path'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { delimiter, join } from 'node:path'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import {
   _resetHydrateShellPathCache,
@@ -8,6 +10,7 @@ import {
   mergePathSegments,
   type HydrationResult
 } from './hydrate-shell-path'
+import { configureShellPathCacheFile } from './shell-path-hydration-cache'
 
 const { spawnMock } = vi.hoisted(() => ({
   spawnMock: vi.fn()
@@ -237,5 +240,92 @@ describe('mergePathSegments', () => {
 
     expect(mergePathSegments([])).toEqual([])
     expect(process.env.PATH).toBe(joinPath('/usr/bin', '/bin'))
+  })
+})
+
+
+describe('hydrateShellPath persistence', () => {
+  const originalPath = process.env.PATH
+  let tempDir: string
+
+  beforeEach(() => {
+    _resetHydrateShellPathCache()
+    spawnMock.mockReset()
+    tempDir = mkdtempSync(join(tmpdir(), 'mcode-shell-path-'))
+  })
+
+  afterEach(() => {
+    configureShellPathCacheFile(null)
+    _resetHydrateShellPathCache()
+    if (originalPath === undefined) {
+      delete process.env.PATH
+    } else {
+      process.env.PATH = originalPath
+    }
+    rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  function stubSpawnEmitting(segments: string): void {
+    spawnMock.mockImplementation(() => {
+      const proc = createMockShellProcess()
+      setImmediate(() => {
+        const marker = '__MCODE_SHELL_PATH__'
+        ;(proc.stdout as EventEmitter).emit('data', Buffer.from(marker + segments + marker))
+        ;(proc as EventEmitter).emit('close', 0)
+      })
+      return proc as unknown as ChildProcessWithoutNullStreams
+    })
+  }
+
+  it('serves the persisted result immediately, then live-refreshes in the background', async () => {
+    const cacheFile = join(tempDir, 'shell-path-hydration.json')
+    writeFileSync(
+      cacheFile,
+      JSON.stringify({ v: 1, shell: 'powershell.exe', segments: ['C:\\last-run\\bin'] })
+    )
+    configureShellPathCacheFile(cacheFile)
+    stubSpawnEmitting('C:\\fresh\\bin')
+
+    // First call must resolve from the persisted cache without waiting for the probe.
+    const first = await hydrateShellPath()
+    expect(first).toEqual({ ok: true, segments: ['C:\\last-run\\bin'], failureReason: 'none' })
+
+    // Once the background probe finishes, later callers see the fresh result.
+    await vi.waitFor(async () => {
+      const refreshed = await hydrateShellPath()
+      expect(refreshed.segments).toEqual(['C:\\fresh\\bin'])
+    })
+  })
+
+  it('ignores a persisted cache written for a different shell', async () => {
+    const cacheFile = join(tempDir, 'shell-path-hydration.json')
+    writeFileSync(cacheFile, JSON.stringify({ v: 1, shell: 'pwsh.exe', segments: ['C:\\stale'] }))
+    configureShellPathCacheFile(cacheFile)
+
+    const spawner = vi.fn(async () => ({
+      segments: ['/usr/local/bin'],
+      ok: true,
+      failureReason: 'none' as const
+    }))
+    const result = await hydrateShellPath({
+      shellOverride: '/bin/zsh',
+      spawner: spawner as unknown as (shell: string) => Promise<HydrationResult>
+    })
+    expect(result.segments).toEqual(['/usr/local/bin'])
+    expect(spawner).toHaveBeenCalledOnce()
+  })
+
+  it('persists successful probes for the next launch', async () => {
+    const cacheFile = join(tempDir, 'shell-path-hydration.json')
+    configureShellPathCacheFile(cacheFile)
+
+    // Real spawn path (no spawner override) so the persist hook runs.
+    stubSpawnEmitting('/Users/t/.cargo/bin')
+    await hydrateShellPath()
+
+    expect(JSON.parse(readFileSync(cacheFile, 'utf-8'))).toMatchObject({
+      v: 1,
+      segments: ['/Users/t/.cargo/bin']
+    })
   })
 })

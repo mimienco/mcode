@@ -6,7 +6,6 @@ import {
   buildOrderedTabItems,
   buildTabDropIndicators,
   buildTabStripLayoutKey,
-  filterTabBarItemsForActiveView,
   findActiveVisibleTabId,
   type TabBarItem
 } from './tab-bar-item-model'
@@ -113,11 +112,7 @@ export function useTabBarItemProjection({
       allOrderedItems
     ]
   )
-  const orderedItems = useMemo(
-    () =>
-      filterTabBarItemsForActiveView(allOrderedItems, activeVisibleTabId, unifiedTabByVisibleId),
-    [activeVisibleTabId, allOrderedItems, unifiedTabByVisibleId]
-  )
+  const orderedItems = allOrderedItems
   const sortableIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems])
   const activeIndicator =
     hoveredTabInsertion?.groupId === resolvedGroupId ? hoveredTabInsertion : null

@@ -11,6 +11,7 @@ import {
   searchRuntimeFilePaths
 } from '@/runtime/runtime-file-client'
 import { createRuntimeRpcAbortError } from '@/runtime/abortable-runtime-environment-call'
+import type { QuickOpenMatchMode } from '../../../shared/quick-open-path-search'
 import { useAppStore } from '@/store'
 import { useWorktreesForRepo } from '@/store/selectors'
 import type { FileExplorerOperationOwner } from '@/components/right-sidebar/file-explorer-types'
@@ -128,11 +129,15 @@ export function getNestedWorktreeExcludeRequest(
 export function useRuntimeFileListForWorktree({
   enabled,
   worktreeId,
-  query
+  query,
+  matchMode,
+  resultLimit
 }: {
   enabled: boolean
   worktreeId: string | null
   query?: string
+  matchMode?: QuickOpenMatchMode
+  resultLimit?: number
 }): RuntimeFileListState {
   const worktree = useAppStore((state) =>
     // Why: folder workspaces live behind getKnownWorktreeById, not worktreesByRepo.
@@ -190,12 +195,14 @@ export function useRuntimeFileListForWorktree({
   const remoteQueryTooLarge = usesRuntimePathSearch && isQuickOpenRemoteQueryTooLarge(remoteQuery)
   const requestKey = useMemo(
     () =>
-      `${worktreePath ?? ''}\n${operationOwnerKey}\n${excludeRequest.key}\n${activeTargetStatus ?? ''}${usesRuntimePathSearch ? `\n${remoteQuery}` : ''}`,
+      `${worktreePath ?? ''}\n${operationOwnerKey}\n${excludeRequest.key}\n${activeTargetStatus ?? ''}${usesRuntimePathSearch ? `\n${remoteQuery}\n${matchMode ?? 'fuzzy'}\n${resultLimit ?? ''}` : ''}`,
     [
       activeTargetStatus,
       excludeRequest.key,
+      matchMode,
       operationOwnerKey,
       remoteQuery,
+      resultLimit,
       usesRuntimePathSearch,
       worktreePath
     ]
@@ -251,7 +258,8 @@ export function useRuntimeFileListForWorktree({
       ? debounceRuntimeFilePathSearch(120, requestAbortController.signal, () =>
           searchRuntimeFilePaths(requestContext, {
             query: remoteQuery,
-            limit: 32,
+            limit: resultLimit ?? 32,
+            matchMode,
             excludePaths,
             ...(connectionId ? { requestToken } : {}),
             signal: requestAbortController.signal
@@ -307,6 +315,8 @@ export function useRuntimeFileListForWorktree({
     worktreePath,
     remoteQuery,
     remoteQueryTooLarge,
+    matchMode,
+    resultLimit,
     usesRuntimePathSearch
   ])
 

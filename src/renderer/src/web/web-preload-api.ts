@@ -25,6 +25,7 @@ import type {
   ComputerUsePermissionStatusResult
 } from '../../../shared/computer-use-permissions-types'
 import type { SearchResult } from '../../../shared/code-search-types'
+import type { ReplaceSummary } from '../../../shared/code-replace-types'
 import type { DirEntry } from '../../../shared/filesystem-entry-types'
 import type {
   GlobalSettings,
@@ -2069,6 +2070,23 @@ function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
         maxResults: args.maxResults
       })
     },
+    searchReplace: async (args) => {
+      const file = await resolveRuntimeFilePath(args.rootPath)
+      return callRuntimeResult<ReplaceSummary>('files.searchReplace', {
+        worktree: toRuntimeWorktreeSelector(file.worktree.id),
+        query: args.query,
+        replacement: args.replacement,
+        caseSensitive: args.options?.caseSensitive,
+        wholeWord: args.options?.wholeWord,
+        useRegex: args.options?.useRegex,
+        preserveCase: args.options?.preserveCase,
+        targets: args.targets.map((t) => ({ relativePath: t.relativePath })),
+        skipPaths: args.skipPaths
+      })
+    },
+    cancelSearchReplace: async () => {
+      // Why: paired-web replaces over runtime RPC with its own timeout; nothing host-side to abort.
+    },
     importExternalPaths: async () => ({ results: [] }),
     stageExternalPathsForRuntimeUpload: async () => ({ sources: [] }),
     resolveDroppedPathsForAgent: async () => ({ resolvedPaths: [], skipped: [], failed: [] }),
@@ -3330,6 +3348,8 @@ function createPtyApi(): NonNullable<Partial<PreloadApi>['pty']> {
     spawn: () => Promise.reject(new Error('Local PTYs are unavailable in the web client.')),
     write: () => {},
     writeAccepted: () => Promise.resolve(false),
+    getCodexSessionOptions: () => Promise.resolve({ available: false }),
+    setCodexSessionOptions: () => Promise.resolve({ outcome: 'unavailable' }),
     resize: () => {},
     claimViewport: () => {},
     reportGeometry: () => {},

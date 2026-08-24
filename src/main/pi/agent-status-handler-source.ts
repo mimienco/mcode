@@ -3,19 +3,18 @@ import type { PiAgentKind } from '../../shared/pi-agent-kind'
 // Why: keep the generated handler registrations separate from hook transport;
 // both are independently sizeable and the installed extension concatenates them.
 export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] {
-  const sessionStartHandler =
-    kind !== 'omp'
-      ? [
-          "  pi.on('session_start', (event, ctx) => {",
-          '    updateSessionMetadata(ctx)',
-          '    // Why: /reload re-registers the active session, but it is not a',
-          '    // turn boundary and must not clear the visible status or unread state.',
-          "    if (event.reason === 'reload') return",
-          "    post('session_start')",
-          '  })',
-          ''
-        ]
-      : []
+  const sessionStartHandler = [
+    "  pi.on('session_start', (event, ctx) => {",
+    '    updateSessionMetadata(ctx)',
+    '    // Why: /reload re-registers the active session, but it is not a',
+    '    // turn boundary and must not clear the visible status or unread state.',
+    ...(kind !== 'omp' ? ["    if (event.reason === 'reload') return"] : []),
+    '    // Why: OMP exposes its persistent session id here before the first turn;',
+    '    // posting it lets Native Chat attach the transcript even after an app restart.',
+    "    post('session_start')",
+    '  })',
+    ''
+  ]
 
   // Why: OMP can switch sessions in-process, so each latest-only post needs fresh identity.
   const ctxParam = ', ctx'
@@ -28,7 +27,8 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
           '  if (!process.env.PRIME_AGENT_INTERNAL_DAEMON_WORKER) return'
         ]
       : []
-  const ownerEnv = kind === 'prime-agent' ? 'MCODE_PRIME_AGENT_STATUS_OWNED' : 'MCODE_PI_STATUS_OWNED'
+  const ownerEnv =
+    kind === 'prime-agent' ? 'MCODE_PRIME_AGENT_STATUS_OWNED' : 'MCODE_PI_STATUS_OWNED'
 
   return [
     '// Why: pi assistant messages carry content as an array of parts',

@@ -32,3 +32,11 @@ export function formatNativeChatFileReference(filePath: string): string {
   const escaped = filePath.replace(/"/g, '\\"')
   return /\s/.test(filePath) ? `@"${escaped}"` : `@${filePath}`
 }
+
+export function buildNativeChatPrompt(draft: string, filePaths: readonly string[]): string {
+  const references = filePaths.map(formatNativeChatFileReference).join(' ')
+  if (references.length === 0) {
+    return draft
+  }
+  return draft.length > 0 ? `${references} ${draft}` : references
+}

@@ -104,7 +104,10 @@ describe('removeWorktree cascade', () => {
           results: { files: [], totalMatches: 0, truncated: false },
           resultOwner: null,
           loading: false,
-          collapsedFiles: new Set(['/path/wt1/file.ts'])
+          collapsedFiles: new Set(['/path/wt1/file.ts']),
+          replaceOpen: false,
+          replaceValue: '',
+          preserveCase: 'none'
         }
       },
       activeWorktreeId: worktreeId,
@@ -719,7 +722,10 @@ describe('removeWorktree cascade', () => {
           results: { files: [], totalMatches: 0, truncated: false },
           resultOwner: null,
           loading: false,
-          collapsedFiles: new Set()
+          collapsedFiles: new Set(),
+          replaceOpen: false,
+          replaceValue: '',
+          preserveCase: 'none'
         },
         [wt2]: {
           query: 'keep',
@@ -731,7 +737,10 @@ describe('removeWorktree cascade', () => {
           results: { files: [], totalMatches: 1, truncated: false },
           resultOwner: null,
           loading: false,
-          collapsedFiles: new Set(['/path/wt2/notes.md'])
+          collapsedFiles: new Set(['/path/wt2/notes.md']),
+          replaceOpen: false,
+          replaceValue: '',
+          preserveCase: 'none'
         }
       },
       activeWorktreeId: wt2,

@@ -16,6 +16,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import { getAgentCatalog, AgentIcon } from '@/lib/agent-catalog'
 import { useDetectedAgents, type AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import { useAppStore } from '@/store'
+import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { cn } from '@/lib/utils'
@@ -209,7 +210,7 @@ export function AgentPermissionsSetting({
   mode,
   onChange
 }: AgentPermissionsSettingProps): React.JSX.Element {
-  const visibleMode: Exclude<AgentPermissionMode, 'mixed'> = mode === 'manual' ? 'manual' : 'yolo'
+  const visibleMode: Exclude<AgentPermissionMode, 'mixed'> = mode === 'mixed' ? 'ask' : mode
   return (
     <section className="space-y-3">
       <SettingsSubsectionHeader
@@ -240,7 +241,7 @@ export function AgentPermissionsSetting({
         }
         description={translate(
           'auto.components.settings.AgentsPane.agentPermissionsDescription',
-          'Choose whether MCode launches agents with fewer permission prompts or with manual checks.'
+          'Choose one MCode permission intent. Providers translate it to their closest safe native preset.'
         )}
         action={
           <SettingsSegmentedControl<AgentPermissionMode>
@@ -257,14 +258,21 @@ export function AgentPermissionsSetting({
             size="sm"
             options={[
               {
-                value: 'yolo',
-                label: translate('auto.components.settings.AgentsPane.agentPermissionsYolo', 'Yolo')
+                value: 'ask',
+                label: translate('auto.components.settings.AgentsPane.agentPermissionsAsk', 'Ask')
               },
               {
-                value: 'manual',
+                value: 'auto-edits',
                 label: translate(
-                  'auto.components.settings.AgentsPane.agentPermissionsManual',
-                  'Manual'
+                  'auto.components.settings.AgentsPane.agentPermissionsAutoEdits',
+                  'Auto-accept edits'
+                )
+              },
+              {
+                value: 'bypass',
+                label: translate(
+                  'auto.components.settings.AgentsPane.agentPermissionsBypass',
+                  'Bypass'
                 )
               }
             ]}
@@ -689,6 +697,7 @@ export function AgentsPane({
   wslDistros,
   wslCapabilitiesLoading
 }: AgentsPaneProps): React.JSX.Element {
+  const confirm = useConfirmationDialog()
   // Why: the Active Server routes agent launches and provider checks through
   // that server, so this pane must list what THAT host can launch — detecting
   // on the client showed a Windows machine's agents while paired to a Linux
@@ -730,10 +739,14 @@ export function AgentsPane({
   const cmdOverrides = settings.agentCmdOverrides ?? {}
   const agentDefaultArgs = settings.agentDefaultArgs ?? {}
   const agentDefaultEnv = settings.agentDefaultEnv ?? {}
-  const agentPermissionMode = resolveAgentPermissionModeSummary({
+  const resolvedAgentPermissionMode = resolveAgentPermissionModeSummary({
     agentDefaultArgs,
     agentDefaultEnv
   })
+  const agentPermissionMode =
+    resolvedAgentPermissionMode === 'mixed'
+      ? 'mixed'
+      : (settings.agentPermissionPreset ?? resolvedAgentPermissionMode)
   const disabledAgents = normalizeDisabledTuiAgents(settings.disabledTuiAgents)
 
   const setDefault = (id: TuiAgent | 'blank' | null): void => {
@@ -778,14 +791,38 @@ export function AgentsPane({
     })
   }
 
-  const saveAgentPermissionMode = (mode: Exclude<AgentPermissionMode, 'mixed'>): void => {
-    updateSettings(
-      applyAgentPermissionMode({
+  const saveAgentPermissionMode = async (
+    mode: Exclude<AgentPermissionMode, 'mixed'>
+  ): Promise<void> => {
+    if (mode === 'bypass') {
+      const accepted = await confirm({
+        title: translate(
+          'auto.components.settings.AgentsPane.confirmBypassPermissionsTitle',
+          'Bypass permissions for new sessions?'
+        ),
+        description: translate(
+          'auto.components.settings.AgentsPane.confirmBypassPermissions',
+          'This removes provider approval prompts and sandbox restrictions where supported. Use it only in an externally isolated environment.'
+        ),
+        confirmLabel: translate(
+          'auto.components.settings.AgentsPane.confirmBypassPermissionsAction',
+          'Bypass permissions'
+        ),
+        confirmVariant: 'destructive'
+      })
+      if (!accepted) {
+        return
+      }
+    }
+    updateSettings({
+      ...applyAgentPermissionMode({
         mode,
+        interactionMode: settings.agentInteractionMode ?? 'build',
         agentDefaultArgs,
         agentDefaultEnv
-      })
-    )
+      }),
+      agentPermissionPreset: mode
+    })
   }
 
   // Why: null means detection is in flight, not "all agents are installed".

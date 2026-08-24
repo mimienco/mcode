@@ -73,6 +73,7 @@ describe('Electron runtime package contract', () => {
     const guardedScripts = [
       'start',
       'dev',
+      'app:dev',
       'dev-stable-name',
       'build:unpack',
       'build:win',
@@ -89,6 +90,15 @@ describe('Electron runtime package contract', () => {
     for (const scriptName of guardedScripts) {
       expect(scripts[scriptName], scriptName).toContain('pnpm run ensure:electron-runtime &&')
     }
+  })
+
+  it('exposes fresh dev and packaged production lanes as explicit commands', () => {
+    const scripts = packageJson.scripts
+
+    expect(scripts.dev).toContain('--fresh-profile')
+    expect(scripts['app:dev']).toContain('--fresh-profile')
+    expect(scripts['app:prod']).toBe('node config/scripts/production-app-lane.mjs run')
+    expect(scripts['app:prod:build']).toBe('node config/scripts/production-app-lane.mjs build')
   })
 
   it('keeps Windows and Linux package builds off macOS native helper builds', () => {

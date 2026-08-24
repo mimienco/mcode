@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import { useAppStore } from '../../store'
-import { sendRuntimePtyInput } from '@/runtime/runtime-terminal-inspection'
+import { sendRuntimePtyInputVerified } from '@/runtime/runtime-terminal-inspection'
 import { getSettingsForAgentTabRuntimeOwner } from '@/lib/agent-paste-draft'
 import type { AgentType } from '../../../../shared/native-chat-types'
 import {
@@ -34,8 +34,8 @@ export type NativeChatInteractiveSend = {
     selections: AskAnswerSelection[],
     onDeliverySettled?: (delivered: boolean) => void
   ) => { settleAfterMs: number; waitsForVerifiedDelivery: boolean }
-  /** Send a raw control string (e.g. an approval option number or ESC) as-is. */
-  sendRaw: (raw: string) => void
+  /** Send a raw control string and resolve only after the runtime accepts it. */
+  sendRaw: (raw: string) => Promise<boolean>
   /** Stop delayed writes without interrupting the agent. */
   cancelPending: () => void
   /** Send ESC to interrupt — cancels a question / denies an approval. */
@@ -72,11 +72,15 @@ export function useNativeChatInteractiveSend(
   )
 
   const sendRaw = useCallback(
-    (raw: string) => {
+    (raw: string): Promise<boolean> => {
       if (!targetPtyId) {
-        return
+        return Promise.resolve(false)
       }
-      sendRuntimePtyInput(getSettingsForAgentTabRuntimeOwner(terminalTabId), targetPtyId, raw)
+      return sendRuntimePtyInputVerified(
+        getSettingsForAgentTabRuntimeOwner(terminalTabId),
+        targetPtyId,
+        raw
+      )
     },
     [terminalTabId, targetPtyId]
   )
@@ -154,7 +158,7 @@ export function useNativeChatInteractiveSend(
   // Stop/cancel: drop any pending answer writes, then send ESC to interrupt.
   const cancel = useCallback(() => {
     cancelInFlight()
-    sendRaw(ESC)
+    void sendRaw(ESC)
   }, [cancelInFlight, sendRaw])
 
   return { sendAnswer, sendRaw, cancelPending: cancelInFlight, cancel }

@@ -51,7 +51,7 @@ describe('nativeChatCardDismissKey', () => {
       approval: {
         title: 'Allow Bash?',
         detail: 'rm -rf build',
-        options: [{ label: 'Allow', send: '1' }]
+        options: [{ label: 'Allow once', send: '1', intent: 'allow-once' }]
       }
     })
     expect(key).toBe('approval:Allow Bash?:rm -rf build')

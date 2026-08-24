@@ -99,6 +99,7 @@ export type KeybindingActionId =
   | 'fileExplorer.copyPath'
   | 'fileExplorer.copyRelativePath'
   | 'fileExplorer.delete'
+  | 'search.toggleReplace'
   | 'settings.search'
   | 'terminal.copySelection'
   | 'terminal.selectAll'
@@ -383,6 +384,14 @@ export const KEYBINDING_DEFINITIONS: readonly KeybindingDefinition[] = [
     scope: 'global',
     searchKeywords: ['shortcut', 'sidebar', 'search'],
     defaultBindings: platformBindings(['Mod+Shift+F'])
+  },
+  {
+    id: 'search.toggleReplace',
+    title: 'Toggle Replace in Search',
+    group: 'File Explorer',
+    scope: 'fileExplorer',
+    searchKeywords: ['shortcut', 'replace', 'search and replace', 'find'],
+    defaultBindings: platformBindings(['Mod+Shift+H'])
   },
   {
     id: 'sidebar.sourceControl.toggle',

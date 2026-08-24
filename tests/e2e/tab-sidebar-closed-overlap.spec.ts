@@ -7,10 +7,9 @@
  * wrapper in App.tsx.
  *
  * The original regression (introduced in #1066, fixed in #1112): the ref
- * was on the *inner* control cluster (traffic-light pad + sidebar toggle +
- * agent badge), excluding the back/forward nav group that sits in the same
- * floating row. The spacer ended up ~55px narrower than the floating
- * strip, so the back/forward arrows silently covered the first tab.
+ * was on the *inner* control cluster, excluding controls that sat in the same
+ * floating row. The spacer ended up ~55px narrower than the floating strip,
+ * so those controls silently covered the first tab.
  * Because the tab strip wasn't overflowing, there was no scroll affordance
  * and the covered tab was completely unreachable.
  *
@@ -206,7 +205,7 @@ test.describe('Tab visibility with closed sidebar', () => {
     expect(centerIsTabOrDescendant).toBe(true)
   })
 
-  test('sidebar toggle and Back button stay separated after sidebar collapse', async ({
+  test('collapsed titlebar keeps only the app menu and sidebar restore action', async ({
     mcodePage
   }) => {
     await mcodePage.addInitScript(() => {
@@ -297,41 +296,44 @@ test.describe('Tab visibility with closed sidebar', () => {
 
     const measureControls = async (): Promise<{
       titlebarIsCollapsed: boolean
-      toggleRight: number
-      backLeft: number
-      backCenterHitsBack: boolean
+      applicationMenuVisible: boolean
+      showSidebarVisible: boolean
+      showSidebarExpanded: string | null
+      floatingButtonCount: number
+      historyInsideFloatingHeader: boolean
     } | null> =>
       mcodePage.evaluate(() => {
         const titlebarLeft = document.querySelector<HTMLElement>('.titlebar-left')
         const sidebarToggle = titlebarLeft?.querySelector<HTMLButtonElement>(
-          'button[aria-label="Toggle sidebar"]'
+          'button[aria-label="Show sidebar"]'
         )
-        const backButton = titlebarLeft?.querySelector<HTMLButtonElement>(
-          'button[aria-label="Go back"]'
-        )
-        if (!titlebarLeft || !sidebarToggle || !backButton) {
+        if (!titlebarLeft || !sidebarToggle) {
           return null
         }
         const titlebarIsCollapsed = getComputedStyle(titlebarLeft).position === 'absolute'
-        const toggleRect = sidebarToggle.getBoundingClientRect()
-        const backRect = backButton.getBoundingClientRect()
-        const backCenterX = backRect.left + backRect.width / 2
-        const backCenterY = backRect.top + backRect.height / 2
-        const elementAtBackCenter = document.elementFromPoint(backCenterX, backCenterY)
         return {
           titlebarIsCollapsed,
-          toggleRight: toggleRect.right,
-          backLeft: backRect.left,
-          backCenterHitsBack:
-            elementAtBackCenter !== null && backButton.contains(elementAtBackCenter)
+          applicationMenuVisible: Boolean(
+            titlebarLeft.querySelector('button[aria-label="Application menu"]')
+          ),
+          showSidebarVisible: sidebarToggle.getBoundingClientRect().width > 0,
+          showSidebarExpanded: sidebarToggle.getAttribute('aria-expanded'),
+          floatingButtonCount: titlebarLeft.querySelectorAll('button').length,
+          historyInsideFloatingHeader: Boolean(
+            titlebarLeft.querySelector(
+              'button[aria-label="Go back"], button[aria-label="Go forward"]'
+            )
+          )
         }
       })
 
     let controls: {
       titlebarIsCollapsed: boolean
-      toggleRight: number
-      backLeft: number
-      backCenterHitsBack: boolean
+      applicationMenuVisible: boolean
+      showSidebarVisible: boolean
+      showSidebarExpanded: string | null
+      floatingButtonCount: number
+      historyInsideFloatingHeader: boolean
     } | null = null
     await expect
       .poll(
@@ -347,12 +349,12 @@ test.describe('Tab visibility with closed sidebar', () => {
       .toBe(true)
 
     expect(controls).not.toBeNull()
-    const { toggleRight, backLeft, backCenterHitsBack } = controls!
-
-    // Why: in the collapsed workspace header, ml-auto has no spare width to
-    // distribute, so this explicit gutter guards the Windows titlebar controls
-    // from visually merging with the Back button again.
-    expect(backLeft - toggleRight).toBeGreaterThanOrEqual(6)
-    expect(backCenterHitsBack).toBe(true)
+    expect(controls).toMatchObject({
+      applicationMenuVisible: true,
+      showSidebarVisible: true,
+      showSidebarExpanded: 'false',
+      floatingButtonCount: 2,
+      historyInsideFloatingHeader: false
+    })
   })
 })

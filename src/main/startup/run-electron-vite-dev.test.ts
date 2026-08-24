@@ -231,11 +231,62 @@ describe('run-electron-vite-dev', () => {
     expect(envSnapshot.worktreeName).toBe('payment-ui')
     expect(envSnapshot.repoRoot).toBe(resolve('.'))
     expect(envSnapshot.badgeLabel).toBeNull()
-    expect(envSnapshot.dockTitle).toBe('MCode: feature/billing-shell')
+    expect(envSnapshot.dockTitle).toBe('MCode Dev: feature/billing-shell')
     expect(envSnapshot.stableName).toBeNull()
     expect(envSnapshot.electronExecPath).toBeNull()
 
     await stopWrapperAndTrackedPids(wrapper, trackedPids)
+  })
+
+  it('starts with a fresh disposable userData profile and removes it after exit', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mcode-dev-wrapper-'))
+    const pidFile = join(tempDir, 'grandchild.pid')
+    const envFile = join(tempDir, 'env.json')
+    const wrapperPath = resolve('config/scripts/run-electron-vite-dev.mjs')
+    const fakeCliPath = resolve('src/main/startup/__fixtures__/fake-electron-vite-dev-cli.mjs')
+
+    const wrapper = spawn(
+      process.execPath,
+      [wrapperPath, '--fresh-profile', '--remote-debugging-port=9446'],
+      {
+        cwd: resolve('.'),
+        env: devWrapperTestEnv({
+          MCODE_ELECTRON_VITE_CLI: fakeCliPath,
+          MCODE_SKIP_DEV_CLI_PREPARE: '1',
+          MCODE_SKIP_DEV_ELECTRON_APP_PREPARE: '1',
+          MCODE_SKIP_DEV_WEB_PREPARE: '1',
+          MCODE_DEV_WRAPPER_TEST_PID_FILE: pidFile,
+          MCODE_DEV_WRAPPER_TEST_ENV_FILE: envFile,
+          MCODE_DEV_WRAPPER_TEST_AUTO_EXIT: '1'
+        }),
+        stdio: 'ignore'
+      }
+    )
+
+    expect(wrapper.pid).toBeTypeOf('number')
+    processesToCleanUp.add(wrapper.pid!)
+
+    await waitFor(() => existsSync(envFile))
+    const trackedPids = trackPidFile(pidFile)
+    const envSnapshot = JSON.parse(readFileSync(envFile, 'utf8')) as {
+      args: string[]
+      userDataPath: string | null
+    }
+
+    expect(envSnapshot.args).not.toContain('--fresh-profile')
+    expect(envSnapshot.userDataPath).toMatch(
+      new RegExp(`^${resolve(tmpdir()).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\\\/]mcode-dev-`)
+    )
+    const { code } = await waitForExit(wrapper)
+    expect(code).toBe(0)
+    await waitFor(() => trackedPids.every((pid) => !processExists(pid)))
+    for (const pid of trackedPids) {
+      processesToCleanUp.delete(pid)
+    }
+    if (wrapper.pid) {
+      processesToCleanUp.delete(wrapper.pid)
+    }
+    expect(existsSync(envSnapshot.userDataPath!)).toBe(false)
   })
 
   it.skipIf(process.platform === 'win32')(

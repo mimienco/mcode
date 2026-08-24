@@ -27,12 +27,18 @@ function picker(items = [COMMAND]): Extract<ComposerAutocomplete, { mode: 'slash
   }
 }
 
-function setup(autocomplete: ComposerAutocomplete = picker(), composing = false) {
+function setup(
+  autocomplete: ComposerAutocomplete = picker(),
+  composing = false,
+  mentionOptionCount = 0
+) {
   const callbacks = {
     completePickerItem: vi.fn(),
     dispatchPickerCommand: vi.fn(),
     dismissPicker: vi.fn(),
     interrupt: vi.fn(),
+    mentionOptionCount,
+    acceptMention: vi.fn(),
     send: vi.fn(),
     setActiveSuggestion: vi.fn(),
     setDraft: vi.fn(),
@@ -95,5 +101,35 @@ describe('useNativeChatComposerKeyDown', () => {
     expect(event.preventDefault).toHaveBeenCalledOnce()
     expect(callbacks.dispatchPickerCommand).not.toHaveBeenCalled()
     expect(callbacks.send).not.toHaveBeenCalled()
+  })
+
+  it('wraps mention selection with arrow keys', () => {
+    const mention: ComposerAutocomplete = { mode: 'mention', query: 'app', triggerKey: '@:0' }
+    const down = setup(mention, false, 2)
+    down.handler(keyEvent('ArrowDown') as never)
+    expect(down.callbacks.setActiveSuggestion).toHaveBeenCalledOnce()
+    expect(down.callbacks.setActiveSuggestion.mock.calls[0][0](1)).toBe(0)
+
+    const up = setup(mention, false, 2)
+    up.handler(keyEvent('ArrowUp') as never)
+    expect(up.callbacks.setActiveSuggestion.mock.calls[0][0](0)).toBe(1)
+  })
+
+  it.each(['Enter', 'Tab'])('accepts a mention with %s', (key) => {
+    const mention: ComposerAutocomplete = { mode: 'mention', query: 'app', triggerKey: '@:0' }
+    const { handler, callbacks } = setup(mention, false, 1)
+    handler(keyEvent(key) as never)
+
+    expect(callbacks.acceptMention).toHaveBeenCalledOnce()
+    expect(callbacks.send).not.toHaveBeenCalled()
+  })
+
+  it('dismisses a mention on Escape without interrupting', () => {
+    const mention: ComposerAutocomplete = { mode: 'mention', query: 'app', triggerKey: '@:0' }
+    const { handler, callbacks } = setup(mention, false, 1)
+    handler(keyEvent('Escape') as never)
+
+    expect(callbacks.dismissPicker).toHaveBeenCalledWith('@:0')
+    expect(callbacks.interrupt).not.toHaveBeenCalled()
   })
 })

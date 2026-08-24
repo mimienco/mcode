@@ -260,6 +260,79 @@ describe('useIpcEvents agent status snapshot integration', () => {
     })
   })
 
+  it('records an OMP identity-only session snapshot for Native Chat', async () => {
+    const tabId = 'tab-omp-native-chat'
+    const leafId = '00000000-0000-4000-8003-000000000001'
+    const paneKey = makePaneKey(tabId, leafId)
+    const worktreeId = 'wt-omp-native-chat'
+    const sessionId = '01a02fe8-1e31-71f1-b392-afc9adc3092f'
+    const store = createTestStore()
+    store.setState({
+      workspaceSessionReady: true,
+      repos: [TEST_REPO],
+      worktreesByRepo: {
+        [TEST_REPO.id]: [makeWorktree({ id: worktreeId, repoId: TEST_REPO.id })]
+      },
+      tabsByWorktree: {
+        [worktreeId]: [
+          makeTab({ id: tabId, worktreeId, title: 'OMP ready', ptyId: 'pty-omp-native-chat' })
+        ]
+      },
+      terminalLayoutsByTabId: {
+        [tabId]: {
+          root: { type: 'leaf', leafId },
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: 'pty-omp-native-chat' }
+        }
+      },
+      activeWorktreeId: null,
+      settings: { ...store.getState().settings, terminalFontSize: 13 }
+    } as Partial<AppState>)
+
+    stubReactSyncEffect()
+    vi.doMock('../store', () => ({
+      useAppStore: {
+        subscribe: store.subscribe,
+        getState: store.getState,
+        setState: store.setState
+      }
+    }))
+    stubAuxiliaryModules()
+    vi.stubGlobal(
+      'window',
+      buildWindowApi({
+        getSnapshot: vi.fn().mockResolvedValue([
+          {
+            paneKey,
+            tabId,
+            worktreeId,
+            state: 'done',
+            prompt: '',
+            agentType: 'omp',
+            providerSession: { key: 'session_id', id: sessionId },
+            providerSessionOnly: true,
+            receivedAt: 1_700_000_000_100,
+            stateStartedAt: 1_700_000_000_100
+          }
+        ] satisfies AgentStatusSetData[]),
+        onSet: () => () => {}
+      })
+    )
+
+    const { useIpcEvents } = await import('./useIpcEvents')
+    useIpcEvents()
+
+    await vi.waitFor(() => {
+      expect(store.getState().sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
+        agent: 'omp',
+        providerSession: { key: 'session_id', id: sessionId },
+        tabId,
+        worktreeId
+      })
+    })
+  })
+
   it('applies a burst leading-edge first, then coalesces the rest into one deferred batch', async () => {
     // Why: each live status event is its own IPC task, so N events used to pay
     // N full render passes (STA-3328 mechanism 2). The leading event must stay

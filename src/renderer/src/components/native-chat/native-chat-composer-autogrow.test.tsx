@@ -18,7 +18,7 @@ vi.mock('./NativeChatComposerActions', () => ({
 }))
 
 vi.mock('./NativeChatAutocompleteMenus', () => ({
-  NativeChatMentionHint: () => null,
+  NativeChatMentionMenu: () => null,
   NativeChatPickerMenu: () => null
 }))
 
@@ -38,6 +38,7 @@ function renderField(draft: string): HTMLTextAreaElement {
       activeSuggestion={0}
       notice={null}
       imageAttachments={[]}
+      fileReferences={[]}
       sendButtonDisabled={false}
       isWorking={false}
       attachDisabled={false}
@@ -53,8 +54,13 @@ function renderField(draft: string): HTMLTextAreaElement {
       pickerListboxId="picker"
       onChoosePickerItem={vi.fn()}
       onRetrySkills={vi.fn()}
-      onAcceptMention={vi.fn()}
+      mentionFiles={[]}
+      mentionLoading={false}
+      mentionLoadError={null}
+      mentionTruncated={false}
+      onChooseMention={vi.fn()}
       onRemoveImageAttachment={vi.fn()}
+      onRemoveFileReference={vi.fn()}
       onAttach={vi.fn()}
       onDictationToggle={vi.fn()}
       onDictationHoldStart={vi.fn()}
@@ -84,10 +90,11 @@ describe('native chat composer autogrow', () => {
     expect(renderField('a\n'.repeat(20)).className).toContain('scrollbar-sleek')
   })
 
-  it('keeps the touch-target minimum heights', () => {
+  it('keeps a spacious writing area and the coarse-pointer touch target', () => {
     const textarea = renderField('')
-    expect(textarea.className).toContain('min-h-12')
+    expect(textarea.className).toContain('min-h-14')
     expect(textarea.className).toContain('pointer-coarse:min-h-14')
+    expect(document.querySelector('[data-native-chat-composer-surface]')).not.toBeNull()
   })
 
   it('does not pin an inline height that a resize could leave stale', () => {

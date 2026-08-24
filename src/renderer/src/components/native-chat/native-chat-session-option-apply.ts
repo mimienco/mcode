@@ -21,6 +21,7 @@ import type {
   NativeChatSessionOptionDispatchCommand,
   NativeChatSessionOptionDispatchResult
 } from './native-chat-session-option-command-dispatch'
+import { dispatchCodexLiveSessionOption } from './native-chat-codex-session-option-apply'
 import {
   flattenNativeChatSessionOptionRecord,
   resolveEffectiveNativeChatModelId,
@@ -33,6 +34,7 @@ type SessionOptionApplyContext = {
   getModels: () => CatalogModel[]
   getRecord: () => NativeChatSessionOptionRecord
   dispatchCommand: NativeChatSessionOptionDispatchCommand
+  directCodexSessionOptions?: boolean
   onAgentPicker?: () => void
   /** The one persist entry point, shared with typed commands: it owns both the
    *  null-model guard and whether the id may be adopted as the launch default. */
@@ -190,7 +192,11 @@ async function applySetOption(
     throw new Error(`Unknown session option: ${id}`)
   }
   const { apply, modelId: previousModelId } = resolved
-  if (ctx.mode === 'live' && apply.midSession?.kind === 'agent-picker') {
+  if (
+    ctx.mode === 'live' &&
+    apply.midSession?.kind === 'agent-picker' &&
+    !ctx.directCodexSessionOptions
+  ) {
     throw new Error('This option must be changed in the agent picker.')
   }
 
@@ -219,12 +225,22 @@ async function applySetOption(
 
   let dispatchResult: NativeChatSessionOptionDispatchResult | void = undefined
   if (ctx.mode === 'live') {
-    dispatchResult = await dispatchLiveCommand(ctx, {
-      optionId: id,
-      value,
-      apply,
-      modelId: previousModelId
-    })
+    dispatchResult = ctx.directCodexSessionOptions
+      ? await dispatchCodexLiveSessionOption({
+          catalog: ctx.catalog,
+          models: ctx.getModels(),
+          optionId: id,
+          value,
+          modelId: previousModelId,
+          currentEffort: getTrackedOption(ctx.getRecord(), previousModelId, 'effort')?.value,
+          dispatchCommand: ctx.dispatchCommand
+        })
+      : await dispatchLiveCommand(ctx, {
+          optionId: id,
+          value,
+          apply,
+          modelId: previousModelId
+        })
   } else if (!apply.launchArgs && !apply.composedIntoModel) {
     throw new Error('This option is only available after the session starts.')
   }
@@ -232,6 +248,24 @@ async function applySetOption(
   const early = applyDispatchOutcome(ctx, dispatchResult)
   if (early) {
     return early
+  }
+
+  if (ctx.directCodexSessionOptions && dispatchResult?.appliedValues) {
+    const { model, effort } = dispatchResult.appliedValues
+    const record = ctx.getRecord()
+    if (model) {
+      if (trackedModelId(record) !== model) {
+        delete record.valuesByModel[model]
+      }
+      ctx.setTrackedValue('model', model, 'dispatched')
+      ctx.persist(model, 'model', model)
+    }
+    const effectiveModelId = model ?? trackedModelId(record) ?? previousModelId
+    if (effort) {
+      ctx.setTrackedValue('effort', effort, 'dispatched')
+      ctx.persist(effectiveModelId, 'effort', effort)
+    }
+    return finish(ctx)
   }
 
   const record = ctx.getRecord()

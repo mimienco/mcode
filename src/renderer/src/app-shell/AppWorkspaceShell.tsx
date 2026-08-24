@@ -100,6 +100,22 @@ export function AppWorkspaceShell(props: {
   const scrollOffsetRef = useRef(0)
   const scrollAnchorRef = useRef<VirtualizedScrollAnchor>(null)
   const sidebarScrollRefs = { scrollOffsetRef, scrollAnchorRef }
+  // Why: the sidebar was the only major region without its own boundary — a crash
+  // here escaped to app.workspace-shell and took the titlebar, terminal, and every
+  // page down with it. One element reused by both layout branches (only one mounts).
+  const guardedSidebar = (
+    <RecoverableRenderErrorBoundary
+      boundaryId="worktree-sidebar"
+      surface="sidebar"
+      title={translate('auto.App.4c2e91fa07', 'The sidebar hit an error.')}
+      description={translate(
+        'auto.App.9d7f3a2b81',
+        'The rest of the app is still running. Retry to reload the sidebar.'
+      )}
+    >
+      <WorktreeSidebar layout={layout} scrollRefs={sidebarScrollRefs} />
+    </RecoverableRenderErrorBoundary>
+  )
 
   return (
     <NativeChatTitlebarPortalProvider>
@@ -148,12 +164,10 @@ export function AppWorkspaceShell(props: {
                       {titlebarLeftControls}
                     </div>
                     {/* Why: flex-1/min-h-0 slot needed under the fixed 36px header, else the sidebar collapses to content height and loses its scroll viewport. */}
-                    <div className="flex min-h-0 flex-1">
-                      <WorktreeSidebar layout={layout} scrollRefs={sidebarScrollRefs} />
-                    </div>
+                    <div className="flex min-h-0 flex-1">{guardedSidebar}</div>
                   </div>
                 ) : (
-                  <WorktreeSidebar layout={layout} scrollRefs={sidebarScrollRefs} />
+                  guardedSidebar
                 )
               ) : null}
               <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">

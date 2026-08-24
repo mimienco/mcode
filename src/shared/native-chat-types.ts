@@ -49,8 +49,8 @@ export type NativeChatToolResultBlock = {
   isError?: boolean
 }
 
-/** A reference to an image, by local path or remote URL. Exactly the field
- *  that applies is populated; `alt` is optional descriptive text. */
+/** A reference to an image by local path or URL. Generated images may carry
+ *  both: the path labels the artifact while an inline URL supplies its preview. */
 export type NativeChatImageRefBlock = {
   type: 'image-ref'
   path?: string

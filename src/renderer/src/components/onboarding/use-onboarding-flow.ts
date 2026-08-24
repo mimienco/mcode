@@ -227,7 +227,7 @@ export function useOnboardingFlow(
     resolveAgentPermissionModeSummary({
       agentDefaultArgs: settings?.agentDefaultArgs,
       agentDefaultEnv: settings?.agentDefaultEnv
-    }) !== 'manual'
+    }) === 'bypass'
   )
   // Why: hydrate theme from saved settings so users who already chose one see it preselected.
   const [theme, setTheme] = useState<GlobalSettings['theme']>(settings?.theme ?? 'dark')
@@ -261,7 +261,7 @@ export function useOnboardingFlow(
       resolveAgentPermissionModeSummary({
         agentDefaultArgs: settings.agentDefaultArgs,
         agentDefaultEnv: settings.agentDefaultEnv
-      }) !== 'manual'
+      }) === 'bypass'
     if (nextYoloPermissions !== yoloPermissions) {
       setYoloPermissions(nextYoloPermissions)
     }

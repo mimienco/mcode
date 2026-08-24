@@ -20,6 +20,10 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import type { SearchOptions, SearchResult } from '../../shared/code-search-types'
+import type {
+  ReplaceOptions,
+  ReplaceSummary
+} from '../../shared/code-replace-types'
 import type { DirEntry, FsChangeEvent, MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { GitWorktreeInfo, Worktree } from '../../shared/worktree/types'
 import {
@@ -52,10 +56,18 @@ import {
 import { wslAwareSpawn } from '../git/runner'
 import { parseWslPath, toWindowsWslPath } from '../wsl'
 import { resolveAuthorizedPath } from '../ipc/filesystem-auth'
+import {
+  performReplace,
+  REMOTE_REPLACE_UNSUPPORTED_MESSAGE
+} from '../ipc/filesystem-search-replace'
 import { isENOENT } from '../ipc/filesystem-path-containment'
 import { listQuickOpenFiles } from '../ipc/filesystem-list-files'
 import { searchQuickOpenFilePaths as searchHostQuickOpenFilePaths } from '../ipc/filesystem-search-file-paths'
-import { isQuickOpenQueryTooLarge, QuickOpenPathRanker } from '../../shared/quick-open-path-search'
+import {
+  isQuickOpenQueryTooLarge,
+  QuickOpenPathRanker,
+  type QuickOpenMatchMode
+} from '../../shared/quick-open-path-search'
 import { limitQuickOpenFilesBySerializedBytes } from '../../shared/quick-open-transport-budget'
 import { searchWithGitGrep } from '../ipc/filesystem-search-git'
 import { getLocalGitOptionsForRegisteredWorktree } from '../ipc/local-worktree-runtime-options'
@@ -700,6 +712,7 @@ export class RuntimeFileCommands {
     worktreeSelector: string,
     query: string,
     limit: number,
+    matchMode?: QuickOpenMatchMode,
     excludePaths?: string[],
     signal?: AbortSignal
   ): Promise<RuntimeFileListResult> {
@@ -714,12 +727,14 @@ export class RuntimeFileCommands {
               connectionId,
               query,
               limit,
+              matchMode,
               excludePaths,
               signal
             )
           : await searchHostQuickOpenFilePaths(worktree.path, this.host.requireStore(), {
               query,
               limit,
+              matchMode,
               excludePaths,
               signal
             })
@@ -2090,6 +2105,47 @@ export class RuntimeFileCommands {
     return this.searchLocalRuntimeFiles(rootPath, searchOptions)
   }
 
+  async searchReplaceRuntimeFiles(
+    worktreeSelector: string,
+    params: {
+      query: string
+      replacement: string
+      options?: ReplaceOptions
+      targets: { relativePath: string }[]
+      skipPaths?: string[]
+    }
+  ): Promise<ReplaceSummary> {
+    const target = await this.host.resolveRuntimeFileTarget(worktreeSelector)
+    const provider = target.connectionId ? getSshFilesystemProvider(target.connectionId) : null
+    if (target.connectionId) {
+      if (!provider) {
+        throw new Error(SSH_FILESYSTEM_PROVIDER_UNAVAILABLE_MESSAGE)
+      }
+      if (!provider.searchReplace) {
+        throw new Error(REMOTE_REPLACE_UNSUPPORTED_MESSAGE)
+      }
+      return provider.searchReplace({
+        rootPath: target.worktree.path,
+        query: params.query,
+        replacement: params.replacement,
+        options: params.options ?? {},
+        targets: params.targets.map((relativePath) => ({
+          filePath: join(target.worktree.path, relativePath.relativePath),
+          relativePath: relativePath.relativePath
+        })),
+        skipPaths: params.skipPaths
+      })
+    }
+    return performReplace({
+      rootPath: target.worktree.path,
+      query: params.query,
+      replacement: params.replacement,
+      options: params.options ?? {},
+      targets: params.targets,
+      skipPaths: params.skipPaths ?? []
+    })
+  }
+
   async listRuntimeFiles(
     worktreeSelector: string,
     options: {
@@ -2350,6 +2406,7 @@ export class RuntimeFileCommands {
     connectionId: string,
     query: string,
     limit: number,
+    matchMode?: QuickOpenMatchMode,
     excludePaths?: string[],
     signal?: AbortSignal
   ): Promise<{ paths: string[]; totalCount: number; truncated: boolean }> {
@@ -2357,7 +2414,12 @@ export class RuntimeFileCommands {
     if (!provider) {
       return { paths: [], totalCount: 0, truncated: false }
     }
-    if (!(await provider.supportsQuickOpenSearch?.({ signal }))) {
+    const supportsSearch = await provider.supportsQuickOpenSearch?.({ signal })
+    const supportsMatchMode =
+      matchMode !== 'substring' ||
+      (provider.supportsQuickOpenSearchMatchMode !== undefined &&
+        (await provider.supportsQuickOpenSearchMatchMode({ signal })))
+    if (!supportsSearch || !supportsMatchMode) {
       // Old relays ignore searchQuery. Keep the compatibility request below the
       // 4 MiB frame ceiling even when legacy paths are near the 64 KiB path cap.
       const legacyFiles = await provider.listFiles(rootPath, {
@@ -2365,7 +2427,7 @@ export class RuntimeFileCommands {
         maxResults: QUICK_OPEN_LEGACY_REMOTE_RESULT_LIMIT,
         signal
       })
-      const ranker = new QuickOpenPathRanker(query, limit)
+      const ranker = new QuickOpenPathRanker(query, limit, { matchMode })
       for (const file of legacyFiles) {
         ranker.consider(file)
       }
@@ -2380,6 +2442,7 @@ export class RuntimeFileCommands {
       excludePaths,
       maxResults: limit + 1,
       searchQuery: query,
+      ...(matchMode === undefined ? {} : { searchMatchMode: matchMode }),
       signal
     })
     return {

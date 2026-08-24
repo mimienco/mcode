@@ -45,8 +45,8 @@ export function NativeChatComposerActions({
     ? translate('components.native-chat.composer.stopDictation', 'Stop dictation')
     : translate('components.native-chat.composer.startDictation', 'Start dictation')
   return (
-    <div className="flex w-full items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-0.5">
+    <div data-native-chat-composer-actions className="flex w-full items-center gap-1.5">
+      <div data-native-chat-attach-action className="flex min-w-0 items-center">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -66,14 +66,21 @@ export function NativeChatComposerActions({
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="ml-auto flex items-center gap-1.5">
-        {/* Why: keep session controls beside the actions they affect; the
-        model trigger is ordered last so it sits directly next to dictation. */}
+      {/* Why: keep session controls beside the actions they affect; the
+      model trigger is ordered last so it sits directly next to dictation. */}
+      <div
+        data-native-chat-run-profile
+        role="group"
+        aria-label={translate('components.native-chat.composer.runProfile', 'Run profile')}
+        className="ml-auto flex min-w-0 items-center rounded-md bg-muted/45 p-0.5"
+      >
         <NativeChatSessionOptionPickers
           surface={sessionOptionsSurface}
           snapshot={sessionOptionsSnapshot}
           isWorking={isWorking}
         />
+      </div>
+      <div data-native-chat-dictation-action>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -118,6 +125,8 @@ export function NativeChatComposerActions({
             {dictationLabel}
           </TooltipContent>
         </Tooltip>
+      </div>
+      <div data-native-chat-send-action>
         <Button
           type="button"
           aria-label={
@@ -129,7 +138,7 @@ export function NativeChatComposerActions({
           onClick={isWorking ? onStop : onSend}
           variant={isWorking ? 'secondary' : 'default'}
           size="icon"
-          className="size-8 rounded-full pointer-coarse:size-10"
+          className="size-9 rounded-full pointer-coarse:size-10"
         >
           {isWorking ? (
             <Square className="size-3.5 fill-current" />

@@ -1,4 +1,5 @@
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,6 +24,27 @@ const {
 } = require('../packaged-runtime-node-modules.cjs')
 
 describe('electron-builder config', () => {
+  it('isolates explicit production-lane artifacts and preserves app data on uninstall', () => {
+    const configPath = join(REPO_ROOT, 'config', 'electron-builder.config.cjs')
+    const output = execFileSync(
+      process.execPath,
+      [
+        '-e',
+        `const config = require(${JSON.stringify(configPath)}); process.stdout.write(JSON.stringify({ output: config.directories.output, deleteAppDataOnUninstall: config.nsis.deleteAppDataOnUninstall }))`
+      ],
+      {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, MCODE_BUILD_LANE: 'production' }
+      }
+    )
+
+    expect(JSON.parse(output)).toEqual({
+      output: join('dist', 'prod'),
+      deleteAppDataOnUninstall: false
+    })
+  })
+
   it('keeps the packaged app identity aligned with local-build validation', () => {
     expect(electronBuilderConfig.appId).toBe(
       require('../../src/shared/local-build-compatibility-contract.json').appId
@@ -248,6 +270,14 @@ describe('electron-builder config', () => {
     expect(electronBuilderConfig.linux.icon).toBe('resources/build/icon.icns')
   })
 
+  it('brands the unpacked Windows executable with MCode identity and icon', () => {
+    expect(electronBuilderConfig.win).toMatchObject({
+      executableName: 'MCode',
+      icon: 'resources/build/icon.ico',
+      signAndEditExecutable: true
+    })
+  })
+
   it('matches the Linux desktop entry to Electron window class', () => {
     expect(electronBuilderConfig.linux.desktop.entry.StartupWMClass).toBe('mcode')
   })
@@ -347,7 +377,7 @@ describe('electron-builder config', () => {
       await mkdir(join(resourcesDir, 'node_modules', 'zod'), { recursive: true })
 
       const sources = new Map([
-        ['out\\main\\index.js', 'const z = require("zod")'],
+        ['out\\main\\index.js', 'const z = require("zod"); const sqlite = require("node:sqlite")'],
         ['out\\main\\agent-hooks\\managed-agent-hook-controls.js', 'const YAML = require("yaml")']
       ])
       const asar = {

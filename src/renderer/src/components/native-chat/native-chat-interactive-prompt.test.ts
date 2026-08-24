@@ -97,8 +97,8 @@ describe('parseApprovalFromStatus', () => {
       title: 'Allow Bash?',
       detail: 'rm -rf build',
       options: [
-        { label: 'Allow', send: '1' },
-        { label: 'Deny', send: ESC }
+        { label: 'Allow once', send: '1', intent: 'allow-once' },
+        { label: 'Deny', send: ESC, intent: 'deny' }
       ]
     })
   })

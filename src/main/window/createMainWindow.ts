@@ -61,6 +61,7 @@ import { installPrivilegedWindowNavigationPolicy } from './privileged-window-nav
 import { isMacosTahoeOrNewer } from './macos-tahoe-release'
 import { registerPluginPanelNavigationGuard } from '../plugins/plugin-panel-navigation-guard'
 import { installWindowsPathRegistryChangeListener } from '../pty/windows-path-registry-change'
+import { installRendererResponsivenessDiagnostics } from './renderer-responsiveness-diagnostics'
 
 // Why: show/restore/resume can overlap before the size nudge resets; never capture the temporary width as the next baseline.
 const activeRepaintJiggles = new WeakSet<BrowserWindow>()
@@ -266,13 +267,16 @@ export function createMainWindow(
   const platformBlurOptions =
     blur && process.platform === 'win32' ? { backgroundMaterial: 'acrylic' as const } : {}
 
+  // Keep the native caption identity separate from the renderer document title. The renderer's
+  // static `<title>MCode</title>` otherwise overwrites BrowserWindow's dev-specific title after load.
+  const nativeWindowTitle = opts?.title ?? 'MCode'
   const mainWindow = new BrowserWindow({
     width: savedBounds?.width ?? defaultBounds.width,
     height: savedBounds?.height ?? defaultBounds.height,
     ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    title: opts?.title ?? 'MCode',
+    title: nativeWindowTitle,
     show: false,
     // Why: macOS swallows the app-activating click by default, so clicking back into MCode needed a second click (Windows/Linux already deliver it).
     acceptFirstMouse: true,
@@ -304,6 +308,11 @@ export function createMainWindow(
       sandbox: true,
       webviewTag: true
     }
+  })
+  installRendererResponsivenessDiagnostics(mainWindow)
+  mainWindow.on('page-title-updated', (event) => {
+    event.preventDefault()
+    mainWindow.setTitle(nativeWindowTitle)
   })
   const rendererWebContentsId = mainWindow.webContents.id
   installWindowsPathRegistryChangeListener(mainWindow)

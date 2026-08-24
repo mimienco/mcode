@@ -126,9 +126,7 @@ export function useFileExplorerTreePaneState({
   // ANY worktree's status write, and re-rendering the whole tree pane per poll
   // (including while typing) is the exact cost tab-bar/use-tab-bar-runtime-model avoids.
   const gitStatusEntries = useAppStore((s) =>
-    activeWorktreeId
-      ? (s.gitStatusByWorktree[activeWorktreeId] ?? EMPTY_GIT_STATUS_ENTRIES)
-      : EMPTY_GIT_STATUS_ENTRIES
+    activeWorktreeId ? (s.gitStatusByWorktree[activeWorktreeId] ?? EMPTY_GIT_STATUS_ENTRIES) : EMPTY_GIT_STATUS_ENTRIES
   )
   const closeFile = useAppStore((s) => s.closeFile)
 

@@ -2,6 +2,11 @@ import { spawn } from 'node:child_process'
 import { delimiter, win32 as pathWin32 } from 'node:path'
 import type { ShellHydrationFailureReason } from '../../shared/shell-path-hydration-types'
 import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
+import {
+  persistHydration,
+  readPersistedHydration,
+  resetShellPathPersistenceForTests
+} from './shell-path-hydration-cache'
 import { WindowsShellPathOwnership, windowsPathSegmentKey } from './windows-shell-path-ownership'
 
 // Why: GUI-launched Electron can miss PATH entries added by shell profiles.
@@ -47,6 +52,7 @@ export function _resetHydrateShellPathCache(): void {
   configuredWindowsFallbackShell = null
   windowsShellConfigurationVersion = 0
   windowsPathOwnership.reset()
+  resetShellPathPersistenceForTests()
 }
 
 function pickShell(): string | null {
@@ -226,7 +232,7 @@ export function hydrateShellPath(options: HydrateOptions = {}): Promise<Hydratio
     () => undefined,
     () => undefined
   )
-  cached = probe.then((result) => {
+  const finalize = (result: HydrationResult): HydrationResult | Promise<HydrationResult> => {
     if (
       platform === 'win32' &&
       options.shellOverride === undefined &&
@@ -235,6 +241,31 @@ export function hydrateShellPath(options: HydrateOptions = {}): Promise<Hydratio
       return hydrateShellPath()
     }
     return result
+  }
+  if (!options.force && options.spawner === undefined && options.shellOverride === undefined) {
+    const persisted = readPersistedHydration(shell)
+    if (persisted) {
+      // Serve last launch's PATH immediately; refresh behind it so newly installed
+      // CLIs still appear. Success replaces what later awaiters see.
+      cached = Promise.resolve(persisted)
+      void probe
+        .then((result) => {
+          if (result.ok && shell) {
+            persistHydration(shell, result.segments)
+          }
+          if (result.ok) {
+            cached = Promise.resolve(result)
+          }
+        })
+        .catch(() => undefined)
+      return cached
+    }
+  }
+  cached = probe.then((result) => {
+    if (result.ok && shell && options.spawner === undefined) {
+      persistHydration(shell, result.segments)
+    }
+    return finalize(result)
   })
   return cached
 }

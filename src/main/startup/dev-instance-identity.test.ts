@@ -50,9 +50,9 @@ describe('dev-instance-identity', () => {
       devWorktreeName: 'dev-indicator',
       devRepoRoot: '/repo/worktrees/dev-indicator'
     })
-    expect(identity.name).toBe('MCode: nwparker/dev-indicator')
+    expect(identity.name).toBe('MCode Dev: nwparker/dev-indicator')
     expect(identity.dockBadgeLabel).toBeNull()
-    expect(identity.appUserModelId).toMatch(/^com\.stablyai\.mcode\.dev\.[a-f0-9]{10}$/)
+    expect(identity.appUserModelId).toMatch(/^com\.mcode\.desktop\.dev\.[a-f0-9]{10}$/)
   })
 
   it('includes the branch when it differs from the worktree basename', () => {
@@ -63,7 +63,7 @@ describe('dev-instance-identity', () => {
     })
 
     expect(identity.devLabel).toBe('payment-ui @ feature/billing-shell')
-    expect(identity.name).toBe('MCode: feature/billing-shell')
+    expect(identity.name).toBe('MCode Dev: feature/billing-shell')
     expect(identity.dockBadgeLabel).toBeNull()
   })
 
@@ -75,7 +75,7 @@ describe('dev-instance-identity', () => {
     })
 
     expect(identity.devLabel).toBe('manual label')
-    expect(identity.name).toBe('MCode: feature/other')
+    expect(identity.name).toBe('MCode Dev: feature/other')
     expect(identity.dockBadgeLabel).toBeNull()
   })
 })

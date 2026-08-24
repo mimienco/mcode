@@ -63,6 +63,7 @@ async function renderProbe(
 beforeEach(() => {
   clearRuntimeCompatibilityCacheForTests()
   useAppStore.setState(initialAppState, true)
+  useAppStore.setState({ hydrationSucceeded: true })
   latestHookResult = null
   detectRemoteAgents.mockReset().mockResolvedValue([])
   detectLocalAgents
@@ -250,6 +251,28 @@ describe('useDetectedAgents (unresolved target)', () => {
     expect(refreshLocalAgents).not.toHaveBeenCalled()
     expect(detectRemoteAgents).not.toHaveBeenCalled()
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+  })
+})
+
+describe('useDetectedAgents (startup)', () => {
+  it('defers automatic detection until workspace hydration completes', async () => {
+    useAppStore.setState({
+      hydrationSucceeded: false,
+      startupWorktreeRefreshCompleted: false
+    })
+
+    await renderProbe({ kind: 'local' })
+
+    expect(latestHookResult?.isLoading).toBe(true)
+    expect(detectLocalAgents).not.toHaveBeenCalled()
+
+    await act(async () => {
+      useAppStore.setState({ hydrationSucceeded: true })
+    })
+    await flushEffects()
+
+    expect(detectLocalAgents).toHaveBeenCalledTimes(1)
+    expect(latestHookResult?.detectedIds).toEqual(['codex'])
   })
 })
 

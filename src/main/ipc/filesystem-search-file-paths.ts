@@ -9,7 +9,11 @@ import {
   shouldIncludeQuickOpenPath,
   type RgOutputMode
 } from '../../shared/quick-open-filter'
-import { isQuickOpenQueryTooLarge, QuickOpenPathRanker } from '../../shared/quick-open-path-search'
+import {
+  isQuickOpenQueryTooLarge,
+  QuickOpenPathRanker,
+  type QuickOpenMatchMode
+} from '../../shared/quick-open-path-search'
 import {
   absorbPendingRipgrepSpawnError,
   isRipgrepUnavailableExit,
@@ -36,6 +40,7 @@ export async function searchQuickOpenFilePaths(
   args: {
     query: string
     limit: number
+    matchMode?: QuickOpenMatchMode
     excludePaths?: string[]
     signal?: AbortSignal
   }
@@ -67,7 +72,9 @@ export async function searchQuickOpenFilePaths(
     excludePathPrefixes,
     forceSlashSeparator: sep === '\\'
   })
-  const ranker = new QuickOpenPathRanker(args.query, args.limit)
+  const ranker = new QuickOpenPathRanker(args.query, args.limit, {
+    matchMode: args.matchMode
+  })
   try {
     await scanRipgrepPaths({
       args: ignoredPass,

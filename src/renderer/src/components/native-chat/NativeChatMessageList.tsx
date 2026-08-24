@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Image as ImageIcon } from 'lucide-react'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import CommentMarkdown, {
   type CommentMarkdownLinkClickHandler
 } from '@/components/sidebar/CommentMarkdown'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
-import { basename } from '@/lib/path'
 import {
   isTextBlock,
   type NativeChatBlock,
@@ -16,11 +15,11 @@ import { orderNativeChatMessages } from './native-chat-message-grouping'
 import { stripNoiseMessages } from './native-chat-noise'
 import { foldToolMessages, splitNativeChatBlocks } from './native-chat-tool-fold'
 import { isNearBottom, shouldShowJumpToLatest, type ScrollGeometry } from './native-chat-autoscroll'
-import { isNativeChatPastedImagePath } from './native-chat-image-paste'
 import { splitNativeChatSessionContext } from './native-chat-context-disclosure'
 import { NativeChatSessionContextDisclosure } from './NativeChatSessionContextDisclosure'
 import { NativeChatToolRun } from './NativeChatToolRun'
 import { NativeChatCopyButton } from './NativeChatCopyButton'
+import { NativeChatImageRefs } from './NativeChatImageRefs'
 import { NATIVE_CHAT_STREAMING_ID } from '../../../../shared/native-chat-streaming'
 
 function geometryOf(el: HTMLElement): ScrollGeometry {
@@ -39,51 +38,23 @@ function proseToMarkdown(blocks: NativeChatBlock[]): string {
     .join('\n\n')
 }
 
-function ImageAttachmentRefs({ blocks }: { blocks: NativeChatBlock[] }): React.JSX.Element | null {
-  const images = blocks.filter((block) => block.type === 'image-ref')
-  if (images.length === 0) {
-    return null
-  }
-  return (
-    <div className="mb-2 flex flex-wrap gap-1.5">
-      {images.map((image, index) => {
-        const label = image.alt ?? image.path ?? image.url ?? 'Image'
-        const name =
-          image.path && isNativeChatPastedImagePath(image.path)
-            ? translate('components.native-chat.composer.pastedImageLabel', 'Pasted image')
-            : image.path
-              ? basename(image.path)
-              : label
-        return (
-          <div
-            key={`${label}-${index}`}
-            className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground"
-            title={label}
-          >
-            <ImageIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{name}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/** Inline controls for an agent message (mobile AgentControls parity): copy the
- *  message's prose, and scroll so this message's top aligns to the viewport top.
- *  Reveals on hover / keyboard focus like the prior copy affordance. */
+/** A quiet message footer: actions stay attached to the prose they control
+ *  instead of floating in the transcript gutter. */
 function AgentControls({
   markdown,
-  onScrollToTop,
-  className
+  onScrollToTop
 }: {
   markdown: string
   onScrollToTop: () => void
-  className?: string
 }): React.JSX.Element {
   return (
-    <div className={cn('flex items-center gap-1', className)}>
-      <NativeChatCopyButton text={markdown} />
+    <div
+      data-native-chat-message-actions
+      role="toolbar"
+      aria-label={translate('components.native-chat.messageActions', 'Message actions')}
+      className="mt-2 flex items-center justify-end gap-0.5 border-t border-border/40 pt-1.5 opacity-70 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100"
+    >
+      <NativeChatCopyButton text={markdown} className="size-7" />
       <button
         type="button"
         onClick={onScrollToTop}
@@ -92,7 +63,7 @@ function AgentControls({
           'Scroll this message to top'
         )}
         title={translate('components.native-chat.scrollMessageToTop', 'Scroll this message to top')}
-        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowUp className="size-3.5" />
       </button>
@@ -126,6 +97,7 @@ function TypingIndicatorRow(): React.JSX.Element {
  *  lifted card, assistant prose as body copy, reasoning de-emphasized. */
 function MessageRow({
   message,
+  previousRole,
   expandSignal,
   onScrollMessageToTop,
   onLinkClick,
@@ -133,6 +105,7 @@ function MessageRow({
   deliveryFailed = false
 }: {
   message: NativeChatMessage
+  previousRole?: NativeChatMessage['role']
   expandSignal: boolean
   /** Align this message's top to the top of the scroll viewport. */
   onScrollMessageToTop: (el: HTMLElement) => void
@@ -144,8 +117,17 @@ function MessageRow({
   const { prose, tools } = useMemo(() => splitNativeChatBlocks(message.blocks), [message.blocks])
   const markdown = proseToMarkdown(prose)
   const isUser = message.role === 'user'
+  const isPending = message.id.startsWith('pending:')
   const isReasoning = message.role === 'reasoning'
   const isSystem = message.role === 'system'
+  const spacingClass =
+    previousRole === undefined
+      ? undefined
+      : isUser
+        ? 'mt-8'
+        : previousRole === 'user'
+          ? 'mt-6 sm:mt-3'
+          : 'mt-5'
   const disclosedUserContent = useMemo(
     () => splitNativeChatSessionContext(isUser ? markdown : ''),
     [isUser, markdown]
@@ -166,19 +148,20 @@ function MessageRow({
   }
 
   if (isUser) {
-    // Why: an optimistic echo is rendered identically to a real user turn (no
-    // muting, no "Queued" label) so that when the real transcript turn lands and
-    // replaces it, there is no visible state change — the send just appears and
-    // stays. (A distinct "queued" treatment flickered normal→queued→normal as the
-    // transcript caught up.)
+    // Keep the optimistic bubble visually stable while the transcript catches
+    // up, but state delivery honestly in the small status line below it.
     return (
-      <div ref={rowRef} className="flex flex-col items-end gap-0.5">
+      <div
+        ref={rowRef}
+        data-native-chat-role="user"
+        className={cn('flex flex-col items-end gap-1', spacingClass)}
+      >
         {/* User turns get a distinct muted fill (not the card/canvas color) so
             the prompt reads apart from the assistant's body copy. */}
-        <div className="max-w-[85%] rounded-lg rounded-tr-sm bg-muted px-3.5 py-2.5 text-sm text-foreground">
+        <div className="max-w-[min(42rem,88%)] rounded-xl rounded-br-sm border border-border/70 bg-muted/60 px-4 py-3 text-sm leading-relaxed text-foreground">
           {disclosedUserContent.visibleText ? (
             <>
-              <ImageAttachmentRefs blocks={prose} />
+              <NativeChatImageRefs blocks={prose} showPreviews={false} />
               <CommentMarkdown
                 content={disclosedUserContent.visibleText}
                 variant="document"
@@ -188,16 +171,23 @@ function MessageRow({
               />
             </>
           ) : (
-            <ImageAttachmentRefs blocks={prose} />
+            <NativeChatImageRefs blocks={prose} showPreviews={false} />
           )}
           <NativeChatSessionContextDisclosure disclosure={disclosedUserContent} />
         </div>
         {deliveryFailed ? (
-          <div className="max-w-[85%] text-[11px] text-destructive/80">
+          <div role="alert" className="max-w-[min(42rem,88%)] px-1 text-xs text-destructive">
             {translate(
               'components.native-chat.launchPromptNotDelivered',
               'Not delivered — check the terminal'
             )}
+          </div>
+        ) : isPending ? (
+          <div
+            role="status"
+            className="max-w-[min(42rem,88%)] px-1 text-[11px] text-muted-foreground"
+          >
+            {translate('components.native-chat.message.sending', 'Sending…')}
           </div>
         ) : null}
       </div>
@@ -206,13 +196,17 @@ function MessageRow({
 
   if (isReasoning) {
     return (
-      <div ref={rowRef} className="max-w-full text-sm text-muted-foreground">
-        <details className="group/reasoning border-l-2 border-border/60 pl-3">
+      <div
+        ref={rowRef}
+        data-native-chat-role="reasoning"
+        className={cn('max-w-[72ch] text-sm text-muted-foreground', spacingClass)}
+      >
+        <details className="group/reasoning border-l border-border/70 pl-3">
           <summary className="cursor-pointer select-none py-1 text-xs font-medium not-italic hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             {translate('components.native-chat.reasoningDisclosure', 'Reasoning')}
           </summary>
           <div className="pt-1 italic leading-relaxed">
-            <ImageAttachmentRefs blocks={prose} />
+            <NativeChatImageRefs blocks={prose} showPreviews />
             {markdown ? (
               <CommentMarkdown
                 content={markdown}
@@ -232,25 +226,20 @@ function MessageRow({
   }
 
   // Plain assistant prose is the copyable unit; reasoning/system asides stay
-  // chrome-free. The controls reveal on hover (and on keyboard focus-within).
+  // chrome-free. The controls live in a small footer rail below the message.
   const showControls = !isReasoning && !isSystem && markdown.length > 0
 
   return (
     <div
       ref={rowRef}
+      data-native-chat-role={message.role}
       className={cn(
-        'group relative max-w-full text-sm leading-relaxed text-foreground',
+        'group max-w-[72ch] text-sm leading-relaxed text-foreground',
+        spacingClass,
         isSystem && 'text-xs text-muted-foreground'
       )}
     >
-      {showControls ? (
-        <AgentControls
-          markdown={markdown}
-          onScrollToTop={scrollToTop}
-          className="absolute -top-8 right-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-        />
-      ) : null}
-      <ImageAttachmentRefs blocks={prose} />
+      <NativeChatImageRefs blocks={prose} showPreviews />
       {markdown ? (
         <CommentMarkdown
           content={markdown}
@@ -261,6 +250,7 @@ function MessageRow({
         />
       ) : null}
       {tools.length > 0 ? <NativeChatToolRun blocks={tools} expandSignal={expandSignal} /> : null}
+      {showControls ? <AgentControls markdown={markdown} onScrollToTop={scrollToTop} /> : null}
     </div>
   )
 }
@@ -405,13 +395,19 @@ export function NativeChatMessageList({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="scrollbar-sleek h-full overflow-y-auto px-3 pt-10 pb-4 sm:px-4"
+        className="scrollbar-sleek h-full overflow-y-auto px-3 pt-8 pb-6 sm:px-5"
       >
         <div
           ref={contentRef}
-          // Why: same max width as the composer column; horizontal inset comes
-          // from the scroll container so content aligns with the composer field.
-          className="mx-auto flex w-full max-w-4xl flex-col gap-5"
+          data-native-chat-transcript
+          role="log"
+          aria-label={translate('components.native-chat.transcript.label', 'Conversation')}
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-busy={isWorking}
+          // Why: 3xl keeps assistant prose near the 65–75 character reading
+          // range while matching the composer column below it.
+          className="mx-auto flex w-full max-w-3xl flex-col"
           // Why: `zoom` scales the chat transcript's text and layout together,
           // scoped to this container so the rest of the app is untouched. It's
           // the desktop analog of the mobile pinch-zoom (Chromium/Electron only).
@@ -423,7 +419,7 @@ export function NativeChatMessageList({
                 type="button"
                 onClick={loadEarlier}
                 disabled={loadingEarlier}
-                className="rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                className="min-h-8 rounded-md px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
               >
                 {loadingEarlier
                   ? translate('components.native-chat.loadingEarlier', 'Loading…')
@@ -431,10 +427,11 @@ export function NativeChatMessageList({
               </button>
             </div>
           ) : null}
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <MessageRow
               key={message.id}
               message={message}
+              previousRole={messages[index - 1]?.role}
               expandSignal={expandSignal}
               onScrollMessageToTop={scrollMessageToTop}
               onLinkClick={onLinkClick}

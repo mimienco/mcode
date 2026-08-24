@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 const COMPONENT_ROOT = __dirname
 
 function componentSource(relativePath: string): string {
-  return readFileSync(join(COMPONENT_ROOT, relativePath), 'utf8')
+  // Why: Windows checkouts use CRLF; multi-line needles below are \n-based.
+  return readFileSync(join(COMPONENT_ROOT, relativePath), 'utf8').replace(/\r\n/g, '\n')
 }
 
 function joinedSource(relativePaths: string[]): string {

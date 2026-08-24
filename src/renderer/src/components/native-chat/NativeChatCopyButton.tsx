@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 
@@ -12,9 +13,11 @@ import { translate } from '@/i18n/i18n'
  */
 export function NativeChatCopyButton({
   text,
+  label: copyLabel,
   className
 }: {
   text: string
+  label?: string
   className?: string
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false)
@@ -40,13 +43,13 @@ export function NativeChatCopyButton({
         setCopied(false)
       }, 1500)
     } catch {
-      /* best-effort: clipboard can reject when unfocused */
+      toast.error(translate('components.native-chat.copyMessage.failed', 'Could not copy message'))
     }
   }, [text])
 
   const label = copied
     ? translate('components.native-chat.copyMessage.copied', 'Copied')
-    : translate('components.native-chat.copyMessage.copy', 'Copy message')
+    : (copyLabel ?? translate('components.native-chat.copyMessage.copy', 'Copy message'))
 
   return (
     <button
@@ -55,7 +58,7 @@ export function NativeChatCopyButton({
       aria-label={label}
       title={label}
       className={cn(
-        'flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         copied && 'text-status-success',
         className
       )}

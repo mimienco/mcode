@@ -12,6 +12,7 @@ import { FileExplorerQueryStrip } from './FileExplorerQueryStrip'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
 import { SearchFilters } from './SearchFilters'
 import { SearchQueryRow } from './SearchQueryRow'
+import { SearchReplaceRow } from './SearchReplaceRow'
 import { SearchResultsPane } from './SearchResultsPane'
 import { useFileSearchPanel } from './useFileSearchPanel'
 import {
@@ -257,6 +258,37 @@ function FileExplorerFiles(): React.JSX.Element {
           )}
         >
           <SearchFilters {...searchPanel.filtersProps} />
+        </div>
+        <div
+          className={cn(
+            'px-2 pb-1.5',
+            explorerView !== 'search' &&
+              'pointer-events-none invisible h-0 overflow-hidden p-0'
+          )}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-1 rounded-sm py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={searchPanel.replaceRowProps.onOpenToggle}
+          >
+            <span
+              className={cn(
+                'transition-transform',
+                searchPanel.replaceRowProps.open && 'rotate-90'
+              )}
+            >
+              ▸
+            </span>
+            {translate('auto.components.right.sidebar.replace.toggle', 'Replace')}
+          </button>
+          {searchPanel.replaceRowProps.open ? (
+            <div className="mt-1">
+              <SearchReplaceRow
+                {...searchPanel.replaceRowProps}
+                useRegex={searchPanel.queryRowProps.useRegex}
+              />
+            </div>
+          ) : null}
         </div>
         {/* Why: the Files and Contents views share one body slot; layering them
            avoids remounting heavy virtualized panes while preserving full height. */}

@@ -71,6 +71,7 @@ import {
   resolveAgentStatusIdentity,
   shouldSuppressInheritedTerminalStatus
 } from '../../../shared/agent-status-identity'
+import { isPiCompatibleAgentType } from '../../../shared/pi-agent-kind'
 import { isGitRepoKind } from '../../../shared/repo-kind'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from '@/lib/floating-terminal'
 import { TOGGLE_QUICK_COMMANDS_MENU_EVENT } from '@/lib/quick-commands-menu-events'
@@ -3372,13 +3373,14 @@ export function useIpcEvents(): void {
         return 'dropped'
       }
       if (data.providerSessionOnly) {
-        if (!data.providerSession || data.agentType !== 'pi') {
+        if (!data.providerSession || !isPiCompatibleAgentType(data.agentType)) {
           return 'dropped'
         }
+        const providerAgent = data.agentType
         const providerSessionUpdate: AgentStatusBatchUpdate = {
           kind: 'providerSession',
           paneKey,
-          agent: 'pi',
+          agent: providerAgent,
           providerSession: data.providerSession,
           timing: { updatedAt: data.receivedAt },
           routing: {

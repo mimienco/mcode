@@ -272,4 +272,29 @@ describe('RuntimeFileCommands', () => {
       signal: undefined
     })
   })
+
+  it('propagates literal mention matching to a capable SSH relay', async () => {
+    const resolveRuntimeFileTarget = vi.fn(async () => ({
+      worktree: { id: 'wt-1', repoId: 'repo-1', path: '/repo' },
+      connectionId: 'ssh-1'
+    }))
+    const { commands } = createRuntimeFileCommands({ resolveRuntimeFileTarget })
+    const listFiles = vi.fn(async () => ['src/target.ts'])
+    getSshFilesystemProviderMock.mockReturnValue({
+      supportsQuickOpenSearch: vi.fn(async () => true),
+      supportsQuickOpenSearchMatchMode: vi.fn(async () => true),
+      listFiles
+    })
+
+    await expect(
+      commands.searchQuickOpenFilePaths('id:wt-1', 'target', 50, 'substring')
+    ).resolves.toMatchObject({ files: [{ relativePath: 'src/target.ts' }], truncated: false })
+    expect(listFiles).toHaveBeenCalledWith('/repo', {
+      excludePaths: undefined,
+      maxResults: 51,
+      searchQuery: 'target',
+      searchMatchMode: 'substring',
+      signal: undefined
+    })
+  })
 })

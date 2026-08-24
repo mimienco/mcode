@@ -22,6 +22,7 @@ import {
   type NativeChatSendClassification
 } from './native-chat-composer-state'
 import { useNativeChatSkills } from './use-native-chat-skills'
+import { useNativeChatMention } from './use-native-chat-mention-files'
 import {
   emitNativeChatPickerItemAccepted,
   emitNativeChatPickerOpened,
@@ -37,6 +38,7 @@ export type NativeChatPickerState = {
   completeItem: (item: NativeChatPickerItem) => void
   dismiss: (triggerKey: string) => void
   handleDraftOrCaretChange: (value: string, caret: number) => void
+  mention: ReturnType<typeof useNativeChatMention>
 }
 
 export function useNativeChatPickerState(args: {
@@ -50,6 +52,8 @@ export function useNativeChatPickerState(args: {
   setDraft: (value: string) => void
   setCaret: Dispatch<SetStateAction<number>>
   setActiveSuggestion: Dispatch<SetStateAction<number>>
+  activeSuggestion: number
+  onChooseMention: (path: string) => void
 }): NativeChatPickerState {
   const {
     agent,
@@ -61,7 +65,9 @@ export function useNativeChatPickerState(args: {
     textareaRef,
     setDraft,
     setCaret,
-    setActiveSuggestion
+    setActiveSuggestion,
+    activeSuggestion,
+    onChooseMention
   } = args
   const profile = useMemo(() => getNativeChatAgentProfile(agent), [agent])
   const beforeCaret = draft.slice(0, caret)
@@ -90,6 +96,21 @@ export function useNativeChatPickerState(args: {
       ),
     [agentCommands, caret, dismissalContext, dismissed, discovery, draft, profile]
   )
+
+  // `@` mention menu: workspace files ranked via the quick-open pipeline.
+  const mention = useNativeChatMention({
+    enabled: autocomplete.mode === 'mention',
+    terminalTabId,
+    query: autocomplete.mode === 'mention' ? autocomplete.query : '',
+    draft,
+    caret,
+    setDraft,
+    setCaret,
+    activeSuggestion,
+    setActiveSuggestion,
+    textareaRef,
+    onChoosePath: onChooseMention
+  })
 
   useEffect(() => {
     // Why: suppression is per-trigger-occurrence AND per-context. The composer
@@ -154,10 +175,7 @@ export function useNativeChatPickerState(args: {
         profile,
         discovery
       )
-      if (
-        (next.mode !== 'slash' && next.mode !== 'skill') ||
-        next.triggerKey !== dismissed.triggerKey
-      ) {
+      if (next.mode === 'none' || next.triggerKey !== dismissed.triggerKey) {
         setDismissed(null)
       }
     },
@@ -193,6 +211,7 @@ export function useNativeChatPickerState(args: {
     clearSkillOrigin,
     completeItem,
     dismiss,
-    handleDraftOrCaretChange
+    handleDraftOrCaretChange,
+    mention
   }
 }

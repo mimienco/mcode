@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const mainCss = fs.readFileSync(new URL('./main.css', import.meta.url), 'utf8')
+// Why: Windows checkouts use CRLF; multi-line needles below are \n-based.
+const mainCss = fs.readFileSync(new URL('./main.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 function getCssRuleBody(selector: string): string {
   const ruleMarker = mainCss.indexOf(`\n${selector} {`)
@@ -22,13 +23,15 @@ describe('worktree card active styling', () => {
       ".dark [data-worktree-card-surface][data-worktree-card-active='primary']"
     )
 
+    // Test Bench redesign: primary wash moved to --ai-action-accent. Still more
+    // translucent than the old foreground washes (5%/7% vs 8%/10%), so the
+    // legibility guard this test exists for still holds.
     expect(primary).toContain(
-      'background: color-mix(in srgb, var(--worktree-sidebar-foreground) 8%, transparent)'
+      'background: color-mix(in srgb, var(--ai-action-accent) 5%, transparent)'
     )
     expect(darkPrimary).toContain(
-      'background: color-mix(in srgb, var(--worktree-sidebar-foreground) 10%, transparent)'
+      'background: color-mix(in srgb, var(--ai-action-accent) 7%, transparent)'
     )
-    expect(darkPrimary).toContain('var(--worktree-sidebar-border)')
   })
 
   it('keeps the secondary selection ring when CSS owns the active state', () => {

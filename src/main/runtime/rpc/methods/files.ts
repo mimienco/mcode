@@ -4,6 +4,7 @@ import { runFileWatchStream } from './file-watch-stream-lifecycle'
 import { FILE_MUTATION_METHODS } from './files-mutation-methods'
 import { remoteFileContentBudget } from './files-remote-content-budget'
 import {
+  QUICK_OPEN_RESULT_LIMIT,
   QUICK_OPEN_REMOTE_QUERY_MAX_CODE_UNITS,
   QUICK_OPEN_SEARCH_VERSION
 } from '../../../../shared/quick-open-path-search'
@@ -15,7 +16,8 @@ let filesWatchSubscriptionSeq = 0
 
 const FilePathSearch = WorktreeSelector.extend({
   query: z.string().max(QUICK_OPEN_REMOTE_QUERY_MAX_CODE_UNITS).default(''),
-  limit: z.number().int().positive().max(32).default(16),
+  limit: z.number().int().positive().max(QUICK_OPEN_RESULT_LIMIT).default(16),
+  matchMode: z.enum(['fuzzy', 'substring']).optional(),
   excludePaths: z.array(z.string()).optional(),
   mode: z.literal('quick-open').optional()
 })
@@ -75,16 +77,23 @@ const FileReadChunk = FileOpen.extend({
 })
 
 const FileSearch = WorktreeSelector.extend({
-  query: z
-    .unknown()
-    .transform((v) => (typeof v === 'string' ? v : ''))
-    .pipe(z.string().min(1, 'Missing search query')),
+  query: z.string().min(1).max(QUICK_OPEN_REMOTE_QUERY_MAX_CODE_UNITS),
   caseSensitive: z.boolean().optional(),
   wholeWord: z.boolean().optional(),
   useRegex: z.boolean().optional(),
-  includePattern: z.string().optional(),
-  excludePattern: z.string().optional(),
+  includePattern: z.string().max(2048).optional(),
+  excludePattern: z.string().max(2048).optional(),
   maxResults: z.number().int().positive().optional()
+})
+
+const FileSearchReplace = FileSearch.omit({ maxResults: true }).extend({
+  replacement: z.string().max(1024 * 1024),
+  preserveCase: z.enum(['none', 'match']).optional(),
+  targets: z
+    .array(z.object({ relativePath: z.string().min(1) }))
+    .min(1)
+    .max(2000),
+  skipPaths: z.array(z.string()).max(5000).optional()
 })
 
 const FileListAll = WorktreeSelector.extend({
@@ -119,6 +128,7 @@ export const FILE_METHODS: RpcAnyMethod[] = [
           params.worktree,
           params.query,
           params.limit,
+          params.matchMode,
           params.excludePaths,
           signal
         )),
@@ -221,6 +231,23 @@ export const FILE_METHODS: RpcAnyMethod[] = [
         ...(maxContentBytes === undefined ? {} : { maxContentBytes })
       })
     }
+  }),
+  defineMethod({
+    name: 'files.searchReplace',
+    params: FileSearchReplace,
+    handler: async (params, { runtime }) =>
+      runtime.searchReplaceRuntimeFiles(params.worktree, {
+        query: params.query,
+        replacement: params.replacement,
+        options: {
+          caseSensitive: params.caseSensitive,
+          wholeWord: params.wholeWord,
+          useRegex: params.useRegex,
+          preserveCase: params.preserveCase
+        },
+        targets: params.targets.map((t) => ({ relativePath: t.relativePath })),
+        skipPaths: params.skipPaths
+      })
   }),
   defineMethod({
     name: 'files.listMarkdownDocuments',

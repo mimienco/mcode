@@ -1,3 +1,5 @@
+import type { AgentInteractionMode, AgentPermissionPreset } from './agent-run-profile'
+
 export type CodexLiveSessionEffort = {
   id: string
   label: string
@@ -18,14 +20,31 @@ export type CodexLiveSessionOptionsSnapshot =
   | {
       available: true
       models: CodexLiveSessionModel[]
-      current?: { model: string; effort?: string }
+      controls: {
+        permissions: AgentPermissionPreset[]
+        interactionModes: AgentInteractionMode[]
+      }
+      current?: {
+        model: string
+        effort?: string
+        permission?: AgentPermissionPreset
+        interactionMode?: AgentInteractionMode
+      }
     }
 
 export type CodexLiveSessionOptionsUpdate = {
   model?: string
   effort?: string
+  permission?: AgentPermissionPreset
+  interactionMode?: AgentInteractionMode
 }
 
 export type CodexLiveSessionOptionsUpdateResult =
-  | { outcome: 'applied'; model?: string; effort?: string }
+  | {
+      outcome: 'applied'
+      model?: string
+      effort?: string
+      permission?: AgentPermissionPreset
+      interactionMode?: AgentInteractionMode
+    }
   | { outcome: 'unavailable' }

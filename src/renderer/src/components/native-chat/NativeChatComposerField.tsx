@@ -4,16 +4,19 @@ import type {
   KeyboardEventHandler,
   RefObject
 } from 'react'
-import { Image as ImageIcon, ImageOff, X } from 'lucide-react'
+import { CircleAlert, Image as ImageIcon, X } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { NATIVE_FILE_DROP_TARGET } from '../../../../shared/native-file-drop'
 import { basename } from '@/lib/path'
 import { isNativeChatPastedImagePath } from './native-chat-image-paste'
 import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
-import { NativeChatMentionHint, NativeChatPickerMenu } from './NativeChatAutocompleteMenus'
+import { NativeChatMentionMenu, NativeChatPickerMenu } from './NativeChatAutocompleteMenus'
+import type { NativeChatMentionFile } from './use-native-chat-mention-files'
 import { NativeChatComposerActions } from './NativeChatComposerActions'
+import { NativeChatFileReferenceChip } from './NativeChatFileReferenceChip'
 import { nativeChatComposerPlaceholder } from './native-chat-composer-target'
+import type { NativeChatComposerFileReference } from './use-native-chat-composer-attachments'
 import type {
   SessionOptionDescriptor,
   SessionOptionsSurface
@@ -29,6 +32,7 @@ export type NativeChatComposerFieldProps = {
   activeSuggestion: number
   notice: string | null
   imageAttachments: readonly NativeChatComposerImageAttachment[]
+  fileReferences: readonly NativeChatComposerFileReference[]
   sendButtonDisabled: boolean
   isWorking: boolean
   attachDisabled: boolean
@@ -44,8 +48,13 @@ export type NativeChatComposerFieldProps = {
   pickerListboxId: string
   onChoosePickerItem: (item: NativeChatPickerItem) => void
   onRetrySkills: () => void
-  onAcceptMention: () => void
+  mentionFiles: readonly NativeChatMentionFile[]
+  mentionLoading: boolean
+  mentionLoadError: string | null
+  mentionTruncated: boolean
+  onChooseMention: (path: string) => void
   onRemoveImageAttachment: (id: string) => void
+  onRemoveFileReference: (id: string) => void
   onAttach: () => void
   onDictationToggle: () => void
   onDictationHoldStart: () => void
@@ -71,6 +80,7 @@ export function NativeChatComposerField({
   activeSuggestion,
   notice,
   imageAttachments,
+  fileReferences,
   sendButtonDisabled,
   isWorking,
   attachDisabled,
@@ -86,8 +96,13 @@ export function NativeChatComposerField({
   pickerListboxId,
   onChoosePickerItem,
   onRetrySkills,
-  onAcceptMention,
+  mentionFiles,
+  mentionLoading,
+  mentionLoadError,
+  mentionTruncated,
+  onChooseMention,
   onRemoveImageAttachment,
+  onRemoveFileReference,
   onAttach,
   onDictationToggle,
   onDictationHoldStart,
@@ -97,11 +112,17 @@ export function NativeChatComposerField({
   sessionOptionsSurface,
   sessionOptionsSnapshot
 }: NativeChatComposerFieldProps): React.JSX.Element {
+  const activeOptionCount =
+    autocomplete.mode === 'mention'
+      ? mentionFiles.length
+      : 'items' in autocomplete
+        ? autocomplete.items.length
+        : 0
   return (
-    <div className="shrink-0 bg-background">
+    <div className="shrink-0 border-t border-border/40 bg-background/95">
       {/* Extra bottom padding keeps the input box off the window rim. */}
-      <div className="px-3 pt-2 pb-4 sm:px-4">
-        <div className="relative mx-auto w-full max-w-4xl">
+      <div className="px-3 pt-3 pb-4 sm:px-5">
+        <div className="relative mx-auto w-full max-w-3xl">
           {autocomplete.mode === 'slash' || autocomplete.mode === 'skill' ? (
             <NativeChatPickerMenu
               autocomplete={autocomplete}
@@ -112,26 +133,44 @@ export function NativeChatComposerField({
             />
           ) : null}
           {autocomplete.mode === 'mention' ? (
-            <NativeChatMentionHint query={autocomplete.query} onAccept={onAcceptMention} />
+            <NativeChatMentionMenu
+              query={autocomplete.query}
+              files={mentionFiles}
+              loading={mentionLoading}
+              loadError={mentionLoadError}
+              truncated={mentionTruncated}
+              activeIndex={activeSuggestion}
+              listboxId={pickerListboxId}
+              onChoose={onChooseMention}
+            />
           ) : null}
           {notice ? (
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ImageOff className="size-3.5 shrink-0" />
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
               <span>{notice}</span>
             </div>
           ) : null}
           <div
             data-native-file-drop-target={NATIVE_FILE_DROP_TARGET.composer}
+            data-native-chat-composer-surface
             className={cn(
-              // Why: always-on hairline (token-level border, not focus ring) —
-              // no focus/click border flash. The box is a container, not a
-              // focus target.
-              'rounded-lg border border-border p-1.5 shadow-xs',
-              'bg-muted/50 dark:bg-input/40'
+              'rounded-xl border border-border/80 bg-card/80 p-2 transition-colors',
+              'focus-within:border-ring/55'
             )}
           >
-            {imageAttachments.length > 0 ? (
+            {fileReferences.length > 0 || imageAttachments.length > 0 ? (
               <div className="mb-2 flex flex-wrap gap-1.5 px-1">
+                {fileReferences.map((reference) => (
+                  <NativeChatFileReferenceChip
+                    key={reference.id}
+                    reference={reference}
+                    onRemove={onRemoveFileReference}
+                  />
+                ))}
                 {imageAttachments.map((attachment) => (
                   <div
                     key={attachment.id}
@@ -154,7 +193,7 @@ export function NativeChatComposerField({
                         'components.native-chat.composer.removeAttachment',
                         'Remove attachment'
                       )}
-                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <X className="size-3" />
                     </button>
@@ -173,16 +212,15 @@ export function NativeChatComposerField({
               onCompositionEnd={onCompositionEnd}
               onPaste={onPaste}
               onSelect={(e) => onTextareaSelect(e.currentTarget)}
-              aria-expanded={autocomplete.mode === 'slash' || autocomplete.mode === 'skill'}
-              aria-controls={
-                autocomplete.mode === 'slash' || autocomplete.mode === 'skill'
-                  ? pickerListboxId
-                  : undefined
-              }
+              aria-label={translate(
+                'components.native-chat.composer.inputLabel',
+                'Message to agent'
+              )}
+              aria-expanded={autocomplete.mode !== 'none'}
+              aria-controls={autocomplete.mode !== 'none' ? pickerListboxId : undefined}
               aria-activedescendant={
-                (autocomplete.mode === 'slash' || autocomplete.mode === 'skill') &&
-                autocomplete.items.length > 0
-                  ? `${pickerListboxId}-option-${Math.min(activeSuggestion, autocomplete.items.length - 1)}`
+                autocomplete.mode !== 'none' && activeOptionCount > 0
+                  ? `${pickerListboxId}-option-${Math.min(activeSuggestion, activeOptionCount - 1)}`
                   : undefined
               }
               placeholder={nativeChatComposerPlaceholder(hasPty, canSend)}
@@ -192,12 +230,12 @@ export function NativeChatComposerField({
               // keeps that gutter off the heavy native scrollbar. Both are layout-driven,
               // so re-wrap on window/pane resize is handled without a measure pass.
               className={cn(
-                'scrollbar-sleek min-h-12 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none pointer-coarse:min-h-14',
+                'scrollbar-sleek min-h-14 w-full resize-none bg-transparent px-2.5 py-2 text-sm leading-6 outline-none pointer-coarse:min-h-14',
                 '[field-sizing:content] max-h-[calc(8lh+0.5rem)]',
-                'placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50'
+                'placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50'
               )}
             />
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2">
               <NativeChatComposerActions
                 attachDisabled={attachDisabled}
                 dictationDisabled={dictationDisabled}

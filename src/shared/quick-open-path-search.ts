@@ -4,18 +4,29 @@ import { compareFileNames } from './file-name-sort'
 export const QUICK_OPEN_RESULT_LIMIT = 50
 export const QUICK_OPEN_QUERY_MAX_BYTES = 2 * 1024
 export const QUICK_OPEN_REMOTE_QUERY_MAX_CODE_UNITS = 256
-export const QUICK_OPEN_SEARCH_VERSION = 1
+export const QUICK_OPEN_SEARCH_VERSION = 2
 
 export type QuickOpenIndexedFile = {
   path: string
   lowerPath: string
   lowerFilename: string
+  /** Maps each UTF-16 code unit in `lowerPath` back to its source-path index. */
+  pathIndices: number[]
   inputIndex: number
 }
 
 export type QuickOpenSearchResult = {
   path: string
   score: number
+  /** Indices into `path` of the characters that matched the query (empty for
+   *  an empty query). Case-fold expansions are mapped back to source indices. */
+  matchIndices: number[]
+}
+
+export type QuickOpenMatchMode = 'fuzzy' | 'substring'
+
+export type QuickOpenRankOptions = {
+  matchMode?: QuickOpenMatchMode
 }
 
 export function prepareQuickOpenFiles(files: readonly string[]): QuickOpenIndexedFile[] {
@@ -50,7 +61,8 @@ export function isQuickOpenRemoteQueryTooLarge(query: string): boolean {
 export function rankQuickOpenFiles(
   query: string,
   files: readonly QuickOpenIndexedFile[],
-  limit = QUICK_OPEN_RESULT_LIMIT
+  limit = QUICK_OPEN_RESULT_LIMIT,
+  options: QuickOpenRankOptions = {}
 ): QuickOpenSearchResult[] {
   if (limit <= 0 || isQuickOpenQueryTooLarge(query)) {
     return []
@@ -59,9 +71,20 @@ export function rankQuickOpenFiles(
   const normalizedQuery = normalizeQuickOpenQuery(query)
   const results: QuickOpenRankedResult[] = []
   for (const file of files) {
-    const score = normalizedQuery ? fuzzyMatchIndexedFile(normalizedQuery, file) : 0
-    if (score !== -1) {
-      retainTopResult(results, { path: file.path, score, inputIndex: file.inputIndex }, limit)
+    const match = normalizedQuery
+      ? matchIndexedFile(normalizedQuery, file, options.matchMode ?? 'fuzzy')
+      : { score: 0, indices: [] }
+    if (match) {
+      retainTopResult(
+        results,
+        {
+          path: file.path,
+          score: match.score,
+          inputIndex: file.inputIndex,
+          matchIndices: match.indices
+        },
+        limit
+      )
     }
   }
   return finalizeResults(results)
@@ -69,14 +92,17 @@ export function rankQuickOpenFiles(
 
 export class QuickOpenPathRanker {
   private readonly normalizedQuery: string | null
+  private readonly matchMode: QuickOpenMatchMode
   private readonly retained: QuickOpenRankedResult[] = []
   private inputIndex = 0
   private matchCount = 0
 
   constructor(
     query: string,
-    private readonly limit: number
+    private readonly limit: number,
+    options: QuickOpenRankOptions = {}
   ) {
+    this.matchMode = options.matchMode ?? 'fuzzy'
     this.normalizedQuery =
       limit <= 0 || isQuickOpenQueryTooLarge(query) ? null : normalizeQuickOpenQuery(query)
   }
@@ -86,14 +112,21 @@ export class QuickOpenPathRanker {
     if (this.normalizedQuery === null) {
       return
     }
-    const score = this.normalizedQuery ? fuzzyMatchIndexedFile(this.normalizedQuery, file) : 0
-    if (score === -1) {
+    const match = this.normalizedQuery
+      ? matchIndexedFile(this.normalizedQuery, file, this.matchMode)
+      : { score: 0, indices: [] }
+    if (!match) {
       return
     }
     this.matchCount++
     retainTopResult(
       this.retained,
-      { path: file.path, score, inputIndex: file.inputIndex },
+      {
+        path: file.path,
+        score: match.score,
+        inputIndex: file.inputIndex,
+        matchIndices: match.indices
+      },
       this.limit
     )
   }
@@ -107,24 +140,97 @@ export class QuickOpenPathRanker {
 }
 
 function normalizeQuickOpenQuery(query: string): string {
-  return query.trim().replace(/\\/g, '/').toLowerCase()
+  return foldSearchText(query.trim().replace(/\\/g, '/')).text
 }
 
 function prepareQuickOpenFile(path: string, inputIndex: number): QuickOpenIndexedFile {
   const searchPath = path.replace(/\\/g, '/')
   const lastSlash = searchPath.lastIndexOf('/')
+  const foldedPath = foldSearchText(searchPath)
   return {
     path,
-    lowerPath: searchPath.toLowerCase(),
-    lowerFilename: searchPath.slice(lastSlash + 1).toLowerCase(),
+    lowerPath: foldedPath.text,
+    lowerFilename: foldSearchText(searchPath.slice(lastSlash + 1)).text,
+    pathIndices: foldedPath.sourceIndices,
     inputIndex
   }
 }
 
-function fuzzyMatchIndexedFile(query: string, file: QuickOpenIndexedFile): number {
+function foldSearchText(value: string): { text: string; sourceIndices: number[] } {
+  let text = ''
+  const sourceIndices: number[] = []
+  for (let sourceIndex = 0; sourceIndex < value.length; ) {
+    const codePoint = value.codePointAt(sourceIndex)
+    if (codePoint === undefined) {
+      break
+    }
+    const sourceCharacter = String.fromCodePoint(codePoint)
+    const foldedCharacter = sourceCharacter.toLowerCase()
+    text += foldedCharacter
+    for (let foldedIndex = 0; foldedIndex < foldedCharacter.length; foldedIndex++) {
+      sourceIndices.push(sourceIndex)
+    }
+    sourceIndex += sourceCharacter.length
+  }
+  return { text, sourceIndices }
+}
+
+type QuickOpenFuzzyMatch = { score: number; indices: number[] }
+
+function matchIndexedFile(
+  query: string,
+  file: QuickOpenIndexedFile,
+  matchMode: QuickOpenMatchMode
+): QuickOpenFuzzyMatch | null {
+  return matchMode === 'substring'
+    ? substringMatchIndexedFile(query, file)
+    : fuzzyMatchIndexedFile(query, file)
+}
+
+function sourceMatchIndices(
+  file: QuickOpenIndexedFile,
+  foldedIndices: readonly number[]
+): number[] {
+  const sourceIndices: number[] = []
+  for (const foldedIndex of foldedIndices) {
+    const sourceIndex = file.pathIndices[foldedIndex]
+    if (sourceIndex !== undefined && sourceIndices.at(-1) !== sourceIndex) {
+      sourceIndices.push(sourceIndex)
+    }
+  }
+  return sourceIndices
+}
+
+function substringMatchIndexedFile(
+  query: string,
+  file: QuickOpenIndexedFile
+): QuickOpenFuzzyMatch | null {
+  const filenameIndex = file.lowerFilename.indexOf(query)
+  const filenameStart = file.lowerPath.length - file.lowerFilename.length
+  const pathIndex =
+    filenameIndex !== -1 ? filenameStart + filenameIndex : file.lowerPath.indexOf(query)
+  if (pathIndex < 0) {
+    return null
+  }
+
+  return {
+    // Keep the incumbent filename-first ordering while requiring a literal match.
+    score: filenameIndex !== -1 ? filenameIndex - 100 : pathIndex,
+    indices: sourceMatchIndices(
+      file,
+      Array.from({ length: query.length }, (_, offset) => pathIndex + offset)
+    )
+  }
+}
+
+function fuzzyMatchIndexedFile(
+  query: string,
+  file: QuickOpenIndexedFile
+): QuickOpenFuzzyMatch | null {
   let qi = 0
   let score = 0
   let lastMatchIdx = -1
+  const indices: number[] = []
 
   for (let ti = 0; ti < file.lowerPath.length && qi < query.length; ti++) {
     if (file.lowerPath[ti] !== query[qi]) {
@@ -141,16 +247,17 @@ function fuzzyMatchIndexedFile(query: string, file: QuickOpenIndexedFile): numbe
       score -= 5
     }
     lastMatchIdx = ti
+    indices.push(ti)
     qi++
   }
 
   if (qi < query.length) {
-    return -1
+    return null
   }
   if (file.lowerFilename.includes(query)) {
     score -= 100
   }
-  return score
+  return { score, indices: sourceMatchIndices(file, indices) }
 }
 
 type QuickOpenRankedResult = QuickOpenSearchResult & {
@@ -207,9 +314,11 @@ function siftResultDown(heap: QuickOpenRankedResult[]): void {
 }
 
 function finalizeResults(results: QuickOpenRankedResult[]): QuickOpenSearchResult[] {
-  return results
-    .sort(compareRankedResult)
-    .map(({ path, score }): QuickOpenSearchResult => ({ path, score }))
+  return results.sort(compareRankedResult).map(({ path, score, matchIndices }) => ({
+    path,
+    score,
+    matchIndices
+  }))
 }
 
 function compareRankedResult(a: QuickOpenRankedResult, b: QuickOpenRankedResult): number {

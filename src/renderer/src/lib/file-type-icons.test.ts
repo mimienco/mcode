@@ -19,7 +19,7 @@ import {
   FileVideo
 } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
-import { getFileTypeIcon } from './file-type-icons'
+import { getFileTypeIcon, getFileTypeIconColorClass } from './file-type-icons'
 
 describe('getFileTypeIcon', () => {
   it('prefers known filenames over generic extensions', () => {
@@ -57,5 +57,12 @@ describe('getFileTypeIcon', () => {
 
   it('falls back to the generic file icon for unknown files', () => {
     expect(getFileTypeIcon('unknown.customtype')).toBe(File)
+  })
+
+  it('returns semantic category colors and keeps unknown files neutral', () => {
+    expect(getFileTypeIconColorClass('src/App.tsx')).toBe('text-file-icon-typescript')
+    expect(getFileTypeIconColorClass('config/settings.json')).toBe('text-file-icon-config')
+    expect(getFileTypeIconColorClass('.env.local')).toBe('text-file-icon-secret')
+    expect(getFileTypeIconColorClass('unknown.customtype')).toBe('')
   })
 })

@@ -1,9 +1,9 @@
 import { memo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
+  DropdownMenuArrow,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -28,6 +28,10 @@ import {
   nativeChatSessionOptionDisabledReason,
   nativeChatSessionOptionLabel
 } from './native-chat-session-option-labels'
+import { NativeChatEffortSlider } from './NativeChatEffortSlider'
+import { NativeChatModelPickerRows } from './NativeChatModelPickerRows'
+import { NativeChatRunProfilePickers } from './NativeChatRunProfilePickers'
+import { runNativeChatSessionOptionSurfaceCall } from './native-chat-session-option-surface-call'
 
 export type NativeChatSessionOptionPickersProps = {
   surface: SessionOptionsSurface | null
@@ -74,19 +78,24 @@ function PickerTrigger(props: {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild disabled={props.disabled}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            aria-label={accessibleName}
-            aria-description={props.disabledReason ?? undefined}
-            className="max-w-48 text-muted-foreground"
-          >
-            <span className="truncate">{props.label}</span>
-            <ChevronDown className="size-3" />
-          </Button>
-        </DropdownMenuTrigger>
+        {/* Keep tooltip and dropdown on separate DOM nodes. Nesting both
+            Radix triggers onto the button lets the tooltip slot overwrite the
+            menu trigger's pointer handlers and aria-haspopup contract. */}
+        <span className="inline-flex">
+          <DropdownMenuTrigger asChild disabled={props.disabled}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={accessibleName}
+              aria-description={props.disabledReason ?? undefined}
+              className="max-w-48 text-muted-foreground"
+            >
+              <span className="truncate">{props.label}</span>
+              <ChevronDown className="size-3" />
+            </Button>
+          </DropdownMenuTrigger>
+        </span>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4}>
         <PickerTooltipContent
@@ -129,18 +138,33 @@ function DescriptorMenuRows(props: {
   }
   // Why: agent-picker opens the TUI; it is not a set of radio choices.
   if (descriptor.action?.type === 'agent-picker') {
+    if (descriptor.category === 'model') {
+      return (
+        <>
+          <DropdownMenuItem
+            disabled={!descriptor.settable || pending}
+            onSelect={() => invokeAction()}
+          >
+            {translate(
+              'components.native-chat.composer.chooseModelInTerminal',
+              'Choose model in Terminal…'
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="max-w-64 whitespace-normal font-normal text-muted-foreground">
+            {translate(
+              'components.native-chat.composer.directModelSwitchUnavailable',
+              'Direct model switching is unavailable for this session. Choose in Terminal or start a new Codex session.'
+            )}
+          </DropdownMenuLabel>
+        </>
+      )
+    }
     const choices = descriptor.kind.type === 'select' ? descriptor.kind.choices : []
-    const choicesLabel =
-      descriptor.category === 'model'
-        ? translate('components.native-chat.composer.knownModels', 'Known models')
-        : translate('components.native-chat.composer.availableChoices', 'Available choices')
-    const choicesNote =
-      descriptor.category === 'model'
-        ? translate(
-            'components.native-chat.composer.modelAvailabilityNote',
-            'Codex decides which models your account can select. Open the agent picker to check.'
-          )
-        : null
+    const choicesLabel = translate(
+      'components.native-chat.composer.availableChoices',
+      'Available choices'
+    )
     return (
       <>
         <DropdownMenuItem
@@ -158,9 +182,6 @@ function DescriptorMenuRows(props: {
             <DropdownMenuLabel className="font-normal text-muted-foreground">
               {choicesLabel}
             </DropdownMenuLabel>
-            {choicesNote ? (
-              <div className="px-2 pb-1 text-xs text-muted-foreground">{choicesNote}</div>
-            ) : null}
             <div role="list" aria-label={choicesLabel}>
               {choices.map((choice) => {
                 const label = nativeChatSessionChoiceLabel(choice)
@@ -211,6 +232,11 @@ function DescriptorMenuRows(props: {
       </>
     )
   }
+  if (descriptor.category === 'model' && descriptor.kind.type === 'select') {
+    return (
+      <NativeChatModelPickerRows descriptor={descriptor} pending={pending} setValue={setValue} />
+    )
+  }
   return (
     <DropdownMenuRadioGroup
       value={descriptor.kind.currentValue}
@@ -220,32 +246,17 @@ function DescriptorMenuRows(props: {
         <DropdownMenuRadioItem
           key={choice.value}
           value={choice.value}
-          disabled={!descriptor.settable || pending}
+          disabled={!descriptor.settable || pending || choice.disabled}
+          title={choice.disabledReason}
         >
           <ChoiceBody
             label={nativeChatSessionChoiceLabel(choice)}
-            description={choice.description}
+            description={choice.disabledReason ?? choice.description}
           />
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>
   )
-}
-
-function runSurfaceCall(
-  pendingKey: string,
-  setPendingId: (id: string | null) => void,
-  call: () => Promise<unknown>
-): void {
-  setPendingId(pendingKey)
-  void call()
-    .catch((error) => {
-      toast.error(
-        translate('components.native-chat.composer.optionUpdateFailed', 'Could not update option'),
-        { description: error instanceof Error ? error.message : String(error) }
-      )
-    })
-    .finally(() => setPendingId(null))
 }
 
 function NativeChatSessionOptionPickersInner({
@@ -255,19 +266,43 @@ function NativeChatSessionOptionPickersInner({
 }: NativeChatSessionOptionPickersProps): React.JSX.Element | null {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const model = snapshot.find((descriptor) => descriptor.category === 'model')
-  const options = sortNativeChatSessionOptions(snapshot)
-  if (!surface || !model) {
+  const effortDescriptor = snapshot.find(
+    (descriptor): descriptor is SessionOptionDescriptor & { kind: { type: 'select' } } =>
+      descriptor.id === 'effort' && descriptor.kind.type === 'select'
+  )
+  const runProfileDescriptors = snapshot.filter(
+    (descriptor) =>
+      descriptor.category === 'permission' || descriptor.category === 'interaction_mode'
+  )
+  const options = sortNativeChatSessionOptions(
+    snapshot.filter(
+      (descriptor) =>
+        descriptor !== effortDescriptor &&
+        descriptor !== model &&
+        !runProfileDescriptors.includes(descriptor)
+    )
+  )
+  if (!surface || (!model && runProfileDescriptors.length === 0)) {
     return null
   }
 
-  const setOption = (descriptor: SessionOptionDescriptor, value: SessionOptionValue): void => {
-    runSurfaceCall(descriptor.id, setPendingId, () => surface.setOption(descriptor.id, value))
+  const setOption = (
+    descriptor: SessionOptionDescriptor,
+    value: SessionOptionValue
+  ): Promise<boolean> => {
+    return runNativeChatSessionOptionSurfaceCall(descriptor.id, setPendingId, () =>
+      surface.setOption(descriptor.id, value)
+    )
   }
   const invokeAction = (descriptor: SessionOptionDescriptor): void => {
-    runSurfaceCall(descriptor.id, setPendingId, () => surface.invokeAction(descriptor.id))
+    void runNativeChatSessionOptionSurfaceCall(descriptor.id, setPendingId, () =>
+      surface.invokeAction(descriptor.id)
+    )
   }
 
-  const modelReason = nativeChatSessionOptionDisabledReason(model.disabledReason)
+  const modelReason = model
+    ? nativeChatSessionOptionDisabledReason(model.disabledReason)
+    : null
   const modelTooltip = translate('components.native-chat.composer.model', 'Model')
   const optionsTooltip = nativeChatOptionsPillTitle(options)
   const allOptionsDisabled = options.every((descriptor) => !descriptor.settable)
@@ -278,9 +313,24 @@ function NativeChatSessionOptionPickersInner({
 
   return (
     <div className="flex min-w-0 items-center gap-0.5">
+      <NativeChatRunProfilePickers
+        surface={surface}
+        descriptors={runProfileDescriptors}
+        isWorking={isWorking}
+        pendingId={pendingId}
+        setPendingId={setPendingId}
+      />
+      {effortDescriptor ? (
+        <NativeChatEffortSlider
+          descriptor={effortDescriptor}
+          disabled={isWorking || pendingId !== null}
+          saving={pendingId === effortDescriptor.id}
+          onValueChange={(value) => setOption(effortDescriptor, value)}
+        />
+      ) : null}
       {options.length > 0 ? (
         <>
-          <DropdownMenu>
+          <DropdownMenu modal={false}>
             <PickerTrigger
               label={nativeChatOptionsPillLabel(options)}
               tooltipLabel={optionsTooltip}
@@ -288,7 +338,13 @@ function NativeChatSessionOptionPickersInner({
               disabledReason={optionsReason}
               dispatched={options.some((descriptor) => descriptor.valueSource === 'dispatched')}
             />
-            <DropdownMenuContent align="start" side="top" collisionPadding={8} className="w-60">
+            <DropdownMenuContent
+              align="start"
+              side="top"
+              sideOffset={8}
+              collisionPadding={8}
+              className="w-60"
+            >
               {options.map((descriptor, index) => {
                 const reason = nativeChatSessionOptionDisabledReason(descriptor.disabledReason)
                 return (
@@ -309,6 +365,7 @@ function NativeChatSessionOptionPickersInner({
                   </div>
                 )
               })}
+              <DropdownMenuArrow className="native-chat-picker-arrow" width={16} height={8} />
             </DropdownMenuContent>
           </DropdownMenu>
           {optionsReason ? (
@@ -318,15 +375,22 @@ function NativeChatSessionOptionPickersInner({
           ) : null}
         </>
       ) : null}
-      <DropdownMenu>
-        <PickerTrigger
-          label={nativeChatModelPillLabel(model)}
-          tooltipLabel={modelTooltip}
-          disabled={isWorking || pendingId !== null}
-          disabledReason={modelReason}
-          dispatched={model.valueSource === 'dispatched'}
-        />
-        <DropdownMenuContent align="start" side="top" collisionPadding={8} className="w-64">
+      {model ? (
+        <DropdownMenu modal={false}>
+          <PickerTrigger
+            label={nativeChatModelPillLabel(model)}
+            tooltipLabel={modelTooltip}
+            disabled={isWorking || pendingId !== null}
+            disabledReason={modelReason}
+            dispatched={model.valueSource === 'dispatched'}
+          />
+          <DropdownMenuContent
+            align="start"
+            side="top"
+            sideOffset={8}
+            collisionPadding={8}
+            className="w-80 max-w-[calc(100vw-1rem)] overflow-visible rounded-[10px] border-border bg-popover text-popover-foreground shadow-[0_10px_24px_rgb(0_0_0/0.18)] backdrop-blur-none dark:border-border dark:bg-popover dark:shadow-[0_10px_24px_rgb(0_0_0/0.18)]"
+          >
           {modelReason && !model.settable ? (
             <DropdownMenuLabel className="font-normal">{modelReason}</DropdownMenuLabel>
           ) : null}
@@ -336,8 +400,10 @@ function NativeChatSessionOptionPickersInner({
             setValue={(value) => setOption(model, value)}
             invokeAction={() => invokeAction(model)}
           />
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DropdownMenuArrow className="native-chat-picker-arrow" width={16} height={8} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   )
 }

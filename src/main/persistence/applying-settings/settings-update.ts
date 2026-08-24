@@ -1,4 +1,8 @@
 import type { GlobalSettings } from '../../../shared/global-settings-types'
+import {
+  normalizeAgentInteractionMode,
+  normalizeAgentPermissionPreset
+} from '../../../shared/agent-run-profile'
 import { normalizeDisabledTuiAgents } from '../../../shared/tui-agent-selection'
 import {
   normalizeTuiAgentArgsRecord,
@@ -91,6 +95,16 @@ export function updateSettings(
   if ('agentDefaultEnv' in updates) {
     sanitizedUpdates.agentDefaultEnv = normalizeTuiAgentEnvRecord(updates.agentDefaultEnv)
     sanitizedUpdates.agentYoloDefaultsMigrated = true
+  }
+  if ('agentPermissionPreset' in updates) {
+    sanitizedUpdates.agentPermissionPreset = normalizeAgentPermissionPreset(
+      updates.agentPermissionPreset
+    )
+  }
+  if ('agentInteractionMode' in updates) {
+    sanitizedUpdates.agentInteractionMode = normalizeAgentInteractionMode(
+      updates.agentInteractionMode
+    )
   }
   if ('terminalQuickCommands' in updates) {
     sanitizedUpdates.terminalQuickCommands = normalizeTerminalQuickCommands(

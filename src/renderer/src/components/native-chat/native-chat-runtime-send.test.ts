@@ -24,6 +24,7 @@ import {
   NATIVE_CHAT_ADVANCE_BUFFER_MS,
   NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT
 } from './native-chat-runtime-send'
+import { sendNativeChatMessageReliably } from './native-chat-reliable-send'
 import {
   buildNativeChatImagePasteBytes,
   buildNativeChatPasteBytes,
@@ -172,6 +173,56 @@ describe('sendNativeChatMessage', () => {
     ])
     expect(sendRuntimePtyInput.mock.calls[1]?.[1]).toBe('pty-a')
     expect(sendRuntimePtyInput.mock.calls[3]?.[1]).toBe('pty-b')
+  })
+})
+
+describe('sendNativeChatMessageReliably', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    sendRuntimePtyInput.mockReset().mockReturnValue(true)
+    sendRuntimePtyInputVerified.mockReset().mockResolvedValue(true)
+    resetNativeChatPtySendQueuesForTests()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    resetNativeChatPtySendQueuesForTests()
+  })
+
+  it('acknowledges both the body and delayed Enter before reporting delivery', async () => {
+    const handle = sendNativeChatMessageReliably(SETTINGS, PTY, 'hello')
+    await vi.waitFor(() => {
+      expect(sendRuntimePtyInputVerified).toHaveBeenCalledWith(
+        SETTINGS,
+        PTY,
+        buildNativeChatPasteBytes('hello')
+      )
+    })
+
+    await vi.advanceTimersByTimeAsync(NATIVE_CHAT_SUBMIT_DELAY_MS)
+
+    await expect(handle.delivery).resolves.toBe(true)
+    expect(sendRuntimePtyInputVerified).toHaveBeenLastCalledWith(SETTINGS, PTY, NATIVE_CHAT_SUBMIT)
+  })
+
+  it('reports a rejected body and clears it without sending Enter', async () => {
+    sendRuntimePtyInputVerified.mockResolvedValueOnce(false)
+    const handle = sendNativeChatMessageReliably(SETTINGS, PTY, 'restore me')
+
+    await expect(handle.delivery).resolves.toBe(false)
+
+    expect(sendRuntimePtyInputVerified).toHaveBeenCalledTimes(1)
+    expect(sendRuntimePtyInput).toHaveBeenLastCalledWith(
+      SETTINGS,
+      PTY,
+      NATIVE_CHAT_CLEAR_UNSUBMITTED_INPUT
+    )
+  })
+
+  it('reports cancellation as failed delivery', async () => {
+    const handle = sendNativeChatMessageReliably(SETTINGS, PTY, 'cancel me')
+    handle.cancel()
+
+    await expect(handle.delivery).resolves.toBe(false)
   })
 })
 

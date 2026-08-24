@@ -50,4 +50,17 @@ describe('resolveNativeChatLeafTitleAgent', () => {
       })
     ).toBe('openclaude')
   })
+
+  it('uses persisted session identity after live agent state is lost on restart', () => {
+    expect(
+      resolveNativeChatLeafTitleAgent({
+        leafId: 'leaf-1',
+        panes: [panes[0]],
+        runtimePaneTitlesByPaneId: {},
+        persistedSessionAgent: 'codex',
+        tabLabel: 'hi',
+        terminalTitle: 'OpenRouterTest'
+      })
+    ).toBe('codex')
+  })
 })

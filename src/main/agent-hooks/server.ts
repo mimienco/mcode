@@ -78,6 +78,7 @@ import {
   type AgentStatusObservation,
   type AgentStatusObservationOrigin
 } from '../../shared/agent-status-observation'
+import { isPiCompatibleAgentType } from '../../shared/pi-agent-kind'
 import {
   resolveAgentStatusIdentity,
   shouldSuppressInheritedTerminalStatus
@@ -268,12 +269,16 @@ function dropHydratedIdleClaudeSubagents(
   }
 }
 
-// Why: remote metadata-only rows are currently a Pi contract; user-dismissed rows use an internal persisted marker instead.
-function isValidPiProviderSessionOnly(
+// Why: Pi-compatible session-start rows carry resume identity without a visible status;
+// validate that each provider can actually build a resume command from the metadata.
+function isValidPiCompatibleProviderSessionOnly(
   providerSession: AgentProviderSessionMetadata | undefined,
   agentType: AgentType | undefined
 ): boolean {
-  return Boolean(providerSession && agentType === 'pi' && getAgentResumeArgv('pi', providerSession))
+  if (!isPiCompatibleAgentType(agentType)) {
+    return false
+  }
+  return Boolean(providerSession && getAgentResumeArgv(agentType, providerSession))
 }
 
 function sanitizeHydratedEntry(
@@ -337,7 +342,7 @@ function sanitizeHydratedEntry(
   )
   if (
     providerSessionOnly &&
-    !isValidPiProviderSessionOnly(providerSession, payload.agentType) &&
+    !isValidPiCompatibleProviderSessionOnly(providerSession, payload.agentType) &&
     !validRetainedIdentity
   ) {
     return null
@@ -2339,7 +2344,7 @@ export class AgentHookServer {
     }
     if (
       envelope.providerSessionOnly === true &&
-      !isValidPiProviderSessionOnly(providerSession, normalizedPayload.agentType)
+      !isValidPiCompatibleProviderSessionOnly(providerSession, normalizedPayload.agentType)
     ) {
       return
     }

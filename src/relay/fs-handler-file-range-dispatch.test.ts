@@ -150,7 +150,7 @@ describe('fs.getCapabilities', () => {
   // quick-open probe on a host that still serves it.
   it('advertises ranged reads without dropping the existing capability', async () => {
     await expect(underTest.call('fs.getCapabilities', {})).resolves.toEqual({
-      quickOpenSearchVersion: 1,
+      quickOpenSearchVersion: 2,
       rangedReadVersion: 1
     })
   })

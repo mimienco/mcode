@@ -32,7 +32,11 @@ export {
 export type ChatApproval = {
   title: string
   detail?: string
-  options: { label: string; send: string }[]
+  options: {
+    label: string
+    send: string
+    intent: 'allow-once' | 'deny'
+  }[]
 }
 
 export type InteractivePromptCard =
@@ -73,8 +77,16 @@ export function parseApprovalFromStatus(
     }),
     detail: typeof summary === 'string' && summary.length > 0 ? summary : undefined,
     options: [
-      { label: translate('components.native-chat.approval.allow', 'Allow'), send: '1' },
-      { label: translate('components.native-chat.approval.deny', 'Deny'), send: ESCAPE }
+      {
+        label: translate('components.native-chat.approval.allowOnce', 'Allow once'),
+        send: '1',
+        intent: 'allow-once'
+      },
+      {
+        label: translate('components.native-chat.approval.deny', 'Deny'),
+        send: ESCAPE,
+        intent: 'deny'
+      }
     ]
   }
 }

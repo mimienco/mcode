@@ -1,6 +1,7 @@
 /* oxlint-disable max-lines -- The resolved conversation view coordinates transcript, optimistic sends, interactive prompts, and terminal-backed input in one lifecycle. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { translate } from '@/i18n/i18n'
 import { useAppStore } from '../../store'
 import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-adoption'
 import { useNativeChatRetainedSession } from './use-native-chat-retained-session'
@@ -13,7 +14,7 @@ import { NativeChatInteractiveCard } from './NativeChatInteractiveCard'
 import { NativeChatEmptyState } from './NativeChatEmptyState'
 import { NativeChatSessionGate } from './NativeChatSessionGate'
 import { useNativeChatInteractiveSend } from './use-native-chat-interactive-send'
-import { findTabAgentEntry } from './native-chat-tab-agent-entry'
+import { findTabAgentEntry, findTabSleepingAgentSession } from './native-chat-tab-agent-entry'
 import {
   shouldClearNativeChatWorkingSuppression,
   shouldShowNativeChatWorking
@@ -34,6 +35,7 @@ import {
   applyCommandMarkerBoundaries,
   commandMarkersAsMessages,
   readCommandMarkerCache,
+  shouldRenderNativeChatCommandMarker,
   type NativeChatCommandMarker
 } from './native-chat-command-marker'
 import {
@@ -53,7 +55,10 @@ import { resolveNativeChatFileLinkContext } from './native-chat-file-link'
 import { selectNativeChatRuntimeEnvironmentId } from './native-chat-runtime-owner'
 import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
 import { useNativeChatFileLinkClick } from './use-native-chat-file-link-click'
-import { useNativeChatTerminalAttention } from './native-chat-terminal-attention'
+import {
+  detectNativeChatMessageAttention,
+  useNativeChatTerminalAttention
+} from './native-chat-terminal-attention'
 import { NativeChatTerminalAttention } from './NativeChatTerminalAttention'
 import type { NativeChatResolvedViewProps, NativeChatViewProps } from './native-chat-view-types'
 
@@ -67,6 +72,8 @@ export default function NativeChatView({
   targetPtyId = null,
   launchAgent,
   resolvedAgent,
+  persistedSession,
+  transcriptOnly = false,
   onSwitchToTerminal,
   readTerminalScreen,
   contextMenuActions
@@ -80,6 +87,22 @@ export default function NativeChatView({
         : findTabAgentEntry(s.agentStatusByPaneKey, terminalTabId)
     )
   )
+  const retainedSessionRecord = useAppStore((s) =>
+    preferredPaneKey
+      ? s.sleepingAgentSessionsByPaneKey[preferredPaneKey]
+      : findTabSleepingAgentSession(s.sleepingAgentSessionsByPaneKey, terminalTabId)
+  )
+  const retainedSession = useMemo(
+    () =>
+      retainedSessionRecord
+        ? {
+            agent: retainedSessionRecord.agent,
+            sessionId: retainedSessionRecord.providerSession.id,
+            transcriptPath: retainedSessionRecord.providerSession.transcriptPath
+          }
+        : null,
+    [retainedSessionRecord]
+  )
 
   // paneKey: prefer the live entry's key; fall back to the tab id so the hook
   // still has a stable key to select live status by before any pane reports.
@@ -89,6 +112,8 @@ export default function NativeChatView({
       paneKey={paneKey}
       launchAgent={launchAgent}
       resolvedAgent={resolvedAgent}
+      persistedSession={persistedSession}
+      retainedSession={retainedSession}
       agentStatusEntry={agentStatusEntry}
       ptyId={targetPtyId}
     >
@@ -98,6 +123,7 @@ export default function NativeChatView({
           agent={resolution.agent}
           sessionId={resolution.sessionId}
           transcriptPath={resolution.transcriptPath}
+          transcriptOnly={transcriptOnly}
           isVisible={isVisible}
           targetPtyId={targetPtyId}
           terminalTabId={terminalTabId}
@@ -115,6 +141,7 @@ function NativeChatResolvedView({
   agent,
   sessionId,
   transcriptPath,
+  transcriptOnly,
   isVisible,
   targetPtyId,
   terminalTabId,
@@ -122,6 +149,7 @@ function NativeChatResolvedView({
   readTerminalScreen,
   contextMenuActions
 }: NativeChatResolvedViewProps): React.JSX.Element {
+  const [transcriptRefreshKey, setTranscriptRefreshKey] = useState(0)
   // Primitive owner selection (no useShallow): routes the pane's read/subscribe to
   // the remote runtime host for a runtime-owned pane; null keeps the local path.
   const runtimeEnvironmentId = useAppStore((s) =>
@@ -133,7 +161,8 @@ function NativeChatResolvedView({
     sessionId,
     transcriptPath,
     runtimeEnvironmentId,
-    enabled: isVisible
+    enabled: isVisible,
+    refreshKey: transcriptRefreshKey
   })
   const launchPrompt = useAppStore((s) => s.nativeChatLaunchPromptByTabId[terminalTabId] ?? null)
   const clearNativeChatLaunchPrompt = useAppStore((s) => s.clearNativeChatLaunchPrompt)
@@ -158,7 +187,8 @@ function NativeChatResolvedView({
   const hookWorkingEpoch = useAppStore(
     (s) => s.agentStatusByPaneKey[paneKey]?.stateStartedAt ?? null
   )
-  const canSend = useNativeChatCanSend(targetPtyId)
+  const interactivePtyId = transcriptOnly ? null : targetPtyId
+  const canSend = useNativeChatCanSend(interactivePtyId)
   const terminalAttention = useNativeChatTerminalAttention({
     agent,
     isVisible,
@@ -166,7 +196,12 @@ function NativeChatResolvedView({
   })
   // Reuse the verified composer send path for interactive cards and composer
   // stop (Stop sends ESC, the agent-TUI interrupt key).
-  const interactiveSend = useNativeChatInteractiveSend(terminalTabId, paneKey, targetPtyId, agent)
+  const interactiveSend = useNativeChatInteractiveSend(
+    terminalTabId,
+    paneKey,
+    interactivePtyId,
+    agent
+  )
   const [workingInterrupted, setWorkingInterrupted] = useState(false)
   const previousWorkingEpochRef = useRef<number | null>(null)
   // True while a question card owns the input region, so the composer is hidden.
@@ -264,6 +299,9 @@ function NativeChatResolvedView({
   )
   const onSlashCommand = useCallback(
     (command: string) => {
+      if (!shouldRenderNativeChatCommandMarker(command)) {
+        return
+      }
       setCommandMarkers(appendCommandMarkerCache(commandMarkerScope, command))
     },
     [commandMarkerScope]
@@ -324,6 +362,8 @@ function NativeChatResolvedView({
       ]
     }
   }, [sessionAfterCommandBoundaries, pending, pendingMessages, commandMarkers, streamingText])
+  const attention =
+    terminalAttention ?? detectNativeChatMessageAttention(sessionWithPending.messages)
   // Derive the view state from the pending-augmented session so a send into an
   // otherwise-empty conversation flips to the list (showing the queued bubble)
   // instead of staying on the empty state.
@@ -409,7 +449,17 @@ function NativeChatResolvedView({
         {viewState.kind === 'loading' ? (
           <NativeChatEmptyState kind="loading" />
         ) : viewState.kind === 'error' ? (
-          <NativeChatEmptyState kind="error" message={viewState.message} />
+          <NativeChatEmptyState
+            kind="error"
+            message={viewState.message}
+            actionLabel={translate('components.native-chat.state.error.retry', 'Retry')}
+            onAction={() => setTranscriptRefreshKey((value) => value + 1)}
+            secondaryActionLabel={translate(
+              'components.native-chat.state.error.action',
+              'Open Terminal'
+            )}
+            onSecondaryAction={onSwitchToTerminal}
+          />
         ) : viewState.kind === 'empty' ? (
           <NativeChatEmptyState kind="empty" agent={agent} />
         ) : (
@@ -425,7 +475,8 @@ function NativeChatResolvedView({
         )}
       </div>
       <NativeChatTerminalAttention
-        attention={terminalAttention}
+        attention={attention}
+        agent={agent}
         onSwitchToTerminal={onSwitchToTerminal}
       >
         {/* Live interactive prompt (question / approval) is the bottom input region
@@ -448,7 +499,7 @@ function NativeChatResolvedView({
             ref={composerRef}
             terminalTabId={terminalTabId}
             paneKey={paneKey}
-            targetPtyId={targetPtyId}
+            targetPtyId={interactivePtyId}
             agent={agent}
             canSend={canSend}
             isWorking={isWorking}

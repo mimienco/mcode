@@ -3,6 +3,11 @@ import type {
   SleepingAgentLaunchConfig
 } from '../../shared/agent-session-resume'
 import type { StartupCommandDelivery } from '../../shared/codex-startup-delivery'
+import type {
+  CodexLiveSessionOptionsSnapshot,
+  CodexLiveSessionOptionsUpdate,
+  CodexLiveSessionOptionsUpdateResult
+} from '../../shared/codex-live-session-options'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import type { PtyListedSession } from '../../shared/pty-listed-session'
 import type { PtyMainDeliveryDiagnostics } from '../../shared/pty-delivery-diagnostics'
@@ -68,6 +73,11 @@ export type PtyApi = {
   }>
   write: (id: string, data: string) => void
   writeAccepted: (id: string, data: string) => Promise<boolean>
+  getCodexSessionOptions: (id: string) => Promise<CodexLiveSessionOptionsSnapshot>
+  setCodexSessionOptions: (
+    id: string,
+    update: CodexLiveSessionOptionsUpdate
+  ) => Promise<CodexLiveSessionOptionsUpdateResult>
   onWriteUnavailable?: (callback: (payload: { id: string }) => void) => () => void
   resize: (id: string, cols: number, rows: number) => void
   claimViewport: (id: string, cols: number, rows: number) => void

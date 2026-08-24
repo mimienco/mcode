@@ -4,10 +4,24 @@ import type {
   CodexLiveSessionOptionsUpdate,
   CodexLiveSessionOptionsUpdateResult
 } from '../../shared/codex-live-session-options'
-import { parseCodexLiveModels } from './codex-live-session-planning'
+import type { AgentInteractionMode, AgentPermissionPreset } from '../../shared/agent-run-profile'
+import { parseCodexThreadRunProfile } from './codex-live-session-controls'
+import {
+  codexRunProfileControls,
+  loadCodexLiveSessionCatalog,
+  prepareCodexLiveSessionUpdate,
+  type CodexLiveSessionCatalog
+} from './codex-live-session-catalog'
 import { CodexLiveSessionRpc } from './codex-live-session-rpc'
 
 const THREAD_TIMEOUT_MS = 8_000
+
+type CodexLiveCurrentSettings = {
+  model: string
+  effort?: string
+  permission?: AgentPermissionPreset
+  interactionMode?: AgentInteractionMode
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -15,20 +29,24 @@ function delay(ms: number): Promise<void> {
 
 export class CodexLiveSessionConnection {
   private threadId: string | null = null
-  private current: { model: string; effort?: string } | null = null
+  private current: CodexLiveCurrentSettings | null = null
   private subscribed = false
   private subscribeInFlight: Promise<void> | null = null
   private settingsUpdateSupported: boolean | null = null
   private capabilityProbeInFlight: Promise<boolean> | null = null
   private readonly settingsNotificationWaiters = new Set<
-    (current: { model: string; effort?: string }) => void
+    (current: CodexLiveCurrentSettings) => void
   >()
 
   private constructor(
     private readonly rpc: CodexLiveSessionRpc,
-    public readonly models: CodexLiveSessionModel[]
+    private readonly catalog: CodexLiveSessionCatalog
   ) {
     rpc.onNotification((method, params) => this.handleNotification(method, params))
+  }
+
+  get models(): CodexLiveSessionModel[] {
+    return this.catalog.models
   }
 
   static async start(args: {
@@ -45,26 +63,8 @@ export class CodexLiveSessionConnection {
         capabilities: { experimentalApi: true }
       })
       rpc.notify('initialized')
-      const models: CodexLiveSessionModel[] = []
-      let cursor: string | null = null
-      do {
-        const response = await rpc.request('model/list', {
-          limit: 100,
-          includeHidden: false,
-          ...(cursor ? { cursor } : {})
-        })
-        models.push(...parseCodexLiveModels(response))
-        cursor =
-          response &&
-          typeof response === 'object' &&
-          typeof (response as { nextCursor?: unknown }).nextCursor === 'string'
-            ? (response as { nextCursor: string }).nextCursor || null
-            : null
-      } while (cursor)
-      if (models.length === 0) {
-        throw new Error('Codex App Server returned no selectable models.')
-      }
-      return new CodexLiveSessionConnection(rpc, models)
+      const catalog = await loadCodexLiveSessionCatalog(rpc, args.cwd)
+      return new CodexLiveSessionConnection(rpc, catalog)
     } catch (error) {
       rpc.dispose()
       throw error
@@ -76,14 +76,16 @@ export class CodexLiveSessionConnection {
       return
     }
     const params = value as
-      | { threadId?: unknown; threadSettings?: { model?: unknown; effort?: unknown } }
+      | { threadId?: unknown; threadSettings?: Record<string, unknown> }
       | undefined
     if (params?.threadId === this.threadId && typeof params.threadSettings?.model === 'string') {
+      const runProfile = parseCodexThreadRunProfile(params.threadSettings)
       this.current = {
         model: params.threadSettings.model,
         ...(typeof params.threadSettings.effort === 'string'
           ? { effort: params.threadSettings.effort }
-          : {})
+          : {}),
+        ...runProfile
       }
       for (const resolve of this.settingsNotificationWaiters) {
         resolve({ ...this.current })
@@ -138,11 +140,13 @@ export class CodexLiveSessionConnection {
         const record =
           resumed && typeof resumed === 'object' ? (resumed as Record<string, unknown>) : null
         if (record && typeof record.model === 'string') {
+          const runProfile = parseCodexThreadRunProfile(record.threadSettings ?? record)
           this.current = {
             model: record.model,
             ...(typeof record.reasoningEffort === 'string'
               ? { effort: record.reasoningEffort }
-              : {})
+              : {}),
+            ...runProfile
           }
         }
         this.subscribed = true
@@ -186,9 +190,11 @@ export class CodexLiveSessionConnection {
   private waitForSettingsNotification(timeoutMs = 750): Promise<{
     model: string
     effort?: string
+    permission?: AgentPermissionPreset
+    interactionMode?: AgentInteractionMode
   } | null> {
     return new Promise((resolve) => {
-      const settle = (current: { model: string; effort?: string }): void => {
+      const settle = (current: CodexLiveCurrentSettings): void => {
         clearTimeout(timer)
         this.settingsNotificationWaiters.delete(settle)
         resolve(current)
@@ -207,6 +213,7 @@ export class CodexLiveSessionConnection {
       : {
           available: true,
           models: [...this.models],
+          controls: codexRunProfileControls(this.catalog),
           ...(this.current ? { current: { ...this.current } } : {})
         }
   }
@@ -236,55 +243,53 @@ export class CodexLiveSessionConnection {
     if (!(await this.ensureSettingsUpdateSupported())) {
       return { outcome: 'unavailable' }
     }
-    const selectedModel = update.model
-      ? this.models.find((model) => model.id === update.model)
-      : undefined
-    if (update.model && !selectedModel) {
+    const prepared = prepareCodexLiveSessionUpdate({
+      catalog: this.catalog,
+      update,
+      current: this.current
+    })
+    if (!prepared) {
       return { outcome: 'unavailable' }
     }
-    const effort = update.effort ?? selectedModel?.defaultEffort
-    if (
-      selectedModel &&
-      effort &&
-      selectedModel.efforts.length > 0 &&
-      !selectedModel.efforts.some((entry) => entry.id === effort)
-    ) {
-      return { outcome: 'unavailable' }
-    }
+    const { currentModel, effort, runProfileUpdate } = prepared
     try {
       const threadId = await this.loadedThreadId()
-      const expectsNotification =
-        this.subscribed &&
-        ((update.model !== undefined && update.model !== this.current?.model) ||
-          (effort !== undefined && effort !== this.current?.effort))
-      const effectiveSettings = expectsNotification ? this.waitForSettingsNotification() : null
+      const changesEffectiveSettings =
+        (update.model !== undefined && update.model !== this.current?.model) ||
+        (effort !== undefined && effort !== this.current?.effort) ||
+        (update.permission !== undefined && update.permission !== this.current?.permission) ||
+        (update.interactionMode !== undefined &&
+          update.interactionMode !== this.current?.interactionMode)
+      const effectiveSettings =
+        changesEffectiveSettings && this.subscribed ? this.waitForSettingsNotification() : null
       await this.rpc.request('thread/settings/update', {
         threadId,
-        ...(update.model ? { model: update.model } : {}),
-        ...(effort ? { effort } : {})
+        ...(update.interactionMode ? {} : update.model ? { model: update.model } : {}),
+        ...(update.interactionMode ? {} : effort ? { effort } : {}),
+        ...runProfileUpdate
       })
       const confirmed = await effectiveSettings
       if (confirmed) {
         return {
           outcome: 'applied',
           model: confirmed.model,
-          ...(confirmed.effort ? { effort: confirmed.effort } : {})
+          ...(confirmed.effort ? { effort: confirmed.effort } : {}),
+          ...(confirmed.permission ? { permission: confirmed.permission } : {}),
+          ...(confirmed.interactionMode ? { interactionMode: confirmed.interactionMode } : {})
         }
       }
-      // A no-op emits no notification. When this alpha cannot subscribe until
-      // the first rollout exists, the accepted queue response is the strongest
-      // available confirmation and still guarantees next-turn settings.
-      const currentModel = update.model ?? this.current?.model
-      if (currentModel) {
-        this.current = {
-          model: currentModel,
-          ...(effort ? { effort } : this.current?.effort ? { effort: this.current.effort } : {})
-        }
+      // An accepted RPC only proves the update was queued. Changed settings
+      // require the provider's effective-state notification before the UI can
+      // claim success; a genuine no-op does not emit one.
+      if (changesEffectiveSettings) {
+        return { outcome: 'unavailable' }
       }
       return {
         outcome: 'applied',
-        ...(update.model ? { model: update.model } : {}),
-        ...(effort ? { effort } : {})
+        ...(this.current?.model ? { model: this.current.model } : { model: currentModel }),
+        ...(this.current?.effort ? { effort: this.current.effort } : {}),
+        ...(this.current?.permission ? { permission: this.current.permission } : {}),
+        ...(this.current?.interactionMode ? { interactionMode: this.current.interactionMode } : {})
       }
     } catch {
       // Treat an accepted handshake/model catalog but rejected settings method

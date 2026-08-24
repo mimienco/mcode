@@ -5,6 +5,7 @@ import {
   type NativeChatBlock,
   type NativeChatMessage
 } from '../../shared/native-chat-types'
+import { buildImageDataUri } from '../../shared/image-data-uri'
 import {
   asRecord,
   extractString,
@@ -150,6 +151,9 @@ function codexCompletedTurnItem(
     return null
   }
   const id = extractString(item.id) ?? fallbackId
+  if (item.type === 'Extension' && item.kind === 'image_gen.generation') {
+    return codexGeneratedImageMessage(item, id, timestamp)
+  }
   const blocks = codexTurnItemBlocks(item.content)
   if (blocks.length === 0) {
     return null
@@ -159,6 +163,58 @@ function codexCompletedTurnItem(
   }
   if (item.type === 'AgentMessage' || item.type === 'agent_message') {
     return { id, role: 'assistant', blocks, timestamp, source: 'transcript' }
+  }
+  return null
+}
+
+function codexGeneratedImageMessage(
+  item: Record<string, unknown>,
+  id: string,
+  timestamp: number | null
+): NativeChatMessage | null {
+  if (item.status !== 'completed' || item.failure) {
+    return null
+  }
+  const path = extractString(item.savedPath) ?? undefined
+  const result = extractString(item.result)
+  const mimeType = generatedImageMimeType(path, result)
+  const url = result && mimeType ? (buildImageDataUri(mimeType, result) ?? undefined) : undefined
+  if (!path && !url) {
+    return null
+  }
+  return {
+    id,
+    role: 'assistant',
+    blocks: [
+      {
+        type: 'image-ref',
+        ...(path ? { path } : {}),
+        ...(url ? { url } : {}),
+        alt: 'Generated image'
+      }
+    ],
+    timestamp,
+    source: 'transcript'
+  }
+}
+
+function generatedImageMimeType(path: string | undefined, result: string | null): string | null {
+  const normalizedPath = path?.toLowerCase() ?? ''
+  if (normalizedPath.endsWith('.png') || result?.startsWith('iVBORw0KGgo')) {
+    return 'image/png'
+  }
+  if (
+    normalizedPath.endsWith('.jpg') ||
+    normalizedPath.endsWith('.jpeg') ||
+    result?.startsWith('/9j/')
+  ) {
+    return 'image/jpeg'
+  }
+  if (normalizedPath.endsWith('.gif') || result?.startsWith('R0lGOD')) {
+    return 'image/gif'
+  }
+  if (normalizedPath.endsWith('.webp') || result?.startsWith('UklGR')) {
+    return 'image/webp'
   }
   return null
 }

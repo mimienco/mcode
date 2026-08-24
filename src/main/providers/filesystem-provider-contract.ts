@@ -1,6 +1,11 @@
 import type { SearchOptions, SearchResult } from '../../shared/code-search-types'
+import type {
+  ReplaceRequest,
+  ReplaceSummary
+} from '../../shared/code-replace-types'
 import type { DirEntry, FsChangeEvent } from '../../shared/filesystem-entry-types'
 import type { WorkspaceSpaceDirectoryScanResult } from '../../shared/workspace-space-types'
+import type { QuickOpenMatchMode } from '../../shared/quick-open-path-search'
 
 export type FileStat = {
   size: number
@@ -92,6 +97,8 @@ export type IFilesystemProvider = {
   copy(source: string, destination: string): Promise<void>
   realpath(filePath: string): Promise<string>
   search(opts: SearchOptions): Promise<SearchResult>
+  /** Optional: absent on older remote hosts; callers must fail closed with an update prompt. */
+  searchReplace?(args: ReplaceRequest & { skipPaths?: string[] }): Promise<ReplaceSummary>
   listFiles(
     rootPath: string,
     options?: {
@@ -99,9 +106,11 @@ export type IFilesystemProvider = {
       signal?: AbortSignal
       maxResults?: number
       searchQuery?: string
+      searchMatchMode?: QuickOpenMatchMode
     }
   ): Promise<string[]>
   supportsQuickOpenSearch?(options?: { signal?: AbortSignal }): Promise<boolean>
+  supportsQuickOpenSearchMatchMode?(options?: { signal?: AbortSignal }): Promise<boolean>
   scanWorkspaceSpace?(
     rootPath: string,
     options?: { signal?: AbortSignal }

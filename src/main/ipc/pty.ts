@@ -19,6 +19,10 @@ import { SSH_PROVIDER_UNREGISTERED_REASON } from '../../shared/pty-liveness-verd
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 import {
+  normalizeAgentInteractionMode,
+  normalizeAgentPermissionPreset
+} from '../../shared/agent-run-profile'
+import {
   LOCAL_EXECUTION_HOST_ID,
   toSshExecutionHostId,
   type ExecutionHostId
@@ -229,6 +233,9 @@ import {
 } from '../codex/codex-real-home-path'
 import type { CodexSessionResumePreparation } from '../codex/codex-session-resume-home'
 import { dropUnverifiedCodexResumeArgv } from '../codex/codex-unverified-resume-launch'
+import { codexLiveSessionBridgeRegistry } from '../codex/codex-live-session-bridge'
+import type { CodexLiveSessionOptionsUpdate } from '../../shared/codex-live-session-options'
+import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
 import { isHostCodexHomeForWsl, isWslCodexHomeForHost } from '../pty/codex-home-wsl-env'
 import { buildConfiguredProxyEnv, type NetworkProxySettings } from '../../shared/network-proxy'
 import {
@@ -836,6 +843,7 @@ type StablePaneSpawnContext = {
   worktreeId?: string
   connectionId?: string | null
   resolveOwner?: () => StablePaneOwner | null
+  beforeFreshSpawn?: () => Promise<void>
   onFreshSpawn?: (result: PtySpawnResult) => void
 }
 
@@ -958,6 +966,7 @@ async function spawnForStablePane(
       return attached
     }
   }
+  await args.beforeFreshSpawn?.()
   const result = await args.provider.spawn(args.spawnOptions)
   args.onFreshSpawn?.(result)
   return { result, owner: null }
@@ -1081,7 +1090,11 @@ function normalizeNodePtySpawnError(err: unknown): Error {
 
 function isPtyAlreadyGoneError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err)
-  return isSshPtyNotFoundError(err) || /Session not found/i.test(message)
+  return (
+    isSshPtyNotFoundError(err) ||
+    /Session not found/i.test(message) ||
+    /Session .+ was explicitly killed/i.test(message)
+  )
 }
 
 function delay(ms: number): Promise<void> {
@@ -1592,7 +1605,8 @@ function resolvePiAgentSourceDir(
   }
 
   const overlayKey = kind === 'omp' ? 'MCODE_OMP_CODING_AGENT_DIR' : 'MCODE_PI_CODING_AGENT_DIR'
-  const otherOverlayKey = kind === 'omp' ? 'MCODE_PI_CODING_AGENT_DIR' : 'MCODE_OMP_CODING_AGENT_DIR'
+  const otherOverlayKey =
+    kind === 'omp' ? 'MCODE_PI_CODING_AGENT_DIR' : 'MCODE_OMP_CODING_AGENT_DIR'
 
   const publicDir = readEnvWithProcessFallback(baseEnv, primaryKey)
   const ownOverlayDir = readEnvWithProcessFallback(baseEnv, overlayKey)
@@ -2129,6 +2143,7 @@ export function clearProviderPtyState(
   // new teardown path forgets to remove one provider's overlay/hook state.
   openCodeHookService.clearPty(id)
   piTitlebarExtensionService.clearPty(id)
+  codexLiveSessionBridgeRegistry.dispose(id)
   // Why: SSH exit/teardown paths bypass pty.ts's local onExit but still must release Claude account-switch guards.
   markClaudePtyExited(id)
   ptySizes.delete(id)
@@ -6712,6 +6727,7 @@ export function registerPtyHandlers(
           transitionSpawnHiddenRendererPtyDeliveryState(preSpawnHiddenMarkId, true)
         }
         releaseWorktreeSpawn = await runtime?.acquireWorktreeTerminalSpawn?.(args.worktreeId)
+        let codexLiveBridgeProvisionalId: string | null = null
         try {
           if (preAllocatedHandle) {
             trustedTerminalHandleEnv.add(preAllocatedHandle)
@@ -6724,6 +6740,33 @@ export function registerPtyHandlers(
             args.worktreeId,
             args.connectionId
           )
+          const prepareCodexLiveBridgeForFreshSpawn = async (): Promise<void> => {
+            if (
+              preAdoptedStablePane ||
+              args.connectionId ||
+              args.launchAgent !== 'codex' ||
+              codexSelectionTarget.runtime !== 'host' ||
+              typeof spawnOptions.command !== 'string'
+            ) {
+              return
+            }
+            const provisionalId = randomUUID()
+            const prepared = await codexLiveSessionBridgeRegistry.prepare({
+              ptyId: provisionalId,
+              command: spawnOptions.command,
+              shell:
+                process.platform === 'win32'
+                  ? resolveWindowsShellStartupFamily(effectiveShellOverride)
+                  : 'posix',
+              env: spawnEnv,
+              cwd,
+              clientVersion: app.getVersion()
+            })
+            if (prepared) {
+              codexLiveBridgeProvisionalId = provisionalId
+              spawnOptions.command = prepared.command
+            }
+          }
           const expectedPtyId =
             stablePaneOwnerCandidate?.ptyId ?? effectiveSessionAppId ?? effectiveSessionId
           if (expectedPtyId) {
@@ -6750,6 +6793,13 @@ export function registerPtyHandlers(
                 owner: stablePaneOwnerCandidate,
                 worktreeId: args.worktreeId,
                 connectionId: args.connectionId,
+                beforeFreshSpawn: prepareCodexLiveBridgeForFreshSpawn,
+                onFreshSpawn: (spawned) => {
+                  if (codexLiveBridgeProvisionalId) {
+                    codexLiveSessionBridgeRegistry.adopt(codexLiveBridgeProvisionalId, spawned.id)
+                    codexLiveBridgeProvisionalId = null
+                  }
+                },
                 resolveOwner: () =>
                   resolveStablePaneOwner(
                     runtime,
@@ -6761,6 +6811,10 @@ export function registerPtyHandlers(
               })
           result = stablePaneSpawn.result
           stablePaneOwner = stablePaneSpawn.owner
+          if (codexLiveBridgeProvisionalId) {
+            codexLiveSessionBridgeRegistry.dispose(codexLiveBridgeProvisionalId)
+            codexLiveBridgeProvisionalId = null
+          }
           if (
             stablePaneOwner &&
             isMintedSessionId &&
@@ -6805,6 +6859,9 @@ export function registerPtyHandlers(
           )
           spawnTiming.mark('provider_spawn')
         } catch (err) {
+          if (codexLiveBridgeProvisionalId) {
+            codexLiveSessionBridgeRegistry.dispose(codexLiveBridgeProvisionalId)
+          }
           if ((isMintedSessionId || preparedProvisionalExecutionContext) && effectiveSessionAppId) {
             runtime?.preparePtyExecutionContext?.(effectiveSessionAppId, null, {
               resetIncarnation: true
@@ -7337,6 +7394,58 @@ export function registerPtyHandlers(
     event.sender === mainWebContents &&
     !mainWindow.isDestroyed() &&
     !(typeof mainWebContents.isDestroyed === 'function' && mainWebContents.isDestroyed())
+
+  const isPtyIdPayload = (value: unknown): value is { id: string } =>
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { id?: unknown }).id === 'string' &&
+    (value as { id: string }).id.length > 0
+
+  const isCodexSessionOptionsUpdate = (value: unknown): value is CodexLiveSessionOptionsUpdate => {
+    if (!value || typeof value !== 'object') {
+      return false
+    }
+    const update = value as {
+      model?: unknown
+      effort?: unknown
+      permission?: unknown
+      interactionMode?: unknown
+    }
+    const keys = Object.keys(update)
+    return (
+      keys.length > 0 &&
+      keys.every((key) => ['model', 'effort', 'permission', 'interactionMode'].includes(key)) &&
+      (update.model === undefined ||
+        (typeof update.model === 'string' && update.model.length > 0)) &&
+      (update.effort === undefined ||
+        (typeof update.effort === 'string' && update.effort.length > 0)) &&
+      (update.permission === undefined ||
+        normalizeAgentPermissionPreset(update.permission) !== undefined) &&
+      (update.interactionMode === undefined ||
+        normalizeAgentInteractionMode(update.interactionMode) !== undefined)
+    )
+  }
+
+  ipcMain.handle('pty:codexSessionOptions:get', (event, args: unknown) => {
+    if (!isPtyWriteEventFromMainWindow(event, mainWindow.webContents) || !isPtyIdPayload(args)) {
+      return { available: false } as const
+    }
+    return codexLiveSessionBridgeRegistry.readySnapshot(args.id)
+  })
+
+  ipcMain.handle('pty:codexSessionOptions:set', (event, args: unknown) => {
+    const payload = args as { id?: unknown; update?: unknown } | null
+    if (
+      !isPtyWriteEventFromMainWindow(event, mainWindow.webContents) ||
+      !payload ||
+      typeof payload.id !== 'string' ||
+      payload.id.length === 0 ||
+      !isCodexSessionOptionsUpdate(payload.update)
+    ) {
+      return { outcome: 'unavailable' } as const
+    }
+    return codexLiveSessionBridgeRegistry.update(payload.id, payload.update)
+  })
 
   const writePtyInput = (args: PtyWritePayload): boolean | Promise<boolean> => {
     // Why: mobile-presence-lock defense-in-depth — the renderer's onData guard can let one keystroke slip during the state-flip lag, so catch it server-side. See docs/mobile-presence-lock.md.

@@ -5,9 +5,19 @@ import {
   initialAgentTabViewModeProps
 } from './native-chat-initial-view-mode'
 import { isNativeChatTranscriptLocalReadable } from './native-chat-transcript-readability'
+import { getDefaultSettings } from '../../../shared/constants'
 
 describe('decideInitialAgentTabViewMode', () => {
-  it("returns 'chat' when native chat and the opt-in default setting are on", () => {
+  it('opens a new Codex tab in Chat with the product defaults', () => {
+    expect(
+      initialAgentTabViewModeProps(getDefaultSettings('C:\\Users\\test'), {
+        agent: 'codex',
+        nativeChatTranscriptIsLocalReadable: true
+      })
+    ).toEqual({ viewMode: 'chat' })
+  })
+
+  it("returns 'chat' when native chat and the default-chat setting are on", () => {
     expect(
       decideInitialAgentTabViewMode({
         experimentalNativeChat: true,

@@ -84,9 +84,16 @@ describe('feature interaction writer boundaries', () => {
     for (const section of sections) {
       expect(section).toContain('sourceContext')
     }
-    const rowRenderStart = source.indexOf('filteredWorkItems.map((item) => {')
+    const rowRenderStart = source.indexOf('filteredWorkItems.map((item) => (')
     expect(rowRenderStart).toBeGreaterThanOrEqual(0)
-    expect(source.slice(rowRenderStart, rowRenderStart + 12_000)).toContain(
+    // Rows are extracted into the memoized GitHubTaskRow component; both halves
+    // must stay in sync — the map threads itemRepo, the row derives sourceContext.
+    expect(source.slice(rowRenderStart, rowRenderStart + 2_000)).toContain(
+      'itemRepo={repoMap.get(item.repoId) ?? null}'
+    )
+    const rowComponentStart = source.indexOf('function GitHubTaskRow')
+    expect(rowComponentStart).toBeGreaterThanOrEqual(0)
+    expect(source.slice(rowComponentStart, rowComponentStart + 12_000)).toContain(
       'sourceContext={getTaskPageRepoSourceContext(itemRepo,'
     )
   })

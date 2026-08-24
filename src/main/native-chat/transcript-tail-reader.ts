@@ -30,6 +30,26 @@ import {
 import { wslTranscriptFsRefusal } from './wsl-transcript-fs-gate'
 
 export const MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES = 2 * 1024 * 1024
+// ImageGen completion records carry the generated bitmap as base64 in the same
+// JSONL record. Keep the ordinary defensive cap, but admit a bounded image
+// record so the native chat can render it instead of silently dropping it.
+export const MAX_NATIVE_CHAT_GENERATED_IMAGE_RECORD_BYTES = 16 * 1024 * 1024
+const CODEX_IMAGE_GENERATION_MARKERS = [
+  Buffer.from('image_gen.generation'),
+  Buffer.from('"savedPath"')
+]
+
+export function nativeChatTranscriptRecordByteLimit(
+  retainedParts: readonly Buffer[],
+  nextPart: Buffer
+): number {
+  const looksLikeGeneratedImage = CODEX_IMAGE_GENERATION_MARKERS.some((marker) =>
+    [nextPart, ...retainedParts].some((part) => part.includes(marker))
+  )
+  return looksLikeGeneratedImage
+    ? MAX_NATIVE_CHAT_GENERATED_IMAGE_RECORD_BYTES
+    : MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES
+}
 
 export type NativeChatLineDecoder = (line: string, fallbackId: string) => NativeChatMessage | null
 
@@ -162,7 +182,7 @@ export async function readNativeChatTranscriptTailFile(
       return
     }
     lineBytes += part.length
-    if (lineBytes > MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES) {
+    if (lineBytes > nativeChatTranscriptRecordByteLimit(lineParts, part)) {
       lineParts.length = 0
       lineOversized = true
       oversizedRecordCount++

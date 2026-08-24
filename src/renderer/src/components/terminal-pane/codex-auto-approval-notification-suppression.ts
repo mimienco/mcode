@@ -57,7 +57,7 @@ export function shouldSuppressCodexAutoApprovalStatus(
       agent: 'codex',
       agentArgs: launchConfig.agentArgs,
       agentEnv: launchConfig.agentEnv
-    }) === 'yolo'
+    }) === 'bypass'
   )
 }
 

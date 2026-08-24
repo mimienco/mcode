@@ -429,6 +429,36 @@ describe('Store', () => {
     expect(store.getSettings().claudeAgentTeamsDefaultDisabledMigrated).toBe(true)
   })
 
+  it('normalizes provider-neutral agent run profiles on load and update', async () => {
+    writeFileSync(
+      join(testState.dir, 'mcode-data.json'),
+      JSON.stringify({
+        settings: {
+          agentPermissionPreset: 'unsafe-custom',
+          agentInteractionMode: 'execute'
+        }
+      })
+    )
+    const store = await createStore()
+
+    expect(store.getSettings().agentPermissionPreset).toBeUndefined()
+    expect(store.getSettings().agentInteractionMode).toBeUndefined()
+
+    const updated = store.updateSettings({
+      agentPermissionPreset: 'auto-edits',
+      agentInteractionMode: 'plan'
+    })
+    expect(updated.agentPermissionPreset).toBe('auto-edits')
+    expect(updated.agentInteractionMode).toBe('plan')
+
+    const invalid = store.updateSettings({
+      agentPermissionPreset: 'unsafe-custom',
+      agentInteractionMode: 'execute'
+    } as never)
+    expect(invalid.agentPermissionPreset).toBeUndefined()
+    expect(invalid.agentInteractionMode).toBeUndefined()
+  })
+
   it('migrates yolo default args onto untouched agent launch settings', async () => {
     writeFileSync(
       join(testState.dir, 'mcode-data.json'),

@@ -24,11 +24,13 @@ import type {
   TerminalArtifactAccessOptions
 } from './types'
 import type { SearchOptions, SearchResult } from '../../shared/code-search-types'
+import type { ReplaceRequest, ReplaceSummary } from '../../shared/code-replace-types'
 import type { DirEntry, FsChangeEvent } from '../../shared/filesystem-entry-types'
 import { routeSshFilesystemWatchNotification } from './ssh-filesystem-watch-notifications'
 import type { WorkspaceSpaceDirectoryScanResult } from '../../shared/workspace-space-types'
 import { isWindowsRemoteHost, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import {
+  probeSshQuickOpenMatchModeCapability,
   probeSshQuickOpenSearchCapability,
   probeSshRangedReadCapability
 } from './ssh-filesystem-provider-capabilities'
@@ -290,6 +292,12 @@ export class SshFilesystemProvider implements IFilesystemProvider {
     return (await this.mux.request('fs.search', opts)) as SearchResult
   }
 
+  async searchReplace(
+    args: ReplaceRequest & { skipPaths?: string[] }
+  ): Promise<ReplaceSummary> {
+    return (await this.mux.request('fs.searchReplace', args)) as ReplaceSummary
+  }
+
   async listFiles(
     rootPath: string,
     options?: Parameters<IFilesystemProvider['listFiles']>[1]
@@ -304,6 +312,9 @@ export class SshFilesystemProvider implements IFilesystemProvider {
     if (options?.searchQuery !== undefined) {
       params.searchQuery = options.searchQuery
     }
+    if (options?.searchMatchMode !== undefined) {
+      params.searchMatchMode = options.searchMatchMode
+    }
     // Why #7721: the signal lets a workspace switch send rpc.cancel so the
     // relay aborts the full-tree scan instead of stacking abandoned scans
     // that starve interactive fs.readDir/fs.stat on the shared SSH channel.
@@ -314,6 +325,8 @@ export class SshFilesystemProvider implements IFilesystemProvider {
 
   supportsQuickOpenSearch = (options: { signal?: AbortSignal } = {}): Promise<boolean> =>
     probeSshQuickOpenSearchCapability(this.mux, options.signal)
+  supportsQuickOpenSearchMatchMode = (options: { signal?: AbortSignal } = {}): Promise<boolean> =>
+    probeSshQuickOpenMatchModeCapability(this.mux, options.signal)
   async watch(
     rootPath: string,
     callback: (events: FsChangeEvent[]) => void,

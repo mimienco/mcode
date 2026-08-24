@@ -4,6 +4,7 @@ import {
   QUICK_OPEN_QUERY_MAX_BYTES,
   QUICK_OPEN_RESULT_LIMIT,
   isQuickOpenQueryTooLarge,
+  getPreparedQuickOpenFiles,
   prepareQuickOpenFiles,
   rankQuickOpenFiles,
   type QuickOpenIndexedFile
@@ -47,7 +48,8 @@ describe('quick-open-search', () => {
     expect(rankQuickOpenFiles('', prepareQuickOpenFiles(files))).toEqual(
       Array.from({ length: QUICK_OPEN_RESULT_LIMIT }, (_, index) => ({
         path: `src/file-${index}.ts`,
-        score: 0
+        score: 0,
+        matchIndices: []
       }))
     )
   })
@@ -56,9 +58,9 @@ describe('quick-open-search', () => {
     const files = ['src/a.ts', 'src/b.ts', 'src/c.ts']
 
     expect(rankQuickOpenFiles('   ', prepareQuickOpenFiles(files))).toEqual([
-      { path: 'src/a.ts', score: 0 },
-      { path: 'src/b.ts', score: 0 },
-      { path: 'src/c.ts', score: 0 }
+      { path: 'src/a.ts', score: 0, matchIndices: [] },
+      { path: 'src/b.ts', score: 0, matchIndices: [] },
+      { path: 'src/c.ts', score: 0, matchIndices: [] }
     ])
   })
 
@@ -74,10 +76,10 @@ describe('quick-open-search', () => {
     const files = Array.from({ length: 10 }, (_, index) => `src/path-${9 - index}.bin`)
 
     expect(rankQuickOpenFiles('s', prepareQuickOpenFiles(files), 4)).toEqual([
-      { path: 'src/path-0.bin', score: 0 },
-      { path: 'src/path-1.bin', score: 0 },
-      { path: 'src/path-2.bin', score: 0 },
-      { path: 'src/path-3.bin', score: 0 }
+      { path: 'src/path-0.bin', score: 0, matchIndices: [0] },
+      { path: 'src/path-1.bin', score: 0, matchIndices: [0] },
+      { path: 'src/path-2.bin', score: 0, matchIndices: [0] },
+      { path: 'src/path-3.bin', score: 0, matchIndices: [0] }
     ])
   })
 
@@ -117,6 +119,52 @@ describe('quick-open-search', () => {
     expect(scores).toEqual([...scores].sort((a, b) => a - b))
   })
 
+  it('returns fuzzy-match indices across the directory and filename', () => {
+    const path = 'src/renderer/index.ts'
+    const [result] = rankQuickOpenFiles('srind', prepareQuickOpenFiles([path]))
+
+    expect(result.matchIndices.map((index) => path[index]).join('')).toBe('srind')
+    expect(result.matchIndices.some((index) => index < path.lastIndexOf('/') + 1)).toBe(true)
+    expect(result.matchIndices.some((index) => index >= path.lastIndexOf('/') + 1)).toBe(true)
+  })
+
+  it('supports literal substring matching for file mentions without changing fuzzy quick open', () => {
+    const path =
+      '.claude-oxalpha/plugins/marketplaces/claude-plugins-official/plugins/project-artifact/skills/project-artifact/template.html'
+    const files = prepareQuickOpenFiles([path])
+
+    expect(rankQuickOpenFiles('clxhjskh', files)).toHaveLength(1)
+    expect(
+      rankQuickOpenFiles('clxhjskh', files, QUICK_OPEN_RESULT_LIMIT, { matchMode: 'substring' })
+    ).toEqual([])
+
+    const [literalMatch] = rankQuickOpenFiles(
+      'project-artifact/template',
+      files,
+      QUICK_OPEN_RESULT_LIMIT,
+      { matchMode: 'substring' }
+    )
+    expect(literalMatch.matchIndices.map((index) => path[index]).join('')).toBe(
+      'project-artifact/template'
+    )
+  })
+
+  it('keeps literal substring highlights aligned after Unicode case folding expands a character', () => {
+    const path = 'src/İFile.ts'
+    const [match] = rankQuickOpenFiles('file', prepareQuickOpenFiles([path]), 50, {
+      matchMode: 'substring'
+    })
+
+    expect(match.matchIndices.map((index) => path[index]).join('')).toBe('File')
+  })
+
+  it('applies literal substring mode in the streaming ranker', () => {
+    const ranker = new QuickOpenPathRanker('clxhjskh', 50, { matchMode: 'substring' })
+    ranker.consider('.claude-oxalpha/shell-snapshots/snapshot.sh')
+
+    expect(ranker.result()).toEqual({ paths: [], totalCount: 0 })
+  })
+
   it('indexes normalized relative paths without changing path semantics', () => {
     const files = [
       'src/renderer/src/components/QuickOpen.tsx',
@@ -125,7 +173,8 @@ describe('quick-open-search', () => {
       'single-file.ts'
     ]
 
-    expect(prepareQuickOpenFiles(files)).toEqual([
+    const indexed = prepareQuickOpenFiles(files)
+    expect(indexed.map(({ pathIndices: _pathIndices, ...file }) => file)).toEqual([
       {
         path: 'src/renderer/src/components/QuickOpen.tsx',
         lowerPath: 'src/renderer/src/components/quickopen.tsx',
@@ -151,6 +200,13 @@ describe('quick-open-search', () => {
         inputIndex: 3
       }
     ])
+    expect(indexed.every((file) => file.pathIndices.length === file.lowerPath.length)).toBe(true)
+  })
+
+  it('reuses a prepared inventory across query changes', () => {
+    const files = ['src/App.tsx', 'src/index.ts']
+
+    expect(getPreparedQuickOpenFiles(files)).toBe(getPreparedQuickOpenFiles(files))
   })
 
   it('returns no results for non-positive limits', () => {

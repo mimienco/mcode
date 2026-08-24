@@ -10347,6 +10347,8 @@ export class MCodeRuntimeService {
     this.fileCommands.deleteFileExplorerPath.bind(this.fileCommands)
   searchRuntimeFiles: RuntimeFileCommands['searchRuntimeFiles'] =
     this.fileCommands.searchRuntimeFiles.bind(this.fileCommands)
+  searchReplaceRuntimeFiles: RuntimeFileCommands['searchReplaceRuntimeFiles'] =
+    this.fileCommands.searchReplaceRuntimeFiles.bind(this.fileCommands)
   listRuntimeFiles: RuntimeFileCommands['listRuntimeFiles'] =
     this.fileCommands.listRuntimeFiles.bind(this.fileCommands)
   listRuntimeMarkdownDocuments: RuntimeFileCommands['listRuntimeMarkdownDocuments'] =

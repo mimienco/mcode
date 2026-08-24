@@ -2,6 +2,7 @@
 file preload API plus remote runtime fallbacks so call sites cannot drift on
 local-vs-environment routing rules. */
 import type { SearchOptions, SearchResult } from '../../../shared/code-search-types'
+import type { ReplaceSummary } from '../../../shared/code-replace-types'
 import type {
   DirEntry,
   FsChangedPayload,
@@ -45,6 +46,7 @@ import {
   hasCachedLegacyQuickOpenInventory,
   searchLegacyQuickOpenInventory
 } from './runtime-legacy-quick-open-inventory'
+import type { QuickOpenMatchMode } from '../../../shared/quick-open-path-search'
 
 export type RuntimeReadableFileContent = {
   content: string
@@ -961,6 +963,53 @@ export async function searchRuntimeFiles(
   )
 }
 
+export type RuntimeReplaceParams = {
+  query: string
+  replacement: string
+  options: {
+    caseSensitive?: boolean
+    wholeWord?: boolean
+    useRegex?: boolean
+    preserveCase?: 'none' | 'match'
+  }
+  targets: { filePath: string; relativePath: string }[]
+  skipPaths: string[]
+}
+
+export async function replaceRuntimeFiles(
+  context: RuntimeFileOperationArgs,
+  params: RuntimeReplaceParams
+): Promise<ReplaceSummary> {
+  if (!context.worktreePath) {
+    throw new Error('No workspace selected')
+  }
+  const target = getActiveRuntimeTarget(context.settings)
+  if (target.kind !== 'environment' || !context.worktreeId) {
+    return window.api.fs.searchReplace({
+      rootPath: context.worktreePath,
+      query: params.query,
+      replacement: params.replacement,
+      options: params.options,
+      targets: params.targets,
+      skipPaths: params.skipPaths,
+      connectionId: context.connectionId
+    })
+  }
+  return callRuntimeRpc<ReplaceSummary>(
+    target,
+    'files.searchReplace',
+    {
+      worktree: toRuntimeWorktreeSelector(context.worktreeId),
+      query: params.query,
+      replacement: params.replacement,
+      ...params.options,
+      targets: params.targets.map((t) => ({ relativePath: t.relativePath })),
+      skipPaths: params.skipPaths
+    },
+    { timeoutMs: 120_000 }
+  )
+}
+
 export async function listRuntimeFiles(
   context: RuntimeFileOperationArgs,
   args: {
@@ -995,6 +1044,7 @@ export async function searchRuntimeFilePaths(
   args: {
     query: string
     limit?: number
+    matchMode?: QuickOpenMatchMode
     excludePaths?: string[]
     requestToken?: string
     signal?: AbortSignal
@@ -1012,7 +1062,8 @@ export async function searchRuntimeFilePaths(
       excludePaths: args.excludePaths,
       requestToken: args.requestToken,
       maxResults: limit + 1,
-      searchQuery: args.query
+      searchQuery: args.query,
+      ...(args.matchMode === undefined ? {} : { searchMatchMode: args.matchMode })
     })
     return { files: files.slice(0, limit), truncated: files.length > limit }
   }
@@ -1027,6 +1078,7 @@ export async function searchRuntimeFilePaths(
       worktreeSelector,
       query: args.query,
       limit,
+      matchMode: args.matchMode,
       worktreePath: context.worktreePath,
       excludePaths: args.excludePaths,
       signal: args.signal
@@ -1042,7 +1094,8 @@ export async function searchRuntimeFilePaths(
         query: args.query,
         limit,
         excludePaths: args.excludePaths,
-        mode: 'quick-open'
+        mode: 'quick-open',
+        ...(args.matchMode === undefined ? {} : { matchMode: args.matchMode })
       },
       { timeoutMs: 15_000, ...(args.signal === undefined ? {} : { signal: args.signal }) }
     )
@@ -1054,6 +1107,7 @@ export async function searchRuntimeFilePaths(
           worktreeSelector,
           query: args.query,
           limit,
+          matchMode: args.matchMode,
           worktreePath: context.worktreePath,
           excludePaths: args.excludePaths,
           signal: args.signal
@@ -1067,16 +1121,19 @@ export async function searchRuntimeFilePaths(
     }
     throw error
   }
-  if (
-    args.excludePaths?.length &&
-    !(typeof result.quickOpenSearchVersion === 'number' && result.quickOpenSearchVersion >= 1)
-  ) {
+  const quickOpenSearchVersion =
+    typeof result.quickOpenSearchVersion === 'number' ? result.quickOpenSearchVersion : 0
+  const needsLegacySearchFallback =
+    (Boolean(args.excludePaths?.length) && quickOpenSearchVersion < 1) ||
+    (args.matchMode === 'substring' && quickOpenSearchVersion < 2)
+  if (needsLegacySearchFallback) {
     try {
       return await searchLegacyQuickOpenInventory({
         target,
         worktreeSelector,
         query: args.query,
         limit,
+        matchMode: args.matchMode,
         worktreePath: context.worktreePath,
         excludePaths: args.excludePaths,
         signal: args.signal

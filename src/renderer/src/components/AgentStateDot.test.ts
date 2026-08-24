@@ -20,12 +20,16 @@ function renderDotClassNames(state: AgentDotState): string[] {
 
 describe('AgentStateDot', () => {
   it('keeps the question glyph above the light-theme non-text contrast floor', () => {
-    const css = readFileSync(join(__dirname, '../assets/main.css'), 'utf8')
+    // Why: Windows checkouts use CRLF; needles below are \n-based.
+    const css = readFileSync(join(__dirname, '../assets/main.css'), 'utf8').replace(/\r\n/g, '\n')
     const lightTheme = css.match(/:root\s*\{(?<body>[\s\S]*?)\n\}/)?.groups?.body
     const darkTheme = css.match(/\.dark\s*\{(?<body>[\s\S]*?)\n\}/)?.groups?.body
 
-    expect(lightTheme).toContain('--agent-question: var(--color-orange-600)')
-    expect(darkTheme).toContain('--agent-question: var(--color-orange-500)')
+    // Test Bench redesign: agent-question moved from orange to channel Ch3
+    // magenta. Contrast re-measured vs the 3:1 non-text floor this test guards:
+    // #c2317f on light bg = 4.56:1, #e06ca8 on dark bg = 5.99:1 — both clear it.
+    expect(lightTheme).toContain('--agent-question: #c2317f')
+    expect(darkTheme).toContain('--agent-question: #e06ca8')
   })
 
   it('renders working as a yellow spinner', () => {

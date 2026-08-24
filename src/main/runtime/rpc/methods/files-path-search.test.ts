@@ -69,10 +69,11 @@ describe('file path search RPC method', () => {
       'id:wt-1',
       'app',
       8,
+      undefined,
       ['/repo/nested'],
       controller.signal
     )
-    expect(response).toMatchObject({ ok: true, result: { quickOpenSearchVersion: 1 } })
+    expect(response).toMatchObject({ ok: true, result: { quickOpenSearchVersion: 2 } })
   })
 
   it('keeps the complete paired Quick Open reply within its content budget', async () => {

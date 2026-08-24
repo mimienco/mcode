@@ -13253,7 +13253,7 @@
     },
     {
       "id": "codex.state-db-backfill-recovery-bounds",
-      "title": "Codex state DB backfill recovery has bounded process and timer use",
+      "title": "Codex state DB backfill recovery is bounded and self-healing",
       "maturity": "experimental",
       "protection": "partial",
       "owner": "codex-runtime",
@@ -13267,10 +13267,10 @@
       "providers": ["local", "wsl", "paired-runtime-host"],
       "coveredPlatforms": ["macos"],
       "coveredProviders": ["local", "wsl"],
-      "coverageNotes": "A deterministic injected claimant and clock cover exits before and after the former ten-second classification boundary, exact spawn/poll/backoff counts, transient exit and spawn-error recovery, owner-lock reacquisition, WSL routing, and cleanup. Live Windows, WSL, and paired-runtime-host process evidence remains uncollected.",
+      "coverageNotes": "A deterministic injected claimant and clock cover bounded claimant retries, CLI-compatible app-server arguments, one recoverable state-DB quarantine/rebuild, transient exit and spawn-error recovery, owner-lock reacquisition, WSL routing, and cleanup. Live Windows, WSL, and paired-runtime-host process evidence remains uncollected.",
       "motivatingLinks": ["https://github.com/mcode-ide/mcode/releases/tag/v1.4.177-rc.0"],
-      "invariant": "One authoritative Codex state DB backfill supervisor spawns at most five claimants regardless of process lifetime, retains at most one child and one timer, rejects later automatic restarts after claimant exhaustion, and bounds pre-claim coordinator failures to five triggers while transient claimant and owner-lock failures can recover within those budgets.",
-      "oracle": "Use an injected process and clock to exit every claimant at 10,001ms without waiting. Permanent failure must give up after five spawns and exits with exactly 15 poll timers and four backoffs, no live child or pending timer, and no safety-fuse abort; repeated triggers must reuse the exhausted result with zero new lock or runner calls. Separately fail twice at 10,001ms and complete on the third claimant, recover from a first-spawn error on attempt two, reacquire after a transient owner-lock failure, and cap permanent lock-root failures at five attempts across six triggers.",
+      "invariant": "One authoritative Codex state DB backfill supervisor retains at most one claimant and one retry timer, retries claimant exhaustion instead of memoizing failure forever, quarantines at most one incomplete state DB per recovery run with session history untouched, and bounds pre-claim coordinator failures to five triggers while transient claimant and owner-lock failures can recover.",
+      "oracle": "Use an injected process and clock to exit the first five claimants at 10,001ms without waiting. The supervisor must quarantine once, retry from a fresh DB, complete on the sixth claimant, and retain no live child; without a successful quarantine it must give up after five claimants with exactly 15 poll timers and four backoffs. Separately assert stable read-only app-server arguments, completion after claimant exits, transient spawn-error recovery, owner-lock reacquisition, WSL routing, and a later retry after permanent coordinator failures.",
       "commands": [
         "pnpm exec vitest run --config config/vitest.config.ts src/main/codex/codex-state-db-backfill-recovery.test.ts"
       ],
@@ -13279,7 +13279,7 @@
         {
           "file": "src/main/codex/codex-state-db-backfill-recovery.test.ts",
           "assertions": [
-            "does not restart an exhausted supervisor when later triggers arrive",
+            "restarts an exhausted supervisor when later triggers arrive",
             "releases a completed supervisor entry",
             "releases a failed owner-lock attempt for later arbitration",
             "bounds permanent coordinator failures across later triggers",
@@ -13299,7 +13299,7 @@
           "result": "passed",
           "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/codex/codex-state-db-backfill-recovery.test.ts",
           "durationSeconds": 0.4,
-          "summary": "Twelve deterministic recovery and owner-lock tests passed, including exact permanent and transient 10,001ms exit accounting, spawn-error recovery, trigger-level exhaustion memoization, bounded coordinator failure, successful owner-lock reacquisition, and zero retained children or timers."
+          "summary": "Deterministic recovery and owner-lock tests cover CLI-compatible arguments, claimant exhaustion recovery, one state-DB quarantine/rebuild, transient failures, bounded coordinator failure, WSL routing, and zero retained children or timers."
         }
       ],
       "runtimeBudget": {
@@ -13312,11 +13312,11 @@
       },
       "redGreenEvidence": {
         "status": "complete",
-        "evidence": "The byte-identical production source at release commit 9e948fbdf462ede3c0160c719474100fc5cbefb7 and origin/main spawned six claimants and reached the harness fuse with 18 polls and six backoffs. The candidate gives up after five claimants with 15 polls and four backoffs; removing the total-spawn cap restores the exact red result."
+        "evidence": "The regression harness now fails when the approval-policy argument is stale or when claimant exhaustion remains permanently memoized. The candidate uses stable read-only app-server arguments, releases exhausted supervisors for retry, and quarantines one stuck state DB before retrying from session history."
       },
       "performanceBudget": {
         "required": true,
-        "evidence": "The supervisor retains at most one claimant and one awaited timer. A permanent process lifetime is bounded to five subprocesses, 15 status polls, and four backoffs; later triggers reuse one settled promise and spawn nothing. Pre-claim coordinator failures perform at most five status/lock attempts. The fix adds no polling, listener, provider call, scan, wire field, or hot-path work."
+        "evidence": "The supervisor retains at most one claimant and one retry timer. One recovery run uses at most five claimant retries before one recoverable DB quarantine and a second bounded phase; retry timers are unref'd and cleared during shutdown/tests. Pre-claim coordinator failures remain capped at five attempts. The fix adds no provider call, scan, wire field, or hot-path work."
       },
       "promotionCriteria": [
         "Collect 100 consecutive focused CI passes or 14 days of soak history.",

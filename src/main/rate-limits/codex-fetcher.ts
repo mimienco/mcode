@@ -611,7 +611,7 @@ async function withBackendSessionWindow(
 }
 
 // ---------------------------------------------------------------------------
-// RPC fetch — spawn `codex -s read-only -a untrusted app-server`
+// RPC fetch — spawn `codex -s read-only -a never app-server`
 // ---------------------------------------------------------------------------
 
 async function fetchViaRpc(options?: FetchCodexRateLimitsOptions): Promise<ProviderRateLimits> {
@@ -624,7 +624,9 @@ async function fetchViaRpc(options?: FetchCodexRateLimitsOptions): Promise<Provi
     let resolved = false
     let rpcId = 0
 
-    const codexArgs = ['-s', 'read-only', '-a', 'untrusted', 'app-server']
+    // Why: Codex removed the legacy `untrusted` approval policy. `never` is
+    // supported by current and older CLIs and is safe for this read-only probe.
+    const codexArgs = ['-s', 'read-only', '-a', 'never', 'app-server']
     const wslCodex = options?.codexHomePath
       ? buildWslCodexCommand(options.codexHomePath, codexArgs, { isolateRpcStdio: true })
       : null

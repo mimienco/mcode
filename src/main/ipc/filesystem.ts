@@ -30,6 +30,7 @@ import type { GitPushTarget } from '../../shared/worktree/types'
 import type { GitHistoryOptions, GitHistoryResult } from '../../shared/git-history'
 import type { SshMutationExpectation } from '../../shared/ssh-types'
 import { sortDirEntries } from '../../shared/file-name-sort'
+import { isFileListingCancellation } from '../../shared/file-listing-cancellation'
 import { assertSshMutationExpectation } from '../ssh/ssh-connection-generation'
 import {
   buildRgArgs,
@@ -95,6 +96,7 @@ import { resolveRegisteredWorktreePath } from './registered-worktree-roots-cache
 import { validateGitRelativeFilePath, isENOENT } from './filesystem-path-containment'
 import { listQuickOpenFiles } from './filesystem-list-files'
 import { registerFilesystemMutationHandlers } from './filesystem-mutations'
+import { registerFilesystemSearchReplaceHandlers } from './filesystem-search-replace'
 import { searchWithGitGrep } from './filesystem-search-git'
 import {
   getLocalGitOptionsForRegisteredWorktree,
@@ -139,7 +141,7 @@ import { sanitizeLocalDownloadFilename } from '../local-download-filename'
 import { registerFilesystemDownloadFolderHandlers } from './filesystem-download-folder'
 import { getWorktreeSharedLinkPaths } from '../git/worktree-shared-directories'
 import { createSenderScopedRequestCancellations } from './sender-scoped-request-cancellation'
-import { QuickOpenPathRanker } from '../../shared/quick-open-path-search'
+import { QuickOpenPathRanker, type QuickOpenMatchMode } from '../../shared/quick-open-path-search'
 import {
   applyGitStatusUpstreamRefWatchRequest,
   type GitStatusUpstreamRefWatchRequest
@@ -917,6 +919,7 @@ export function registerFilesystemHandlers(
   )
 
   registerFilesystemMutationHandlers(store)
+  registerFilesystemSearchReplaceHandlers(store)
 
   ipcMain.handle('fs:authorizeExternalPath', (_event, args: { targetPath: string }): void => {
     authorizeExternalPath(args.targetPath)
@@ -1120,6 +1123,7 @@ export function registerFilesystemHandlers(
         requestToken?: string
         maxResults?: number
         searchQuery?: string
+        searchMatchMode?: QuickOpenMatchMode
       }
     ): Promise<string[]> => {
       const controller = listFilesCancellations.begin(event, args.requestToken)
@@ -1131,11 +1135,15 @@ export function registerFilesystemHandlers(
             return []
           }
           // Why: forward excludePaths or nested linked worktrees get double-scanned over SSH, causing timeout-induced partial results.
-          if (
-            args.searchQuery !== undefined &&
-            provider.supportsQuickOpenSearch &&
-            !(await provider.supportsQuickOpenSearch({ signal: controller?.signal }))
-          ) {
+          const supportsSearch =
+            args.searchQuery === undefined ||
+            (provider.supportsQuickOpenSearch !== undefined &&
+              (await provider.supportsQuickOpenSearch({ signal: controller?.signal })))
+          const supportsMatchMode =
+            args.searchMatchMode !== 'substring' ||
+            (provider.supportsQuickOpenSearchMatchMode !== undefined &&
+              (await provider.supportsQuickOpenSearchMatchMode({ signal: controller?.signal })))
+          if (args.searchQuery !== undefined && (!supportsSearch || !supportsMatchMode)) {
             const legacyFiles = await provider.listFiles(args.rootPath, {
               excludePaths: args.excludePaths,
               maxResults: QUICK_OPEN_SSH_LEGACY_RESULT_LIMIT,
@@ -1143,7 +1151,8 @@ export function registerFilesystemHandlers(
             })
             const ranker = new QuickOpenPathRanker(
               args.searchQuery,
-              args.maxResults ?? QUICK_OPEN_SSH_LEGACY_RESULT_LIMIT
+              args.maxResults ?? QUICK_OPEN_SSH_LEGACY_RESULT_LIMIT,
+              { matchMode: args.searchMatchMode }
             )
             for (const file of legacyFiles) {
               ranker.consider(file)
@@ -1154,10 +1163,21 @@ export function registerFilesystemHandlers(
             excludePaths: args.excludePaths,
             ...(args.maxResults === undefined ? {} : { maxResults: args.maxResults }),
             ...(args.searchQuery === undefined ? {} : { searchQuery: args.searchQuery }),
+            ...(args.searchMatchMode === undefined
+              ? {}
+              : { searchMatchMode: args.searchMatchMode }),
             signal: controller?.signal
           })
         }
         return await listQuickOpenFiles(args.rootPath, store, args.excludePaths, controller?.signal)
+      } catch (error) {
+        // Why: a superseded scan's rejection is normal control flow (a newer
+        // request owns the UI now) — returning [] keeps Electron from logging it
+        // as a handler error while the in-flight request delivers real results.
+        if (isFileListingCancellation(error)) {
+          return []
+        }
+        throw error
       } finally {
         listFilesCancellations.finish(event, args.requestToken, controller)
       }

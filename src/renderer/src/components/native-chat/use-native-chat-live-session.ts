@@ -35,6 +35,8 @@ export type UseNativeChatLiveSessionArgs = {
   runtimeEnvironmentId?: string | null
   /** False suspends transcript IO while retaining the last committed session. */
   enabled?: boolean
+  /** Changes only when the user explicitly retries the current transcript source. */
+  refreshKey?: number
 }
 
 /** A live session plus the older-history pagination controls the view needs. */
@@ -86,7 +88,15 @@ export type ReadState =
 export function useNativeChatLiveSession(
   args: UseNativeChatLiveSessionArgs
 ): NativeChatLiveSession {
-  const { paneKey, agent, sessionId, transcriptPath, runtimeEnvironmentId, enabled = true } = args
+  const {
+    paneKey,
+    agent,
+    sessionId,
+    transcriptPath,
+    runtimeEnvironmentId,
+    enabled = true,
+    refreshKey = 0
+  } = args
   // Stable per owner id so a re-render without an owner flip keeps the same transport and doesn't re-subscribe.
   const transport = useMemo(
     () => getNativeChatSessionTransport(runtimeEnvironmentId ?? null),
@@ -122,7 +132,8 @@ export function useNativeChatLiveSession(
     runtimeEnvironmentId ?? null,
     agent,
     sessionId,
-    transcriptPath ?? null
+    transcriptPath ?? null,
+    refreshKey
   ])
   const retainedSourceKeyRef = useRef(sourceKey)
 

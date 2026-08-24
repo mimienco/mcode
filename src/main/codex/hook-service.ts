@@ -287,9 +287,35 @@ function commandUsesCodexPluginOnlyPlaceholder(command: string | undefined): boo
   )
 }
 
-function removeCodexPluginEnvironmentCommands(definitions: HookDefinition[]): HookDefinition[] {
-  // Why: plugin placeholders only resolve for Codex plugin hook sources; mirroring them into a plain runtime hooks.json turns them into 127s.
-  return removeManagedCommands(definitions, commandUsesCodexPluginOnlyPlaceholder)
+function keepTrustedSystemUserHookDefinitions(args: {
+  definitions: HookDefinition[]
+  eventName: string
+  isManagedCommand: (command: string | undefined) => boolean
+  systemConfigPath: string
+  trustedSignatures: ReadonlyMap<string, TrustedSystemHookSignatureState>
+}): HookDefinition[] {
+  return args.definitions.flatMap((definition, groupIndex) => {
+    const hooks = (Array.isArray(definition.hooks) ? definition.hooks : []).filter(
+      (hook, handlerIndex) => {
+        if (
+          args.isManagedCommand(hook.command) ||
+          commandUsesCodexPluginOnlyPlaceholder(hook.command)
+        ) {
+          return false
+        }
+        const entry = createCodexHookTrustEntry(
+          args.systemConfigPath,
+          args.eventName,
+          groupIndex,
+          handlerIndex,
+          definition,
+          hook
+        )
+        return Boolean(entry && args.trustedSignatures.has(getCodexHookTrustSignature(entry)))
+      }
+    )
+    return hooks.length > 0 ? [{ ...definition, hooks }] : []
+  })
 }
 
 function getRuntimeHooksWithSystemUserHooks(
@@ -321,14 +347,19 @@ function getRuntimeHooksWithSystemUserHooks(
       continue
     }
 
-    const systemUserDefinitions = removeCodexPluginEnvironmentCommands(
-      removeManagedCommands(systemDefinitions, isManagedCommand)
-    )
+    const systemUserDefinitions = keepTrustedSystemUserHookDefinitions({
+      definitions: systemDefinitions,
+      eventName,
+      isManagedCommand,
+      systemConfigPath,
+      trustedSignatures: trustedSystemHookSignatures
+    })
     if (systemUserDefinitions.length === 0) {
       continue
     }
 
-    // Why: rebuild from system hooks; reusing old runtime copies would keep deleted/edited ~/.codex/hooks.json entries alive for new sessions.
+    // Why: unreviewed system hooks stay in ~/.codex; copying them into MCode's
+    // managed home would block every new Codex session on the same review.
     nextHooks[eventName] = dedupeHookDefinitions(systemUserDefinitions)
   }
 

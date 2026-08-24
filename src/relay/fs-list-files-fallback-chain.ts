@@ -10,21 +10,23 @@ import { isQuickOpenReaddirBudgetError } from '../shared/quick-open-readdir-walk
 import { buildInstallRgMessage, buildRipgrepRequiredMessage } from './fs-handler-install-rg'
 import { buildRelayCommandEnv } from './relay-command-env'
 import { RipgrepUnavailableError } from '../shared/ripgrep-process-availability'
-import { QuickOpenPathRanker } from '../shared/quick-open-path-search'
+import { QuickOpenPathRanker, type QuickOpenMatchMode } from '../shared/quick-open-path-search'
 
 export async function runListFilesScan(
   rootPath: string,
   excludePathPrefixes: string[],
   signal: AbortSignal,
   maxResults?: number,
-  searchQuery?: string
+  searchQuery?: string,
+  searchMatchMode: QuickOpenMatchMode = 'fuzzy'
 ): Promise<string[]> {
   throwIfFileListingCancelled(signal)
   try {
     return await listFilesWithRg(rootPath, excludePathPrefixes, {
       signal,
       maxResults,
-      searchQuery
+      searchQuery,
+      searchMatchMode
     })
   } catch (error) {
     throwIfFileListingCancelled(signal)
@@ -60,7 +62,8 @@ export async function runListFilesScan(
           maxResults: searchQuery === undefined ? maxResults : undefined
         }),
         searchQuery,
-        maxResults
+        maxResults,
+        searchMatchMode
       )
     } catch (err) {
       if (isQuickOpenReaddirBudgetError(err)) {
@@ -81,7 +84,8 @@ export async function runListFilesScan(
         maxResults: searchQuery === undefined ? maxResults : undefined
       }),
       searchQuery,
-      maxResults
+      maxResults,
+      searchMatchMode
     )
   } catch (err) {
     // Why: a cancelled scan is not an rg-availability problem; wrapping it
@@ -96,12 +100,13 @@ export async function runListFilesScan(
 function rankFallbackFiles(
   files: readonly string[],
   query: string | undefined,
-  limit: number | undefined
+  limit: number | undefined,
+  searchMatchMode: QuickOpenMatchMode
 ): string[] {
   if (query === undefined) {
     return [...files]
   }
-  const ranker = new QuickOpenPathRanker(query, limit ?? 16)
+  const ranker = new QuickOpenPathRanker(query, limit ?? 16, { matchMode: searchMatchMode })
   for (const file of files) {
     ranker.consider(file)
   }

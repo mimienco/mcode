@@ -7,6 +7,7 @@ import {
   HANG_WATCHDOG_HEARTBEAT_INTERVAL_MS,
   HANG_WATCHDOG_TIMEOUT_MS,
   type HangWatchdogWorkerData,
+  type HangWatchdogWorkerToMainMessage,
   type MainToHangWatchdogWorkerMessage
 } from './hang-watchdog-worker-protocol'
 
@@ -22,10 +23,8 @@ function positiveTiming(value: string | undefined, fallback: number): number {
 
 export function installMainThreadHangWatchdog(options: {
   userDataPath: string
+  onObservation?: (message: HangWatchdogWorkerToMainMessage) => void
 }): MainThreadHangWatchdogHandle | null {
-  if (process.platform !== 'darwin') {
-    return null
-  }
   // Why: dev main threads pause in debuggers routinely; watch packaged builds only unless forced.
   if (!app.isPackaged && process.env.MCODE_HANG_WATCHDOG_FORCE !== '1') {
     return null
@@ -53,6 +52,17 @@ export function installMainThreadHangWatchdog(options: {
   }
   worker.on('error', (error) => {
     console.error('[hang-watchdog] watchdog worker failed:', error)
+  })
+  worker.on('message', (message: HangWatchdogWorkerToMainMessage) => {
+    if (
+      (message.type !== 'hang-detected' && message.type !== 'hang-resolved') ||
+      !Number.isFinite(message.unresponsiveMs) ||
+      !Number.isFinite(message.observedAt)
+    ) {
+      return
+    }
+    console.warn('[main-thread-stall]', message)
+    options.onObservation?.(message)
   })
   let stopped = false
   const postMessage = (message: MainToHangWatchdogWorkerMessage): void => {

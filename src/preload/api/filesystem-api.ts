@@ -1,4 +1,5 @@
 import type { SearchOptions, SearchResult } from '../../shared/code-search-types'
+import type { ReplaceSummary } from '../../shared/code-replace-types'
 import type {
   DirEntry,
   FsChangedPayload,
@@ -11,6 +12,7 @@ import type {
   LocalLogTailWatchArgs
 } from '../../shared/local-log-tail-types'
 import type { SshMutationExpectation } from '../../shared/ssh-types'
+import type { QuickOpenMatchMode } from '../../shared/quick-open-path-search'
 
 export type ExportApi = {
   htmlToPdf: (args: {
@@ -119,9 +121,26 @@ export type FilesystemApi = {
       requestToken?: string
       maxResults?: number
       searchQuery?: string
+      searchMatchMode?: QuickOpenMatchMode
     }) => Promise<string[]>
     cancelListFiles: (args: { requestToken: string }) => Promise<void>
     search: (args: SearchOptions & { connectionId?: string }) => Promise<SearchResult>
+    searchReplace: (args: {
+      rootPath: string
+      query: string
+      replacement: string
+      options?: {
+        caseSensitive?: boolean
+        wholeWord?: boolean
+        useRegex?: boolean
+        preserveCase?: 'none' | 'match'
+      }
+      targets: { filePath: string; relativePath: string }[]
+      requestId?: string
+      skipPaths?: string[]
+      connectionId?: string
+    }) => Promise<ReplaceSummary>
+    cancelSearchReplace: (args: { requestId: string }) => Promise<void>
     importExternalPaths: (
       args: {
         sourcePaths: string[]

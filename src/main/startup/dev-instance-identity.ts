@@ -86,7 +86,8 @@ export function getDevInstanceIdentity(
     cleanEnvValue(path.basename(repoRoot ?? process.cwd()))
   const devLabel = cleanEnvValue(env.MCODE_DEV_INSTANCE_LABEL) ?? formatLabel(branch, worktreeName)
   const dockTitle =
-    cleanEnvValue(env.MCODE_DEV_DOCK_TITLE) ?? `${BASE_APP_NAME}: ${branch ?? devLabel ?? 'dev'}`
+    cleanEnvValue(env.MCODE_DEV_DOCK_TITLE) ??
+    `${BASE_APP_NAME} Dev: ${branch ?? devLabel ?? 'dev'}`
 
   return {
     name: dockTitle,

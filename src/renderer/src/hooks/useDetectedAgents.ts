@@ -73,7 +73,9 @@ export function useDetectedAgents(
       : targetKind === 'runtime' && targetId
         ? `runtime:${targetId}`
         : null
-
+  const startupAgentDetectionReady = useAppStore(
+    (s) => s.hydrationSucceeded || s.startupWorktreeRefreshCompleted
+  )
   const detectedIds = useAppStore((s) => {
     if (isUnknown) {
       return null
@@ -88,7 +90,7 @@ export function useDetectedAgents(
       ? (s.localDetectedAgentIdsByContext[localContextKey] ?? null)
       : s.detectedAgentIds
   })
-  const isLoading = useAppStore((s) => {
+  const detectionIsLoading = useAppStore((s) => {
     if (isUnknown) {
       return true
     }
@@ -102,6 +104,8 @@ export function useDetectedAgents(
       ? (s.isDetectingLocalAgentsByContext[localContextKey] ?? false)
       : s.isDetectingAgents
   })
+  const isLoading =
+    isUnknown || (!startupAgentDetectionReady && detectedIds === null) || detectionIsLoading
   const isRefreshing = useAppStore((s) => {
     if (targetKind === 'runtime' && targetId) {
       return s.isRefreshingRuntimeAgents[targetId] ?? false
@@ -141,7 +145,7 @@ export function useDetectedAgents(
   }, [isUnknown, localWorktreeId, targetKind, targetId])
 
   useEffect(() => {
-    if (isUnknown) {
+    if (isUnknown || !startupAgentDetectionReady) {
       return
     }
     const isNewRemoteTarget =
@@ -175,6 +179,7 @@ export function useDetectedAgents(
     }
   }, [
     isUnknown,
+    startupAgentDetectionReady,
     targetKind,
     targetId,
     remoteTargetKey,

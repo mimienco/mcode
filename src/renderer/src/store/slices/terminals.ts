@@ -627,7 +627,7 @@ export type TerminalSlice = {
       /** Coding-harness agent launched here, recorded so the tab bar shows the provider icon before the agent's first hook event. */
       launchAgent?: TuiAgent
       quickCommandLabel?: string | null
-      /** Initial native-chat view mode; agent launches pass 'chat' when openAgentTabsInChatByDefault is on, else omitted for the 'terminal' default. */
+      /** Initial native-chat view mode; agent launches pass 'chat' when openAgentTabsInChatByDefault is on. */
       viewMode?: Tab['viewMode']
       startupCwd?: string
       forceHostRuntime?: boolean

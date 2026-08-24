@@ -28,23 +28,30 @@ import {
   killSpawnedRipgrepProcess,
   RipgrepUnavailableError
 } from '../shared/ripgrep-process-availability'
-import { QuickOpenPathRanker } from '../shared/quick-open-path-search'
+import { QuickOpenPathRanker, type QuickOpenMatchMode } from '../shared/quick-open-path-search'
 
 export const LIST_FILES_TIMEOUT_MS = 25_000
 
 export function listFilesWithRg(
   rootPath: string,
   excludePathPrefixes: readonly string[] = [],
-  options: { signal?: AbortSignal; maxResults?: number; searchQuery?: string } = {}
+  options: {
+    signal?: AbortSignal
+    maxResults?: number
+    searchQuery?: string
+    searchMatchMode?: QuickOpenMatchMode
+  } = {}
 ): Promise<string[]> {
-  const { signal, maxResults, searchQuery } = options
+  const { signal, maxResults, searchQuery, searchMatchMode = 'fuzzy' } = options
   if (signal?.aborted) {
     return Promise.reject(fileListingCancellationError(signal))
   }
   return new Promise((resolve, reject) => {
     const files = new Set<string>()
     const ranker =
-      searchQuery === undefined ? null : new QuickOpenPathRanker(searchQuery, maxResults ?? 16)
+      searchQuery === undefined
+        ? null
+        : new QuickOpenPathRanker(searchQuery, maxResults ?? 16, { matchMode: searchMatchMode })
     let done = false
     const children: {
       child: ChildProcess

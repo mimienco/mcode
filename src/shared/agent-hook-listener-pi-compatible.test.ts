@@ -415,6 +415,30 @@ describe('shared agent-hook-listener', () => {
     expect(next?.payload.prompt).toBe('')
   })
 
+  it('emits OMP resume identity without creating a visible status transition', () => {
+    const sessionStart = normalizeHookPayload(
+      state,
+      'omp',
+      {
+        paneKey: PANE_KEY,
+        payload: {
+          hook_event_name: 'session_start',
+          session_id: 'omp-session-2'
+        }
+      },
+      'production'
+    )
+
+    expect(sessionStart).toMatchObject({
+      providerSessionOnly: true,
+      providerSession: {
+        key: 'session_id',
+        id: 'omp-session-2'
+      },
+      payload: { state: 'done', prompt: '', agentType: 'omp' }
+    })
+  })
+
   it('normalizes Prime status and session identity without Pi-only ask-user behavior', () => {
     const tool = normalizeHookPayload(
       state,

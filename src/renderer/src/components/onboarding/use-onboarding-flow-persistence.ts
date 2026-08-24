@@ -163,13 +163,15 @@ export function usePersistCurrentStep({
     try {
       if (currentStepId === 'agent') {
         const defaultTuiAgent = selectedAgentOrBlank(selectedAgent)
+        const agentPermissionPreset = yoloPermissions ? 'bypass' : 'ask'
         await updateSettings({
           defaultTuiAgent,
           ...applyAgentPermissionMode({
-            mode: yoloPermissions ? 'yolo' : 'manual',
+            mode: agentPermissionPreset,
             agentDefaultArgs: settings.agentDefaultArgs,
             agentDefaultEnv: settings.agentDefaultEnv
-          })
+          }),
+          agentPermissionPreset
         })
         const choseAgent = defaultTuiAgent !== 'blank'
         const wasAlreadyChosen = onboardingChecklist.choseAgent

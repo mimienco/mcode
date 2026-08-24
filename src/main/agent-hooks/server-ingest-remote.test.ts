@@ -90,6 +90,43 @@ describe('AgentHookServer ingestRemote', () => {
     }
   })
 
+  it('caches and replays OMP session identity without requiring a transcript path', () => {
+    const server = new AgentHookServer()
+    const rendererListener = vi.fn()
+    server.setListener(rendererListener)
+
+    server.ingestRemote(
+      {
+        paneKey: PANE,
+        tabId: 'tab-1',
+        worktreeId: 'wt-1',
+        providerSession: { key: 'session_id', id: 'omp-session-1' },
+        providerSessionOnly: true,
+        payload: { state: 'done', prompt: '', agentType: 'omp' }
+      },
+      'conn-1'
+    )
+
+    expect(rendererListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paneKey: PANE,
+        providerSessionOnly: true,
+        providerSession: { key: 'session_id', id: 'omp-session-1' }
+      })
+    )
+
+    const replayListener = vi.fn()
+    server.setListener(replayListener)
+    expect(replayListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paneKey: PANE,
+        providerSessionOnly: true,
+        providerSession: { key: 'session_id', id: 'omp-session-1' },
+        isReplay: true
+      })
+    )
+  })
+
   it('fans a Pi session-only status out to plugins, not just the renderer', () => {
     const server = new AgentHookServer()
     const rendererListener = vi.fn()

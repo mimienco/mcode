@@ -23,6 +23,21 @@ export type NativeChatPaneResolutionInput = {
   /** Agent identity resolved from trusted terminal title/foreground signals.
    *  Fallback only: launch metadata and hook status remain authoritative. */
   resolvedAgent?: TuiAgent | null
+  /** Stable conversation identity persisted with the tab. Used only when no
+   *  live status entry exists, so a new live session can never inherit an old
+   *  transcript while its hooks are still starting. */
+  persistedSession?: {
+    agent: Extract<TuiAgent, 'claude' | 'codex'>
+    sessionId: string
+  } | null
+  /** Durable provider identity recorded without a visible turn-state event.
+   *  OMP reports this shape on session_start, so it lives in the sleeping
+   *  session registry even while the PTY is active. */
+  retainedSession?: {
+    agent: TuiAgent
+    sessionId: string
+    transcriptPath?: string
+  } | null
 }
 
 export type NativeChatPaneResolution = {
@@ -46,14 +61,31 @@ export type NativeChatPaneResolution = {
 export function resolveNativeChatSession(
   input: NativeChatPaneResolutionInput
 ): NativeChatPaneResolution | null {
-  const agent = input.agentStatusEntry?.agentType ?? input.launchAgent ?? input.resolvedAgent
+  const retainedSession = input.agentStatusEntry ? null : input.retainedSession
+  const agent =
+    input.agentStatusEntry?.agentType ??
+    retainedSession?.agent ??
+    input.launchAgent ??
+    input.resolvedAgent
   if (!agent || !isNativeChatSupportedAgent(agent)) {
     return null
   }
+  const persistedSession =
+    !input.agentStatusEntry && input.persistedSession?.agent === agent
+      ? input.persistedSession
+      : null
+  const matchingRetainedSession = retainedSession?.agent === agent ? retainedSession : null
   return {
     agent,
-    sessionId: input.agentStatusEntry?.providerSession?.id ?? null,
-    transcriptPath: input.agentStatusEntry?.providerSession?.transcriptPath ?? null,
+    sessionId:
+      input.agentStatusEntry?.providerSession?.id ??
+      matchingRetainedSession?.sessionId ??
+      persistedSession?.sessionId ??
+      null,
+    transcriptPath:
+      input.agentStatusEntry?.providerSession?.transcriptPath ??
+      matchingRetainedSession?.transcriptPath ??
+      null,
     ptyId: input.ptyId,
     paneKey: input.paneKey
   }

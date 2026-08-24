@@ -44,6 +44,65 @@ function makeSingleLayout(leafId: string): TerminalLayoutSnapshot {
 }
 
 describe('buildTitleDerivedAgentRows', () => {
+  it('adds a not-started row for a visible chat launch before its PTY exists', () => {
+    const rows = buildWorktreeAgentRows({
+      tabs: [makeTab('tab-1', { launchAgent: 'codex', title: 'Codex chat', viewMode: 'chat' })],
+      entries: [],
+      retained: [],
+      runtimePaneTitlesByTabId: { 'tab-1': { 1: 'Codex chat' } },
+      ptyIdsByTabId: {},
+      terminalLayoutsByTabId: { 'tab-1': makeSingleLayout(LEAF_ID_1) },
+      now: 2000
+    })
+
+    expect(
+      rows.map((row) => [
+        row.agentType,
+        row.state,
+        row.entry.prompt,
+        row.entry.lastAssistantMessage
+      ])
+    ).toEqual([['codex', 'idle', 'Codex', 'Not started']])
+  })
+
+  it('keeps a launched live agent visible while its title is still the workspace name', () => {
+    const rows = buildWorktreeAgentRows({
+      tabs: [makeTab('tab-1', { launchAgent: 'codex', title: 'OpenRouterTest' })],
+      entries: [],
+      retained: [],
+      runtimePaneTitlesByTabId: { 'tab-1': { 1: 'OpenRouterTest' } },
+      ptyIdsByTabId: { 'tab-1': ['pty-codex'] },
+      terminalLayoutsByTabId: { 'tab-1': makeSingleLayout(LEAF_ID_1) },
+      now: 2000
+    })
+
+    expect(
+      rows.map((row) => [row.agentType, row.state, row.entry.prompt, row.entry.lastAssistantMessage])
+    ).toEqual([['codex', 'idle', 'Codex', 'Idle']])
+  })
+
+  it('does not relabel a sleeping or split agent tab as not started', () => {
+    const rowsFor = (tab: TerminalTab, layout: TerminalLayoutSnapshot) =>
+      buildWorktreeAgentRows({
+        tabs: [tab],
+        entries: [],
+        retained: [],
+        ptyIdsByTabId: {},
+        terminalLayoutsByTabId: { 'tab-1': layout },
+        now: 2000
+      })
+
+    expect(
+      rowsFor(
+        makeTab('tab-1', { launchAgent: 'codex', ptyId: 'sleeping-session' }),
+        makeSingleLayout(LEAF_ID_1)
+      )
+    ).toHaveLength(0)
+    expect(
+      rowsFor(makeTab('tab-1', { launchAgent: 'codex', ptyId: null }), makeSplitLayout())
+    ).toHaveLength(0)
+  })
+
   it('adds title-derived rows for live agent panes that have no hook status yet', () => {
     const rows = buildWorktreeAgentRows({
       tabs: [makeTab('tab-1')],

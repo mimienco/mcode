@@ -39,7 +39,7 @@ type PickerAutocomplete = {
 export type ComposerAutocomplete =
   | { mode: 'none' }
   | ({ mode: 'slash' } & PickerAutocomplete)
-  | { mode: 'mention'; query: string }
+  | { mode: 'mention'; query: string; triggerKey: string }
   | ({ mode: 'skill' } & PickerAutocomplete)
 
 const EMPTY_DISCOVERY: NativeChatSkillDiscoverySnapshot = { status: 'ready', skills: [] }
@@ -57,9 +57,13 @@ export function deriveComposerAutocomplete(
   if (before.startsWith('/') && !/\s/.test(before)) {
     return deriveSlashAutocomplete(before, agentCommands, profile, discovery, dismissedTriggerKey)
   }
-  const mentionMatch = before.match(/(?:^|\s)@(\S*)$/)
-  if (mentionMatch) {
-    return { mode: 'mention', query: mentionMatch[1] }
+  const mention = findActiveMention(before)
+  if (mention) {
+    const triggerKey = `@:${mention.tokenStart}`
+    if (dismissedTriggerKey === triggerKey) {
+      return { mode: 'none' }
+    }
+    return { mode: 'mention', query: mention.query, triggerKey }
   }
   const skillMatch =
     profile?.skillPrefix === '$' || (!profile && skills.length > 0)
@@ -171,13 +175,50 @@ export function applyMentionSuggestion(
 ): { draft: string; caret: number } {
   const before = draft.slice(0, caret)
   const after = draft.slice(caret)
-  const match = before.match(/(^|\s)@(\S*)$/)
-  if (!match) {
+  const mention = findActiveMention(before)
+  if (!mention) {
     return { draft, caret }
   }
-  const tokenStart = before.length - match[2].length - 1
-  const nextBefore = `${before.slice(0, tokenStart)}@${path} `
+  const escapedPath = path.replaceAll('"', '\\"')
+  const mentionText = /\s|"/.test(path) ? `@"${escapedPath}"` : `@${path}`
+  const separator = after === '' || !/^\s/.test(after) ? ' ' : ''
+  const nextBefore = `${before.slice(0, mention.tokenStart)}${mentionText}${separator}`
   return { draft: nextBefore + after, caret: nextBefore.length }
+}
+
+export function removeActiveMentionQuery(
+  draft: string,
+  caret: number
+): { draft: string; caret: number } {
+  const before = draft.slice(0, caret)
+  const mention = findActiveMention(before)
+  if (!mention) {
+    return { draft, caret }
+  }
+  const prefix = before.slice(0, mention.tokenStart)
+  const after = draft.slice(caret)
+  const suffix =
+    (prefix.length === 0 || /\s$/.test(prefix)) && /^\s/.test(after) ? after.slice(1) : after
+  return { draft: prefix + suffix, caret: prefix.length }
+}
+
+type ActiveMention = { query: string; tokenStart: number }
+
+/** Match the unfinished mention immediately before the caret. Quoted mentions
+ *  keep whitespace in the search query, so files such as `My Report.md` remain
+ *  both searchable and unambiguous when inserted into prose. */
+function findActiveMention(before: string): ActiveMention | null {
+  const quoted = before.match(/(?:^|\s)@"((?:[^"\\]|\\.)*)$/)
+  const unquoted = quoted ? null : before.match(/(?:^|\s)@(\S*)$/)
+  const match = quoted ?? unquoted
+  if (!match) {
+    return null
+  }
+  const tokenStart = (match.index ?? 0) + match[0].lastIndexOf('@')
+  return {
+    query: quoted ? match[1].replaceAll('\\"', '"') : match[1],
+    tokenStart
+  }
 }
 
 export type HistoryState = { entries: readonly string[]; index: number | null }

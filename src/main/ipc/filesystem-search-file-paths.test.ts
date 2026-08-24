@@ -112,6 +112,29 @@ describe('searchQuickOpenFilePaths', () => {
     expect(child.kill).toHaveBeenCalledOnce()
   })
 
+  it('does not return fuzzy-only candidates in literal substring mode', async () => {
+    const child = createMockProcess()
+    wslAwareSpawnMock.mockReturnValue(child)
+    const promise = searchQuickOpenFilePaths('/repo', {} as Store, {
+      query: 'clxhjskh',
+      limit: 50,
+      matchMode: 'substring'
+    })
+    await flushMicrotasks()
+
+    ;(child.stdout as unknown as EventEmitter).emit(
+      'data',
+      '.claude-oxalpha/shell-snapshots/snapshot.sh\nsrc/clxhjskh.ts\n'
+    )
+    child.emit('close', 0, null)
+
+    await expect(promise).resolves.toEqual({
+      paths: ['src/clxhjskh.ts'],
+      totalCount: 1,
+      truncated: false
+    })
+  })
+
   it('requires ripgrep instead of retaining an unbounded fallback inventory', async () => {
     getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
     checkRgAvailableMock.mockResolvedValue(false)

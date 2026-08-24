@@ -31,14 +31,19 @@ const mocks = vi.hoisted(() => ({
   createClaudeModelSwitchConfirmationObserver: vi.fn(),
   discoverCommitMessageModels: vi.fn(),
   draft: 'hello',
+  fileReferences: [] as { id: string; path: string }[],
   getMainBufferSnapshot: vi.fn(),
   sendHandle: { cancel: vi.fn(), settleAfterMs: 500 },
   sendNativeChatMessage: vi.fn(),
+  sendNativeChatMessageReliably: vi.fn(),
   sendNativeChatTypedCommand: vi.fn(),
   sendNativeChatMessageVerified: vi.fn(),
   typeNativeChatCommand: vi.fn(),
   trackPendingSend: vi.fn(),
   setDraft: vi.fn(),
+  appendFileReferences: vi.fn(),
+  clearFileReferences: vi.fn(),
+  removeFileReference: vi.fn(),
   draftScopeKeys: [] as string[],
   clearNativeChatLaunchDraft: vi.fn(),
   markNativeChatLaunchDraftAdopted: vi.fn()
@@ -66,12 +71,18 @@ vi.mock('@/lib/agent-paste-draft', () => ({
 }))
 vi.mock('./native-chat-runtime-send', () => ({
   sendNativeChatMessage: (...args: unknown[]) => mocks.sendNativeChatMessage(...args),
+  sendNativeChatMessageReliably: (...args: unknown[]) =>
+    mocks.sendNativeChatMessageReliably(...args),
   sendNativeChatTypedCommand: (...args: unknown[]) => mocks.sendNativeChatTypedCommand(...args),
   sendNativeChatMessageVerified: (...args: unknown[]) =>
     mocks.sendNativeChatMessageVerified(...args),
   typeNativeChatCommand: (...args: unknown[]) => mocks.typeNativeChatCommand(...args),
   sendNativeChatMessageWithImageAttachments: vi.fn(),
   submitNativeChatPrompt: vi.fn()
+}))
+vi.mock('./native-chat-reliable-send', () => ({
+  sendNativeChatMessageReliably: (...args: unknown[]) =>
+    mocks.sendNativeChatMessageReliably(...args)
 }))
 vi.mock('./claude-model-switch-confirmation', () => ({
   createClaudeModelSwitchConfirmationObserver: (...args: unknown[]) =>
@@ -108,9 +119,13 @@ vi.mock('./use-native-chat-skills', () => ({
 vi.mock('./use-native-chat-composer-attachments', () => ({
   useNativeChatComposerAttachments: () => ({
     imageAttachments: [],
+    fileReferences: mocks.fileReferences,
+    appendFileReferences: mocks.appendFileReferences,
     attachResolvedPaths: vi.fn(),
     clearImageAttachments: vi.fn(),
-    removeImageAttachment: vi.fn()
+    clearFileReferences: mocks.clearFileReferences,
+    removeImageAttachment: vi.fn(),
+    removeFileReference: mocks.removeFileReference
   })
 }))
 vi.mock('./use-native-chat-composer-paste', () => ({
@@ -148,6 +163,7 @@ describe('NativeChatComposer', () => {
     mocks.fieldProps = null
     mocks.modelSwitchOutcome = 'applied'
     mocks.draft = 'hello'
+    mocks.fileReferences = []
     mocks.draftScopeKeys.length = 0
     mocks.confirmationObserver = null
     mocks.createClaudeModelSwitchConfirmationObserver.mockImplementation(() => {
@@ -186,6 +202,7 @@ describe('NativeChatComposer', () => {
       ]
     })
     mocks.sendNativeChatMessage.mockReturnValue(mocks.sendHandle)
+    mocks.sendNativeChatMessageReliably.mockReturnValue(mocks.sendHandle)
     mocks.sendNativeChatTypedCommand.mockReturnValue(mocks.sendHandle)
     mocks.sendNativeChatMessageVerified.mockResolvedValue(true)
     mocks.typeNativeChatCommand.mockResolvedValue(true)
@@ -242,6 +259,60 @@ describe('NativeChatComposer', () => {
     expect(mocks.trackPendingSend).toHaveBeenCalledWith(mocks.sendHandle, 'pending-1')
   })
 
+  it('serializes selected file chips into the sent and optimistic prompt', () => {
+    mocks.draft = 'review this'
+    mocks.fileReferences = [{ id: 'ref-1', path: 'src/App.tsx' }]
+    const onOptimisticSend = vi.fn(() => 'pending-1')
+    render(
+      <NativeChatComposer
+        terminalTabId="tab-1"
+        paneKey="tab-1:leaf-1"
+        targetPtyId="pty-1"
+        agent="codex"
+        onOptimisticSend={onOptimisticSend}
+      />
+    )
+
+    act(() => mocks.fieldProps?.onSend?.())
+
+    expect(mocks.sendNativeChatMessageReliably).toHaveBeenCalledWith(
+      {},
+      'pty-1',
+      '@src/App.tsx review this',
+      [],
+      undefined
+    )
+    expect(onOptimisticSend).toHaveBeenCalledWith('@src/App.tsx review this', [])
+    expect(mocks.clearFileReferences).toHaveBeenCalledOnce()
+  })
+
+  it('treats slash-like text with selected file context as a chat prompt', () => {
+    mocks.draft = '/status'
+    mocks.fileReferences = [{ id: 'ref-1', path: 'src/App.tsx' }]
+    const onOptimisticSend = vi.fn()
+    render(
+      <NativeChatComposer
+        terminalTabId="tab-1"
+        paneKey="tab-1:leaf-1"
+        targetPtyId="pty-1"
+        agent="codex"
+        onOptimisticSend={onOptimisticSend}
+      />
+    )
+
+    act(() => mocks.fieldProps?.onSend?.())
+
+    expect(mocks.sendNativeChatMessageReliably).toHaveBeenCalledWith(
+      {},
+      'pty-1',
+      '@src/App.tsx /status',
+      [],
+      undefined
+    )
+    expect(mocks.sendNativeChatTypedCommand).not.toHaveBeenCalled()
+    expect(onOptimisticSend).toHaveBeenCalledWith('@src/App.tsx /status', [])
+  })
+
   it('types Codex slash composer sends instead of pasting them', () => {
     mocks.draft = '/status'
     render(
@@ -274,6 +345,34 @@ describe('NativeChatComposer', () => {
 
     expect(mocks.sendNativeChatMessage).toHaveBeenCalledWith({}, 'pty-1', '$ref-oss', undefined)
     expect(mocks.sendNativeChatTypedCommand).not.toHaveBeenCalled()
+  })
+
+  it('restores an ordinary draft when acknowledged delivery fails', async () => {
+    const onOptimisticSend = vi.fn(() => 'pending-1')
+    const onOptimisticSendCanceled = vi.fn()
+    mocks.sendNativeChatMessageReliably.mockReturnValue({
+      ...mocks.sendHandle,
+      delivery: Promise.resolve(false)
+    })
+    render(
+      <NativeChatComposer
+        terminalTabId="tab-1"
+        paneKey="tab-1:leaf-1"
+        targetPtyId="pty-1"
+        agent="codex"
+        onOptimisticSend={onOptimisticSend}
+        onOptimisticSendCanceled={onOptimisticSendCanceled}
+      />
+    )
+
+    act(() => mocks.fieldProps?.onSend?.())
+
+    await waitFor(() => expect(onOptimisticSendCanceled).toHaveBeenCalledWith('pending-1'))
+    const restoreDraft = mocks.setDraft.mock.calls.find(
+      ([value]) => typeof value === 'function'
+    )?.[0] as ((current: string) => string) | undefined
+    expect(restoreDraft?.('')).toBe('hello')
+    expect(restoreDraft?.('newer text')).toBe('hello\n\nnewer text')
   })
 
   it.each(['claude', 'openclaude'] as const)('keeps %s slash composer sends pasted', (agent) => {

@@ -722,7 +722,7 @@ describe('fetchCodexRateLimits', () => {
         "export CODEX_HOME='\\''/home/alice/.local/share/mcode/account/home'\\''"
       )
       expect(shellCommand).toContain(
-        "exec codex '\\''-s'\\'' '\\''read-only'\\'' '\\''-a'\\'' '\\''untrusted'\\'' '\\''app-server'\\'' <&3 >&4 3<&- 4>&-"
+        "exec codex '\\''-s'\\'' '\\''read-only'\\'' '\\''-a'\\'' '\\''never'\\'' '\\''app-server'\\'' <&3 >&4 3<&- 4>&-"
       )
       expect(shellCommand.match(/<&3 >&4 3<&- 4>&-/g)).toHaveLength(3)
       expect(shellCommand.match(/exec codex [^\n]+<&3 >&4 3<&- 4>&-/g)).toHaveLength(3)
@@ -784,7 +784,7 @@ describe('fetchCodexRateLimits', () => {
 
       const [spawnFile, spawnArgs, spawnOptions] = childSpawnMock.mock.calls[0]
       expect(spawnFile).toBe('codex')
-      expect(spawnArgs).toEqual(['-s', 'read-only', '-a', 'untrusted', 'app-server'])
+      expect(spawnArgs).toEqual(['-s', 'read-only', '-a', 'never', 'app-server'])
       expect(spawnOptions).toEqual(
         expect.objectContaining({
           env: expect.objectContaining({ CODEX_HOME: 'C:\\Users\\alice\\.codex' })

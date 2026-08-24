@@ -4,7 +4,10 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { decodeCodexTranscriptLine } from './transcript-line-decoders-codex'
 import { readNativeChatTranscript } from './transcript-reader'
-import { readNativeChatTranscriptTail } from './transcript-tail-reader'
+import {
+  MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES,
+  readNativeChatTranscriptTail
+} from './transcript-tail-reader'
 
 let tempRoots: string[] = []
 
@@ -245,6 +248,85 @@ describe('Codex transcript history modes', () => {
       id: 'fallback-output',
       role: 'tool',
       blocks: [{ type: 'tool-result', output: 'ok' }]
+    })
+  })
+
+  it('decodes completed image generation extensions as assistant images', () => {
+    const image = decodeCodexTranscriptLine(
+      JSON.stringify({
+        timestamp: '2026-08-22T18:22:30.306Z',
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          item: {
+            type: 'Extension',
+            kind: 'image_gen.generation',
+            id: 'generated-image-1',
+            status: 'completed',
+            result: 'aW1hZ2UtYnl0ZXM=',
+            savedPath: 'C:\\generated_images\\generated-image-1.png'
+          }
+        }
+      }),
+      'fallback-image'
+    )
+
+    expect(image).toMatchObject({
+      id: 'generated-image-1',
+      role: 'assistant',
+      timestamp: Date.parse('2026-08-22T18:22:30.306Z'),
+      blocks: [
+        {
+          type: 'image-ref',
+          path: 'C:\\generated_images\\generated-image-1.png',
+          url: 'data:image/png;base64,aW1hZ2UtYnl0ZXM=',
+          alt: 'Generated image'
+        }
+      ]
+    })
+  })
+
+  it('keeps generated images whose base64 completion record exceeds the ordinary line cap', async () => {
+    const result = `iVBORw0KGgo${'A'.repeat(MAX_NATIVE_CHAT_TRANSCRIPT_RECORD_BYTES)}`
+    const filePath = await writeCodexFixture([
+      completedItem(
+        {
+          type: 'Extension',
+          kind: 'image_gen.generation',
+          id: 'large-generated-image',
+          status: 'completed',
+          result,
+          savedPath: 'C:\\generated_images\\large-generated-image.png',
+          failure: null
+        },
+        '2026-08-22T18:22:30.306Z'
+      )
+    ])
+
+    const tail = await readNativeChatTranscriptTail({
+      agent: 'codex',
+      sessionId: 'session-1',
+      filePath,
+      limit: 10
+    })
+
+    expect(tail).toMatchObject({
+      messages: [
+        {
+          id: 'large-generated-image',
+          role: 'assistant',
+          blocks: [
+            {
+              type: 'image-ref',
+              path: 'C:\\generated_images\\large-generated-image.png',
+              alt: 'Generated image'
+            }
+          ]
+        }
+      ]
+    })
+    expect('messages' in tail && tail.messages[0]?.blocks[0]).toMatchObject({
+      url: expect.stringMatching(/^data:image\/png;base64,iVBORw0KGgo/)
     })
   })
 })

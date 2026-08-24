@@ -3,7 +3,10 @@ import {
   buildExcludePathPrefixes,
   shouldExcludeQuickOpenRelPath
 } from '../../../shared/quick-open-filter'
-import { QuickOpenPathRanker } from '../../../shared/quick-open-path-search'
+import {
+  QuickOpenPathRanker,
+  type QuickOpenMatchMode
+} from '../../../shared/quick-open-path-search'
 import { callRuntimeRpc, type RuntimeClientTarget } from './runtime-rpc-client'
 import { createRuntimeRpcAbortError } from './abortable-runtime-environment-call'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
@@ -166,6 +169,7 @@ export async function searchLegacyQuickOpenInventory(args: {
   worktreeSelector: string
   query: string
   limit: number
+  matchMode?: QuickOpenMatchMode
   worktreePath: string | null | undefined
   excludePaths: string[] | undefined
   signal?: AbortSignal
@@ -180,7 +184,9 @@ export async function searchLegacyQuickOpenInventory(args: {
     args.worktreePath ?? result.rootPath,
     args.excludePaths
   )
-  const ranker = new QuickOpenPathRanker(args.query, args.limit)
+  const ranker = new QuickOpenPathRanker(args.query, args.limit, {
+    matchMode: args.matchMode
+  })
   for (const entry of result.files) {
     if (!shouldExcludeQuickOpenRelPath(entry.relativePath, excludePrefixes)) {
       ranker.consider(entry.relativePath)

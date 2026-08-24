@@ -50,7 +50,20 @@ export function probeSshQuickOpenSearchCapability(
   signal?: AbortSignal
 ): Promise<boolean> {
   return readSshFsCapabilities(mux, signal).then(
-    (capabilities) => capabilities?.quickOpenSearchVersion === 1
+    (capabilities) =>
+      typeof capabilities?.quickOpenSearchVersion === 'number' &&
+      capabilities.quickOpenSearchVersion >= 1
+  )
+}
+
+export function probeSshQuickOpenMatchModeCapability(
+  mux: SshChannelMultiplexer,
+  signal?: AbortSignal
+): Promise<boolean> {
+  return readSshFsCapabilities(mux, signal).then(
+    (capabilities) =>
+      typeof capabilities?.quickOpenSearchVersion === 'number' &&
+      capabilities.quickOpenSearchVersion >= 2
   )
 }
 

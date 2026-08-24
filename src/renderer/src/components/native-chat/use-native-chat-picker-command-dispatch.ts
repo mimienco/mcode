@@ -32,6 +32,7 @@ export function useNativeChatPickerCommandDispatch(args: {
   setActiveSuggestion: Dispatch<SetStateAction<number>>
   clearSkillOrigin: () => void
   clearImageAttachments: () => void
+  clearFileReferences: () => void
   setNotice: Dispatch<SetStateAction<string | null>>
 }): (command: Extract<NativeChatPickerItem, { kind: 'command' }>) => void {
   const {
@@ -48,6 +49,7 @@ export function useNativeChatPickerCommandDispatch(args: {
     setActiveSuggestion,
     clearSkillOrigin,
     clearImageAttachments,
+    clearFileReferences,
     setNotice
   } = args
   return useCallback(
@@ -79,11 +81,13 @@ export function useNativeChatPickerCommandDispatch(args: {
       setActiveSuggestion(0)
       clearSkillOrigin()
       clearImageAttachments()
+      clearFileReferences()
       setNotice(null)
     },
     [
       agent,
       clearImageAttachments,
+      clearFileReferences,
       clearSkillOrigin,
       disabled,
       isDispatchingSessionOption,

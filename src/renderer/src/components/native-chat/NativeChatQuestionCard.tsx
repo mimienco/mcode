@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import { useId, useState, type RefObject } from 'react'
 import { Check, Pencil, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -8,6 +8,7 @@ export type NativeChatQuestionCardProps = {
   prompt: AskPrompt
   /** Whether the snapshotted answer is still being delivered to the agent. */
   isSubmitting?: boolean
+  deliveryFailed?: boolean
   /** Deliver the chosen answer (per-question option indices + free text). */
   onAnswer: (selections: AskAnswerSelection[]) => void
   /** Dismiss the prompt (sends Escape to the agent). */
@@ -27,6 +28,7 @@ export type NativeChatQuestionCardProps = {
 export function NativeChatQuestionCard({
   prompt,
   isSubmitting = false,
+  deliveryFailed = false,
   onAnswer,
   onCancel,
   answerInputRef
@@ -36,6 +38,7 @@ export function NativeChatQuestionCard({
   // unique, while Claude's selector commits the numbered row (STA-1860).
   const [selections, setSelections] = useState<number[][]>(() => prompt.questions.map(() => []))
   const [otherText, setOtherText] = useState<string[]>(() => prompt.questions.map(() => ''))
+  const tabsId = useId()
 
   const total = prompt.questions.length
   const isLast = index === total - 1
@@ -60,6 +63,12 @@ export function NativeChatQuestionCard({
   }
 
   const currentAnswered = answerFor(index).length > 0
+
+  const focusQuestion = (nextIndex: number): void => {
+    const bounded = Math.max(0, Math.min(nextIndex, total - 1))
+    setIndex(bounded)
+    requestAnimationFrame(() => document.getElementById(`${tabsId}-tab-${bounded}`)?.focus())
+  }
 
   const submitAll = (sel: number[][], oth: string[]): void => {
     const resolved: AskAnswerSelection[] = prompt.questions.map((_, i) => {
@@ -124,15 +133,40 @@ export function NativeChatQuestionCard({
     // composer's width and padding, rendered as the "ask" dialog card directly
     // above the text input. Its free-text row is the answer input.
     <div className="shrink-0 bg-background" aria-busy={isSubmitting}>
-      <div className="mx-auto w-full max-w-4xl px-3 pt-2 pb-4 sm:px-4">
+      <div className="mx-auto w-full max-w-3xl px-3 pt-2 pb-4 sm:px-5">
         {total > 1 ? (
-          <div className="mb-2 flex gap-1 overflow-x-auto pb-1 scrollbar-sleek">
+          <div
+            role="tablist"
+            aria-label={translate('components.native-chat.question.stepsLabel', 'Questions')}
+            className="mb-2 flex gap-1 overflow-x-auto pb-1 scrollbar-sleek"
+          >
             {prompt.questions.map((qq, i) => (
               <button
                 key={i}
                 type="button"
+                id={`${tabsId}-tab-${i}`}
+                role="tab"
+                aria-selected={i === index}
+                aria-current={i === index ? 'step' : undefined}
+                aria-controls={`${tabsId}-panel-${i}`}
+                tabIndex={i === index ? 0 : -1}
                 disabled={isSubmitting}
                 onClick={() => setIndex(i)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowRight') {
+                    event.preventDefault()
+                    focusQuestion((i + 1) % total)
+                  } else if (event.key === 'ArrowLeft') {
+                    event.preventDefault()
+                    focusQuestion((i - 1 + total) % total)
+                  } else if (event.key === 'Home') {
+                    event.preventDefault()
+                    focusQuestion(0)
+                  } else if (event.key === 'End') {
+                    event.preventDefault()
+                    focusQuestion(total - 1)
+                  }
+                }}
                 className={cn(
                   'flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium disabled:pointer-events-none',
                   i === index
@@ -154,16 +188,26 @@ export function NativeChatQuestionCard({
           </div>
         ) : null}
 
-        <div className="overflow-hidden rounded-lg border border-input bg-card shadow-xs">
+        <div
+          id={`${tabsId}-panel-${index}`}
+          role={total > 1 ? 'tabpanel' : 'region'}
+          aria-labelledby={total > 1 ? `${tabsId}-tab-${index}` : undefined}
+          aria-label={
+            total > 1
+              ? undefined
+              : translate('components.native-chat.question.regionLabel', 'Agent question')
+          }
+          className="overflow-hidden rounded-lg border border-agent-question/30 bg-card shadow-xs"
+        >
           <div className="flex items-start justify-between gap-2 px-3.5 py-2.5">
-            <p className="min-w-0 break-words text-sm font-semibold text-foreground">
+            <h2 className="min-w-0 break-words text-sm font-semibold text-foreground">
               {q.question}
-            </p>
+            </h2>
             <button
               type="button"
               onClick={onCancel}
               aria-label={translate('components.native-chat.question.cancel', 'Cancel')}
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X className="size-4" />
             </button>
@@ -191,6 +235,10 @@ export function NativeChatQuestionCard({
                 ref={answerInputRef}
                 disabled={isSubmitting}
                 value={otherText[index]}
+                aria-label={translate(
+                  'components.native-chat.question.otherLabel',
+                  'Custom answer'
+                )}
                 onChange={(e) => setOther(index, e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -202,14 +250,14 @@ export function NativeChatQuestionCard({
                   'components.native-chat.question.otherPlaceholder',
                   'Type your answer'
                 )}
-                className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60 disabled:cursor-default disabled:opacity-50"
+                className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-default disabled:opacity-50"
               />
               <button
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => confirm()}
                 className={cn(
-                  'shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50',
+                  'min-h-8 shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50',
                   currentAnswered
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -227,9 +275,22 @@ export function NativeChatQuestionCard({
           </div>
         </div>
 
+        {deliveryFailed ? (
+          <p role="alert" className="mt-2 text-xs text-destructive">
+            {translate(
+              'components.native-chat.question.deliveryFailed',
+              'The answer was not delivered. Your selections are preserved; try again.'
+            )}
+          </p>
+        ) : null}
+
         {total > 1 ? (
-          <p className="mt-2 text-right text-xs text-muted-foreground">
-            {index + 1}/{total}
+          <p aria-live="polite" className="mt-2 text-right text-xs text-muted-foreground">
+            {translate(
+              'components.native-chat.question.progress',
+              'Question {{value0}} of {{value1}}',
+              { value0: index + 1, value1: total }
+            )}
           </p>
         ) : null}
       </div>

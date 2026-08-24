@@ -71,6 +71,7 @@ if (envFile) {
         badgeLabel: process.env.MCODE_DEV_DOCK_BADGE_LABEL ?? null,
         dockTitle: process.env.MCODE_DEV_DOCK_TITLE ?? null,
         stableName: process.env.MCODE_DEV_STABLE_NAME ?? null,
+        userDataPath: process.env.MCODE_DEV_USER_DATA_PATH ?? null,
         electronExecPath: process.env.ELECTRON_EXEC_PATH ?? null
       },
       null,
@@ -78,5 +79,8 @@ if (envFile) {
     ),
     'utf8'
   )
+}
+if (process.env.MCODE_DEV_WRAPPER_TEST_AUTO_EXIT === '1') {
+  exitAfterGrandchild('SIGTERM', 0)
 }
 setInterval(() => {}, 1000)

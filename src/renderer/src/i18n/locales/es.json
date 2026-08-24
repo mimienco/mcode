@@ -115,6 +115,8 @@
       "e81217c1b7": "Ocultar nombre de la aplicación",
       "5096cbbc86": "MCode",
       "8b0b8eb54f": "Menú de aplicaciones",
+      "a27f8dd81a": "Ocultar barra lateral",
+      "18d43bd86c": "Mostrar barra lateral",
       "caea5b51b9": "Reiniciar ahora",
       "0a9e810705": "Hasta que reinicies, los cambios no se guardarán. Tus pestañas anteriores siguen guardadas en disco.",
       "12e77cf12b": "Error al restaurar la sesión",
@@ -10427,6 +10429,22 @@
             "8a77efcbd1": "archivos a incluir (por ejemplo, *.ts, src/**)",
             "a69ee1bd0e": "Archivos para incluir"
           },
+          "replace": {
+            "toggle": "Reemplazar",
+            "placeholder": "Reemplazar",
+            "all": "Reemplazar todo",
+            "preserveCase": "Conservar mayúsculas y minúsculas",
+            "confirm": {
+              "root": "¿Reemplazar {{value0}} coincidencia(s)?",
+              "yes": "Reemplazar",
+              "no": "Cancelar"
+            },
+            "summary": {
+              "written": "Se reemplazaron {{value0}} en {{value1}} archivo(s)",
+              "skipped": "{{value0}} omitidos (cambios sin guardar en el editor)",
+              "failed": "{{value0}} con error"
+            }
+          },
           "SearchHeader": {
             "6234a5ef85": "Usar expresión regular",
             "4567e6e0b6": "Coincidir palabra completa",
@@ -14365,7 +14383,6 @@
         "noPty": "No hay terminal activa: vuelva a alternar para volver a conectarse.",
         "locked": "La entrada está retenida por otro dispositivo.",
         "placeholder": "Enviar un mensaje…",
-        "mentionHint": "Archivo de referencia:",
         "attach": "Adjuntar archivo",
         "startDictation": "Iniciar dictado",
         "stopDictation": "Detener dictado",
@@ -14383,6 +14400,8 @@
         "options": "Opciones",
         "sessionOptions": "Opciones de sesión",
         "chooseInAgentPicker": "Elegir en el selector del agente…",
+        "chooseModelInTerminal": "Elegir modelo en la terminal…",
+        "directModelSwitchUnavailable": "El cambio directo de modelo no está disponible para esta sesión. Elige uno en la terminal o inicia una nueva sesión de Codex.",
         "toggleOption": "Alternar {{value0}}",
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueUnknown": "Valor actual desconocido — elige Activado o Desactivado",
@@ -14416,7 +14435,13 @@
         "skillScopeBuiltIn": "Integrado",
         "skillScopePlugin": "Plugin",
         "skillsLoaded": "Habilidades cargadas",
-        "noCommands": "No hay comandos coincidentes"
+        "noCommands": "No hay comandos coincidentes",
+        "loadingFiles": "Cargando archivos...",
+        "fileMatchCount": "Archivos coincidentes: {{resultCount}}",
+        "moreFileMatches": "Hay más resultados. Sigue escribiendo para acotar la lista.",
+        "noFiles": "No hay archivos coincidentes",
+        "typeToSearchFiles": "Escribe para buscar archivos del espacio de trabajo",
+        "mentionFiles": "Archivos del espacio de trabajo"
       },
       "tool": {
         "running": "Ejecutando…",

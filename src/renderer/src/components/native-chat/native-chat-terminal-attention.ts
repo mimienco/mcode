@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { AgentType } from '../../../../shared/agent-status-types'
+import { isTextBlock, type NativeChatMessage } from '../../../../shared/native-chat-types'
 import { stripAnsiEscapeSequences } from '../../../../shared/ansi-escape-sequences'
 
 const TERMINAL_ATTENTION_POLL_MS = 500
 
-export type NativeChatTerminalAttention = 'codex-hooks-review'
+export type NativeChatTerminalAttention = 'codex-hooks-review' | 'agent-auth-required'
 
 function compactTerminalText(value: string): string {
   // Why: alternate-screen TUIs position words with cursor escapes, so prompt
@@ -24,6 +25,27 @@ export function detectNativeChatTerminalAttention(
     text.includes('trustallandcontinue') &&
     text.includes('continuewithouttrusting')
     ? 'codex-hooks-review'
+    : null
+}
+
+export function detectNativeChatMessageAttention(
+  messages: readonly NativeChatMessage[]
+): NativeChatTerminalAttention | null {
+  const latestAssistant = messages.findLast((message) => message.role === 'assistant')
+  if (!latestAssistant) {
+    return null
+  }
+  const text = latestAssistant.blocks
+    .filter(isTextBlock)
+    .map((block) => block.text)
+    .join('\n')
+    .trim()
+  if (text.length === 0 || text.length > 320) {
+    return null
+  }
+  return /(?:login|session)\s+(?:has\s+)?expired|not\s+(?:logged|signed)\s+in/i.test(text) &&
+    /\/login|log\s*in|sign\s*in/i.test(text)
+    ? 'agent-auth-required'
     : null
 }
 

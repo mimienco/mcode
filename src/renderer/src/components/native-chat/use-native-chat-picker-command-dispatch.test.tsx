@@ -42,6 +42,7 @@ function renderDispatch(agent: 'codex' | 'claude' | 'openclaude') {
       setActiveSuggestion: vi.fn(),
       clearSkillOrigin: vi.fn(),
       clearImageAttachments: vi.fn(),
+      clearFileReferences: vi.fn(),
       setNotice: vi.fn()
     })
   )

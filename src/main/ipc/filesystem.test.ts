@@ -561,7 +561,10 @@ describe('registerFilesystemHandlers', () => {
 
   it('fs:listFiles forwards bounded Quick Open search options to SSH', async () => {
     const listFilesMock = vi.fn().mockResolvedValue(['src/target.ts'])
-    getSshFilesystemProviderMock.mockReturnValue({ listFiles: listFilesMock })
+    getSshFilesystemProviderMock.mockReturnValue({
+      listFiles: listFilesMock,
+      supportsQuickOpenSearch: vi.fn().mockResolvedValue(true)
+    })
 
     registerFilesystemHandlers(store as never)
 
@@ -577,6 +580,29 @@ describe('registerFilesystemHandlers', () => {
       maxResults: 33,
       searchQuery: 'target'
     })
+  })
+
+  it('filters exact mentions locally when the SSH relay is fuzzy-only', async () => {
+    const listFilesMock = vi
+      .fn()
+      .mockResolvedValue(['.claude-oxalpha/shell-snapshots/snapshot.sh', 'src/clxhjskh.ts'])
+    getSshFilesystemProviderMock.mockReturnValue({
+      listFiles: listFilesMock,
+      supportsQuickOpenSearch: vi.fn().mockResolvedValue(true),
+      supportsQuickOpenSearchMatchMode: vi.fn().mockResolvedValue(false)
+    })
+
+    registerFilesystemHandlers(store as never)
+
+    await expect(
+      handlers.get('fs:listFiles')!(null, {
+        rootPath: '/home/user/repo',
+        connectionId: 'conn-1',
+        maxResults: 50,
+        searchQuery: 'clxhjskh',
+        searchMatchMode: 'substring'
+      })
+    ).resolves.toEqual(['src/clxhjskh.ts'])
   })
 
   it('ranks a bounded legacy SSH listing when the relay lacks Quick Open search', async () => {

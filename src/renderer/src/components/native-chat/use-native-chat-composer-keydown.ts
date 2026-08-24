@@ -16,6 +16,8 @@ export type UseNativeChatComposerKeyDownArgs = {
   completePickerItem: (item: NativeChatPickerItem) => void
   dispatchPickerCommand: (item: Extract<NativeChatPickerItem, { kind: 'command' }>) => void
   dismissPicker: (triggerKey: string) => void
+  mentionOptionCount: number
+  acceptMention: () => void
   interrupt: () => void
   send: () => void
   setActiveSuggestion: Dispatch<SetStateAction<number>>
@@ -33,6 +35,8 @@ export function useNativeChatComposerKeyDown({
   completePickerItem,
   dispatchPickerCommand,
   dismissPicker,
+  mentionOptionCount,
+  acceptMention,
   interrupt,
   send,
   setActiveSuggestion,
@@ -80,6 +84,31 @@ export function useNativeChatComposerKeyDown({
         }
       }
 
+      if (autocomplete.mode === 'mention') {
+        if (event.key === 'ArrowDown' && mentionOptionCount > 0) {
+          event.preventDefault()
+          setActiveSuggestion((index) => (index + 1) % mentionOptionCount)
+          return
+        }
+        if (event.key === 'ArrowUp' && mentionOptionCount > 0) {
+          event.preventDefault()
+          setActiveSuggestion((index) => (index - 1 + mentionOptionCount) % mentionOptionCount)
+          return
+        }
+        if ((event.key === 'Enter' || event.key === 'Tab') && mentionOptionCount > 0) {
+          event.preventDefault()
+          acceptMention()
+          return
+        }
+        if (event.key === 'Escape') {
+          // Why: with the mention menu open, Esc closes the menu instead of
+          // interrupting the running agent.
+          event.preventDefault()
+          dismissPicker(autocomplete.triggerKey)
+          return
+        }
+      }
+
       if (event.key === 'Escape') {
         event.preventDefault()
         interrupt()
@@ -111,6 +140,7 @@ export function useNativeChatComposerKeyDown({
       }
     },
     [
+      acceptMention,
       activeSuggestion,
       autocomplete,
       completePickerItem,
@@ -120,6 +150,7 @@ export function useNativeChatComposerKeyDown({
       history,
       interrupt,
       isComposing,
+      mentionOptionCount,
       send,
       setActiveSuggestion,
       setCaret,

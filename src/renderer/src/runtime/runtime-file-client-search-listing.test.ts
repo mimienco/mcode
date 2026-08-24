@@ -137,7 +137,7 @@ describe('runtime file client', () => {
         ],
         totalCount: 40,
         truncated: true,
-        quickOpenSearchVersion: 1
+        quickOpenSearchVersion: 2
       },
       _meta: { runtimeId: 'remote-runtime' }
     })
@@ -149,7 +149,12 @@ describe('runtime file client', () => {
           worktreeId: 'wt-1',
           worktreePath: '/remote/repo'
         },
-        { query: 'target', limit: 32, excludePaths: ['/remote/repo/nested'] }
+        {
+          query: 'target',
+          limit: 32,
+          matchMode: 'substring',
+          excludePaths: ['/remote/repo/nested']
+        }
       )
     ).resolves.toEqual({
       files: ['data/target.ts', 'src/target.ts'],
@@ -164,7 +169,8 @@ describe('runtime file client', () => {
         query: 'target',
         limit: 32,
         excludePaths: ['/remote/repo/nested'],
-        mode: 'quick-open'
+        mode: 'quick-open',
+        matchMode: 'substring'
       },
       timeoutMs: 15_000
     })
@@ -185,6 +191,7 @@ describe('runtime file client', () => {
         {
           query: 'target',
           limit: 2,
+          matchMode: 'substring',
           excludePaths: ['/remote/repo/nested'],
           requestToken: 'quick-open-ssh-1'
         }
@@ -200,7 +207,8 @@ describe('runtime file client', () => {
       excludePaths: ['/remote/repo/nested'],
       requestToken: 'quick-open-ssh-1',
       maxResults: 3,
-      searchQuery: 'target'
+      searchQuery: 'target',
+      searchMatchMode: 'substring'
     })
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
@@ -310,7 +318,7 @@ describe('runtime file client', () => {
     )
   })
 
-  it('re-applies exclusions for legacy runtimes that ignore quick-open fields', async () => {
+  it('falls back to exact local filtering when a runtime only supports fuzzy path search', async () => {
     runtimeEnvironmentCall.mockImplementation(({ method }) => {
       if (method === 'files.searchPaths') {
         return Promise.resolve({
@@ -325,7 +333,8 @@ describe('runtime file client', () => {
               kind: 'text'
             })),
             totalCount: 33,
-            truncated: true
+            truncated: true,
+            quickOpenSearchVersion: 1
           },
           _meta: { runtimeId: 'legacy-runtime' }
         })
@@ -354,7 +363,12 @@ describe('runtime file client', () => {
           worktreeId: 'wt-1',
           worktreePath: '/remote/repo'
         },
-        { query: 'target', limit: 32, excludePaths: ['/remote/repo/nested'] }
+        {
+          query: 'target',
+          limit: 32,
+          matchMode: 'substring',
+          excludePaths: ['/remote/repo/nested']
+        }
       )
     ).resolves.toEqual({ files: ['src/target.ts'], truncated: false })
 

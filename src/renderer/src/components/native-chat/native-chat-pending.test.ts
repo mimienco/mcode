@@ -690,6 +690,23 @@ describe('commandMarkersAsMessages', () => {
     ])
   })
 
+  it('does not render effort changes in the conversation', () => {
+    expect(
+      commandMarkersAsMessages([
+        { id: 'effort', command: '/effort medium', sentAt: 7 },
+        { id: 'clear', command: '/clear', sentAt: 8 }
+      ])
+    ).toEqual([
+      {
+        id: 'command:clear',
+        role: 'system',
+        blocks: [{ type: 'text', text: 'Ran /clear' }],
+        timestamp: 8,
+        source: 'scrape'
+      }
+    ])
+  })
+
   it('survives stripNoiseMessages (the "Ran" text is not a noise prefix)', () => {
     const markers = commandMarkersAsMessages([{ id: 'c1', command: '/compact', sentAt: 1 }])
     expect(stripNoiseMessages(markers)).toEqual(markers)

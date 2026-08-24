@@ -1,10 +1,15 @@
+// @vitest-environment happy-dom
+
+import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import { filterTabBarItemsForActiveView, type TabBarItem } from './tab-bar-item-model'
+import type { TabBarProps } from './tab-bar-props'
+import { createUnifiedTabLookup } from './tab-bar-item-model'
+import { useTabBarItemProjection } from './use-tab-bar-item-projection'
 
-function makeTerminalItem(id: string): TabBarItem {
-  const terminal: TerminalTab = {
+function makeTerminal(id: string): TerminalTab {
+  return {
     id,
     ptyId: null,
     worktreeId: 'worktree-1',
@@ -13,13 +18,6 @@ function makeTerminalItem(id: string): TabBarItem {
     color: null,
     sortOrder: 0,
     createdAt: 0
-  }
-  return {
-    type: 'terminal',
-    id,
-    unifiedTabId: id,
-    isPinned: false,
-    data: terminal
   }
 }
 
@@ -39,25 +37,62 @@ function makeUnifiedTerminal(id: string, viewMode?: 'terminal' | 'chat'): Tab {
   }
 }
 
-describe('Chat tab-strip partition', () => {
-  const chatOne = makeTerminalItem('chat-1')
-  const chatTwo = makeTerminalItem('chat-2')
-  const shell = makeTerminalItem('shell-1')
-  const lookup = new Map<string, Tab>([
-    ['chat-1', makeUnifiedTerminal('chat-1', 'chat')],
-    ['chat-2', makeUnifiedTerminal('chat-2', 'chat')],
-    ['shell-1', makeUnifiedTerminal('shell-1', 'terminal')]
-  ])
+describe('tab-strip view switching', () => {
+  const tabs = [makeTerminal('chat-1'), makeTerminal('shell-1'), makeTerminal('chat-2')]
+  const unifiedTabs = [
+    makeUnifiedTerminal('chat-1', 'chat'),
+    makeUnifiedTerminal('shell-1', 'terminal'),
+    makeUnifiedTerminal('chat-2', 'chat')
+  ]
 
-  it('shows chat sessions and hides raw terminal tabs while Chat is active', () => {
-    const visible = filterTabBarItemsForActiveView([chatOne, shell, chatTwo], 'chat-1', lookup)
+  function renderProjection(activeTabId: string) {
+    const props: TabBarProps = {
+      tabs,
+      activeTabId,
+      activeTabType: 'terminal',
+      worktreeId: 'worktree-1',
+      groupId: 'group-1',
+      expandedPaneByTabId: {},
+      onActivate: () => {},
+      onClose: () => {},
+      onCloseOthers: () => {},
+      onCloseToRight: () => {},
+      onCloseToLeft: () => {},
+      onNewTerminalTab: () => {},
+      onNewBrowserTab: () => {},
+      onSetCustomTitle: () => {},
+      onSetTabColor: () => {},
+      onTogglePaneExpand: () => {}
+    }
+    return renderHook(() =>
+      useTabBarItemProjection({
+        props,
+        resolvedGroupId: 'group-1',
+        unifiedTabs,
+        unifiedTabByVisibleId: createUnifiedTabLookup(unifiedTabs, 'group-1'),
+        generatedTabTitlesEnabled: false,
+        statusByRelativePath: new Map()
+      })
+    )
+  }
 
-    expect(visible.map((item) => item.id)).toEqual(['chat-1', 'chat-2'])
+  it('keeps the complete workspace strip while Chat is active', () => {
+    const { result } = renderProjection('chat-1')
+
+    expect(result.current.orderedItems.map((item) => item.id)).toEqual([
+      'chat-1',
+      'shell-1',
+      'chat-2'
+    ])
   })
 
   it('keeps the complete workspace strip while Terminal is active', () => {
-    const visible = filterTabBarItemsForActiveView([chatOne, shell, chatTwo], 'shell-1', lookup)
+    const { result } = renderProjection('shell-1')
 
-    expect(visible.map((item) => item.id)).toEqual(['chat-1', 'shell-1', 'chat-2'])
+    expect(result.current.orderedItems.map((item) => item.id)).toEqual([
+      'chat-1',
+      'shell-1',
+      'chat-2'
+    ])
   })
 })

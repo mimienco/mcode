@@ -115,6 +115,8 @@
       "e81217c1b7": "隐藏应用名称",
       "5096cbbc86": "MCode",
       "8b0b8eb54f": "应用菜单",
+      "a27f8dd81a": "隐藏侧边栏",
+      "18d43bd86c": "显示侧边栏",
       "caea5b51b9": "立即重启",
       "0a9e810705": "重新启动之前不会保存更改。您以前的选项卡在磁盘上是安全的。",
       "12e77cf12b": "会话恢复失败",
@@ -10447,6 +10449,22 @@
             "8a77efcbd1": "要包含的文件（例如 *.ts、src/**）",
             "a69ee1bd0e": "要包含的文件"
           },
+          "replace": {
+            "toggle": "替换",
+            "placeholder": "替换",
+            "all": "全部替换",
+            "preserveCase": "保留大小写",
+            "confirm": {
+              "root": "替换 {{value0}} 处匹配？",
+              "yes": "替换",
+              "no": "取消"
+            },
+            "summary": {
+              "written": "已在 {{value1}} 个文件中替换 {{value0}} 处",
+              "skipped": "{{value0}} 个已跳过（编辑器有未保存更改）",
+              "failed": "{{value0}} 个失败"
+            }
+          },
           "SearchHeader": {
             "6234a5ef85": "使用正则表达式",
             "4567e6e0b6": "匹配整个单词",
@@ -14385,7 +14403,6 @@
         "noPty": "没有实时终端，请切回终端以重新连接。",
         "locked": "输入正被另一台设备占用。",
         "placeholder": "发送消息…",
-        "mentionHint": "引用文件：",
         "attach": "附加文件",
         "startDictation": "开始听写",
         "stopDictation": "停止听写",
@@ -14403,6 +14420,8 @@
         "options": "选项",
         "sessionOptions": "会话选项",
         "chooseInAgentPicker": "在智能体选择器中选择…",
+        "chooseModelInTerminal": "在终端中选择模型…",
+        "directModelSwitchUnavailable": "此会话不支持直接切换模型。请在终端中选择，或启动新的 Codex 会话。",
         "toggleOption": "切换{{value0}}",
         "pillAccessibleName": "{{value0}} {{value1}}",
         "valueUnknown": "当前值未知 — 请选择开或关",
@@ -14436,7 +14455,13 @@
         "skillScopeBuiltIn": "内置",
         "skillScopePlugin": "插件",
         "skillsLoaded": "技能已加载",
-        "noCommands": "没有匹配的命令"
+        "noCommands": "没有匹配的命令",
+        "loadingFiles": "正在加载文件…",
+        "fileMatchCount": "匹配文件：{{resultCount}} 个",
+        "moreFileMatches": "还有更多匹配项。请继续输入以缩小列表范围。",
+        "noFiles": "没有匹配的文件",
+        "typeToSearchFiles": "输入以搜索工作区文件",
+        "mentionFiles": "工作区文件"
       },
       "tool": {
         "running": "正在运行…",

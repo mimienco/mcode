@@ -38,9 +38,10 @@ import {
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import { delimiter, join, resolve } from 'node:path'
+import { resolveBenchmarkRepoRoot } from './benchmark-paths.mjs'
 
 const scriptDir = import.meta.dirname
-const repoRoot = resolve(scriptDir, '..', '..')
+const repoRoot = resolveBenchmarkRepoRoot(scriptDir)
 const require = createRequire(import.meta.url)
 
 function parseArgs(argv) {

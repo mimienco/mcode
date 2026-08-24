@@ -261,6 +261,13 @@ function buildClaudeUsageFetchDiagnostic(
   }
 }
 
+// Why: identical failures (expired token, 429) recur every poll cycle and the
+// fetcher already surfaces each failure to the UI; log a signature once per
+// window instead of spamming the console with the same warning on every refresh.
+const WARN_REPEAT_SUPPRESS_MS = 30 * 60 * 1000
+let lastWarnSignature: string | null = null
+let lastWarnAt = 0
+
 function warnClaudeUsageFetchFailure(
   authPreparation: ClaudeRuntimeAuthPreparation | undefined,
   oauthCredentials: OAuthCredentialReadResult,
@@ -268,6 +275,13 @@ function warnClaudeUsageFetchFailure(
 ): void {
   const message = error instanceof Error ? error.message : String(error)
   const status = error instanceof OAuthUsageError ? error.status : null
+  const signature = `${status ?? ''}:${message}`
+  const now = Date.now()
+  if (signature === lastWarnSignature && now - lastWarnAt < WARN_REPEAT_SUPPRESS_MS) {
+    return
+  }
+  lastWarnSignature = signature
+  lastWarnAt = now
   console.warn('[claude-rate-limits] Claude usage refresh failed', {
     ...buildClaudeUsageFetchDiagnostic(authPreparation, oauthCredentials),
     status,

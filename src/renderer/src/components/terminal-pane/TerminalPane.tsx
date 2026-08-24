@@ -115,6 +115,7 @@ import { canToggleNativeChat } from '../native-chat/native-chat-availability'
 import { getQuickChatWorkspaceForKey } from '../../../../shared/quick-chat-workspaces'
 import { NativeChatViewSwitcher } from '../native-chat/NativeChatViewSwitcher'
 import { useNativeChatTitlebarPortalTarget } from '../native-chat/NativeChatTitlebarPortal'
+import { nativeChatSessionIsTranscriptOnly } from '../native-chat/native-chat-interaction-mode'
 import {
   nativeChatLaunchAgentForLeaf,
   resolveNativeChatLeafRoute,
@@ -587,6 +588,32 @@ function TerminalPane(
         leafId,
         panes: managerRef.current?.getPanes() ?? [],
         runtimePaneTitlesByPaneId,
+        // Why: AI Vault identity survives app/dev restarts even when the live
+        // hook status does not, so a restored single-pane agent keeps its
+        // Chat/Terminal switch. The helper rejects tab-wide evidence in splits.
+        persistedSessionAgent: hasSingleKnownLeaf ? terminalTab?.aiVaultTitle?.agent : null,
+        tabLabel: hasSingleKnownLeaf ? unifiedTabLabel : null,
+        terminalTitle: hasSingleKnownLeaf ? terminalTab?.title : null
+      })
+    },
+    [
+      getNativeChatLeafIds,
+      getTabWideAgentHintLeafId,
+      runtimePaneTitlesByPaneId,
+      terminalTab?.aiVaultTitle?.agent,
+      terminalTab?.title,
+      unifiedTabLabel
+    ]
+  )
+  const resolveLiveTitleAgentForLeaf = useCallback(
+    (leafId: string | null) => {
+      const hasSingleKnownLeaf =
+        getNativeChatLeafIds().length === 1 && getTabWideAgentHintLeafId() === leafId
+      return resolveNativeChatLeafTitleAgent({
+        leafId,
+        panes: managerRef.current?.getPanes() ?? [],
+        runtimePaneTitlesByPaneId,
+        persistedSessionAgent: null,
         tabLabel: hasSingleKnownLeaf ? unifiedTabLabel : null,
         terminalTitle: hasSingleKnownLeaf ? terminalTab?.title : null
       })
@@ -2935,11 +2962,30 @@ function TerminalPane(
     ? (paneTransportsRef.current.get(chatPane.id)?.getPtyId() ?? null)
     : null
   const chatPaneResolvedAgent = chatPane ? resolveTitleAgentForLeaf(chatPane.leafId) : null
+  const chatPanePersistedSession =
+    chatPane &&
+    getNativeChatLeafIds().length === 1 &&
+    getTabWideAgentHintLeafId() === chatPane.leafId &&
+    terminalTab?.aiVaultTitle
+      ? {
+          agent: terminalTab.aiVaultTitle.agent,
+          sessionId: terminalTab.aiVaultTitle.sessionId
+        }
+      : null
   const chatPaneLaunchAgent = nativeChatLaunchAgentForLeaf({
     launchAgent: terminalTab?.launchAgent,
     launchAgentLeafId: getTabWideAgentHintLeafId(),
     leafId: chatPane?.leafId ?? null,
     leafIds: getNativeChatLeafIds()
+  })
+  const chatPaneTranscriptOnly = nativeChatSessionIsTranscriptOnly({
+    persistedSession: chatPanePersistedSession,
+    hasLiveAgentEvidence: Boolean(
+      chatPane &&
+      (tabAgentTypeByLeaf[chatPane.leafId] ??
+        chatPaneLaunchAgent ??
+        resolveLiveTitleAgentForLeaf(chatPane.leafId))
+    )
   })
   const activePaneIsChatLeaf = Boolean(
     isChatViewMode && activePane?.leafId && activePane.leafId === chatLeafId
@@ -3206,6 +3252,8 @@ function TerminalPane(
                 targetPtyId={chatPanePtyId}
                 launchAgent={chatPaneLaunchAgent}
                 resolvedAgent={chatPaneResolvedAgent}
+                persistedSession={chatPanePersistedSession}
+                transcriptOnly={chatPaneTranscriptOnly}
                 onSwitchToTerminal={switchNativeChatToTerminal}
                 readTerminalScreen={readNativeChatTerminalScreen}
                 contextMenuActions={{

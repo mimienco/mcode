@@ -347,7 +347,31 @@ describe('getPiAgentStatusExtensionSource', () => {
     }
   })
 
-  it('keeps OMP runtime status payloads unchanged by Pi session metadata', async () => {
+  it.each(['startup', 'reload'])(
+    'posts persistent OMP session identity when the session starts via %s',
+    async (reason) => {
+      const harness = createHarness({ kind: 'omp' })
+
+      await harness.callHook(
+        'session_start',
+        { reason },
+        {
+          sessionManager: {
+            getSessionId: () => 'omp-session-1',
+            getSessionFile: () => '/tmp/omp-session-1.jsonl'
+          }
+        }
+      )
+
+      expect(harness.fetchMock).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(String(harness.fetchMock.mock.calls[0]?.[1]?.body)).payload).toEqual({
+        hook_event_name: 'session_start',
+        session_id: 'omp-session-1'
+      })
+    }
+  )
+
+  it('does not leak stale OMP session metadata into events without runtime context', async () => {
     const harness = createHarness({ kind: 'omp' })
 
     await harness.callHook(
@@ -362,8 +386,8 @@ describe('getPiAgentStatusExtensionSource', () => {
     )
     await harness.callHook('agent_start')
 
-    expect(harness.fetchMock).toHaveBeenCalledTimes(1)
-    expect(harness.fetchMock.mock.calls[0]?.[1]?.body).toBe(
+    await vi.waitFor(() => expect(harness.fetchMock).toHaveBeenCalledTimes(2))
+    expect(harness.fetchMock.mock.calls[1]?.[1]?.body).toBe(
       JSON.stringify({
         paneKey: 'pane-1',
         launchToken: 'launch-1',

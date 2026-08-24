@@ -89,6 +89,19 @@ describe('NativeChatSessionGate', () => {
     )
   })
 
+  it('opens OMP from its retained identity-only session event', () => {
+    renderResolution({
+      paneKey: 'tab-1:leaf-1',
+      launchAgent: 'omp',
+      retainedSession: { agent: 'omp', sessionId: 'omp-session' },
+      ptyId: 'pty-1'
+    })
+
+    expect(screen.getByTestId('native-chat-resolution')).toHaveTextContent(
+      'omp:omp-session:tab-1:leaf-1'
+    )
+  })
+
   it('preserves the open composer, session, and draft through disconnect and reconnect', () => {
     const paneKey = 'tab-1:leaf-1'
     const connectedEntry = entry({

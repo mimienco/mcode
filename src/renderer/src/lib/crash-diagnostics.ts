@@ -10,6 +10,8 @@ import { recordRendererCrashBreadcrumb } from './crash-breadcrumb-recorder'
 import { collectRendererMemoryProfileCounts } from './renderer-memory-profile'
 
 const RENDERER_MEMORY_SAMPLE_INTERVAL_MS = 60_000
+const RENDERER_EVENT_LOOP_SAMPLE_INTERVAL_MS = 250
+const RENDERER_EVENT_LOOP_STALL_THRESHOLD_MS = 1_000
 const BYTES_PER_MEGABYTE = 1024 * 1024
 const BYTES_PER_KILOBYTE = 1024
 // Why: one detailed breadcrumb per threshold names what grew before an OOM.
@@ -32,6 +34,9 @@ type HeapMetrics = BrowserPerformanceMemory & {
 
 let rendererCrashDiagnosticsInstalled = false
 let rendererMemoryInterval: number | null = null
+let rendererEventLoopInterval: number | null = null
+let rendererEventLoopLastTickAt = 0
+let unsubscribeRendererSystemResume: (() => void) | null = null
 let rendererSurface: RendererSurface = 'main'
 const emittedHighwaterRatios = new Set<number>()
 
@@ -57,6 +62,15 @@ export function installRendererCrashDiagnostics(surface: RendererSurface = 'main
       RENDERER_MEMORY_SAMPLE_INTERVAL_MS
     )
   }
+  rendererEventLoopLastTickAt = rendererClockNow()
+  rendererEventLoopInterval = window.setInterval(
+    recordRendererEventLoopTick,
+    RENDERER_EVENT_LOOP_SAMPLE_INTERVAL_MS
+  )
+  unsubscribeRendererSystemResume =
+    window.api?.ui?.onSystemResumed?.(() => {
+      rendererEventLoopLastTickAt = rendererClockNow()
+    }) ?? null
 }
 
 function disposeRendererCrashDiagnostics(): void {
@@ -70,6 +84,13 @@ function disposeRendererCrashDiagnostics(): void {
     window.clearInterval(rendererMemoryInterval)
     rendererMemoryInterval = null
   }
+  if (rendererEventLoopInterval !== null) {
+    window.clearInterval(rendererEventLoopInterval)
+    rendererEventLoopInterval = null
+  }
+  rendererEventLoopLastTickAt = 0
+  unsubscribeRendererSystemResume?.()
+  unsubscribeRendererSystemResume = null
   emittedHighwaterRatios.clear()
   rendererSurface = 'main'
 }
@@ -133,6 +154,37 @@ function recordRendererMemory(reason: string): void {
     })
   )
   recordRendererMemoryHighwater(memory, browserWebviews)
+}
+
+function rendererClockNow(): number {
+  return typeof window.performance.now === 'function' ? window.performance.now() : Date.now()
+}
+
+function recordRendererEventLoopTick(): void {
+  const now = rendererClockNow()
+  const gapMs = now - rendererEventLoopLastTickAt
+  rendererEventLoopLastTickAt = now
+  const blockedMs = gapMs - RENDERER_EVENT_LOOP_SAMPLE_INTERVAL_MS
+  if (
+    blockedMs < RENDERER_EVENT_LOOP_STALL_THRESHOLD_MS ||
+    (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+  ) {
+    return
+  }
+  const memory = readHeapMetrics()
+  recordRendererCrashBreadcrumb(
+    'renderer_event_loop_stall',
+    compactBreadcrumbData({
+      rendererSurface,
+      gapMs: Math.round(gapMs),
+      blockedMs: Math.round(blockedMs),
+      visibilityState: typeof document === 'undefined' ? 'unknown' : document.visibilityState,
+      usedHeapMB: toMegabytes(memory?.usedJSHeapSize),
+      terminalElements:
+        typeof document === 'undefined' ? undefined : document.querySelectorAll('.xterm').length,
+      ...collectRendererMemoryProfileCounts()
+    })
+  )
 }
 
 function recordRendererMemoryHighwater(

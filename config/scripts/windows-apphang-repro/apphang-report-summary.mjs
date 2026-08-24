@@ -15,6 +15,23 @@ export function summarizeTrace(userDataDir) {
       parsed.push({ raw: line })
     }
   }
+  const stallNames = new Set([
+    'renderer_event_loop_stall',
+    'renderer_unresponsive',
+    'renderer_responsive',
+    'main_thread_unresponsive',
+    'main_thread_responsive',
+    'main_thread_hang_detected'
+  ])
+  const stallEvents = parsed.flatMap((entry) => {
+    const name = entry.attributes?.['breadcrumb.name']
+    if (!stallNames.has(name)) {
+      return []
+    }
+    return [
+      { name, data: entry.attributes?.['breadcrumb.data'] ?? {}, durationMs: entry.durationMs }
+    ]
+  })
   const interesting = parsed.filter((entry) => {
     const name = String(entry.name ?? entry.event ?? entry.type ?? '')
     const text = JSON.stringify(entry)
@@ -22,6 +39,7 @@ export function summarizeTrace(userDataDir) {
       name.includes('git.exec') ||
       name.includes('renderer_memory') ||
       name.includes('sidebar_worktree_activate') ||
+      stallNames.has(entry.attributes?.['breadcrumb.name']) ||
       text.includes('git.exec remote') ||
       text.includes('git.exec worktree') ||
       text.includes('sidebar_worktree_activate')
@@ -31,6 +49,28 @@ export function summarizeTrace(userDataDir) {
     tracePath,
     exists: true,
     totalLines: lines.length,
+    stallSummary: {
+      count: stallEvents.length,
+      byName: Object.fromEntries(
+        [...stallNames].map((name) => [
+          name,
+          stallEvents.filter((event) => event.name === name).length
+        ])
+      ),
+      maxRendererBlockedMs: Math.max(0, ...stallEvents.map((event) => event.data.blockedMs ?? 0)),
+      maxNativeRendererUnresponsiveMs: Math.max(
+        0,
+        ...stallEvents
+          .filter((event) => event.name === 'renderer_responsive')
+          .map((event) => event.data.durationMs ?? 0)
+      ),
+      maxMainUnresponsiveMs: Math.max(
+        0,
+        ...stallEvents
+          .filter((event) => event.name.startsWith('main_thread_'))
+          .map((event) => event.data.unresponsiveMs ?? 0)
+      )
+    },
     interestingTail: interesting.slice(-40)
   }
 }

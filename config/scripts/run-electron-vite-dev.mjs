@@ -16,6 +16,7 @@ import {
 import net from 'node:net'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { createDisposableDevProfile } from './disposable-dev-profile.mjs'
 import { prepareDevCliTerminalWrappers } from './dev-cli-terminal-wrapper.mjs'
 import { isDevBundleInUse, selectStaleDevBundleDirs } from './dev-electron-bundle-cache.mjs'
 import {
@@ -33,14 +34,28 @@ delete process.env.ELECTRON_RUN_AS_NODE
 const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(import.meta.dirname, '../..')
 const STABLE_NAME_FLAG = '--stable-name'
+const FRESH_PROFILE_FLAG = '--fresh-profile'
 const rawForwardedArgs = process.argv.slice(2)
 // Why: keep an escape hatch for tools that key off Electron's stock app name.
 // The flag is runner-only and must not leak into Chromium/electron-vite.
 const useStableElectronName =
   process.env.MCODE_DEV_STABLE_NAME === '1' || rawForwardedArgs.includes(STABLE_NAME_FLAG)
-const forwardedRaw = rawForwardedArgs.filter((arg) => arg !== STABLE_NAME_FLAG)
+const useFreshDevProfile =
+  process.env.MCODE_DEV_FRESH_PROFILE === '1' || rawForwardedArgs.includes(FRESH_PROFILE_FLAG)
+const forwardedRaw = rawForwardedArgs.filter(
+  (arg) => arg !== STABLE_NAME_FLAG && arg !== FRESH_PROFILE_FLAG
+)
 if (useStableElectronName) {
   process.env.MCODE_DEV_STABLE_NAME = '1'
+}
+
+let cleanupFreshDevProfile = () => {}
+
+if (useFreshDevProfile) {
+  const disposableProfile = createDisposableDevProfile()
+  process.env.MCODE_DEV_USER_DATA_PATH = disposableProfile.profilePath
+  cleanupFreshDevProfile = disposableProfile.cleanup
+  console.error(`[mcode-dev] Fresh disposable profile: ${disposableProfile.profilePath}`)
 }
 
 function readGitValue(args) {
@@ -70,7 +85,7 @@ function formatDevInstanceLabel(branch, worktreeName) {
 }
 
 function createDockTitle(branch, label) {
-  return `MCode: ${branch || label || 'dev'}`
+  return `MCode Dev: ${branch || label || 'dev'}`
 }
 
 function seedDevInstanceIdentityEnv() {
@@ -768,6 +783,7 @@ child.on('error', (error) => {
   if (forcedKillTimer) {
     clearTimeout(forcedKillTimer)
   }
+  cleanupFreshDevProfile()
   console.error(error)
   process.exit(1)
 })
@@ -776,6 +792,7 @@ child.on('exit', (code, signal) => {
   if (forcedKillTimer) {
     clearTimeout(forcedKillTimer)
   }
+  cleanupFreshDevProfile()
 
   if (isShuttingDown) {
     process.exit(signalExitCode(signal ?? 'SIGINT'))

@@ -23,9 +23,9 @@ const SAMPLE_INTERVAL_MS = 200
 const VERIFY_TIMEOUT_MS = 500
 const VERIFY_CHECK_INTERVAL_MS = 50
 const VERIFY_BLOCK_MS = 1_200
-const PRODUCTION_HEARTBEAT_INTERVAL_MS = 2_000
-const PRODUCTION_TIMEOUT_MS = 45_000
-const PRODUCTION_CHECK_INTERVAL_MS = 5_000
+const PRODUCTION_HEARTBEAT_INTERVAL_MS = 500
+const PRODUCTION_TIMEOUT_MS = 5_000
+const PRODUCTION_CHECK_INTERVAL_MS = 500
 const PRODUCTION_SAMPLE_MS = 30_000
 const MAX_LAUNCH_ATTEMPTS = 3
 const MIB = 1024 * 1024
@@ -253,7 +253,7 @@ async function measureWorker(markerPath) {
 
 async function runInternal() {
   if (process.platform !== 'darwin') {
-    throw new Error('The production watchdog is macOS-only; run this benchmark on macOS')
+    throw new Error('The footprint benchmark is macOS-only; run it on macOS')
   }
   const { app } = await import('electron')
   const boundary = process.env[BOUNDARY_ENV]
@@ -359,7 +359,7 @@ function runTrial(executable, boundary) {
 
 function runBenchmark() {
   if (process.platform !== 'darwin') {
-    throw new Error('The production watchdog is macOS-only; run this benchmark on macOS')
+    throw new Error('The footprint benchmark is macOS-only; run it on macOS')
   }
   if (!existsSync(entryPath)) {
     throw new Error(`Missing ${entryPath}; run pnpm exec electron-vite build first`)

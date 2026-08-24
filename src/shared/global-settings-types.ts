@@ -11,6 +11,7 @@ import type { TerminalCustomTheme } from './terminal-custom-themes'
 import type { UiLanguage } from './ui-language'
 import type { GlobalWindowsRuntimeDefault } from './project-execution-runtime'
 import type { PersistedNativeChatSessionOptions } from './native-chat-session-options'
+import type { AgentInteractionMode, AgentPermissionPreset } from './agent-run-profile'
 import type { ComputerAwakeMode } from './computer-awake-mode'
 import type { CommitMessageAiSettings } from './commit-message-ai-types'
 import type { HostSettingOverrides } from './host-setting-overrides'
@@ -201,12 +202,16 @@ export type GlobalSettings = {
   openLinksInAppModifierInverts?: boolean
   /** Show terminal link actions on plain click; off restores modifier-click-only terminal links. */
   terminalLinkActionPopoverEnabled?: boolean
-  /** Opt-in: open new coding-agent tabs in native chat instead of the raw terminal; optional for legacy settings. */
+  /** Open new supported coding-agent tabs in native chat; optional for legacy settings. */
   openAgentTabsInChatByDefault?: boolean
   /** Experimental native chat surface for Claude/Codex sessions; off by default. */
   experimentalNativeChat?: boolean
   /** Last explicit native-chat model + option selections; live panes need an applied/dispatched record before showing a value. */
   nativeChatSessionOptions?: PersistedNativeChatSessionOptions
+  /** Provider-neutral permission intent used by Settings, native Chat, and new agent launches. */
+  agentPermissionPreset?: AgentPermissionPreset
+  /** Provider-neutral default work mode; combined-enum providers restore the saved permission on Build. */
+  agentInteractionMode?: AgentInteractionMode
   /** Extra launcher rows for the worktree "Open in" submenu. VS Code is always shown first. */
   openInApplications?: OpenInApplication[]
   /** Deprecated: migration/backward-compat only. Use PersistedUIState.rightSidebarOpen. */

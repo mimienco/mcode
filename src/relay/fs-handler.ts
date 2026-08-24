@@ -35,6 +35,7 @@ import {
 import { RelayStreamRegistry } from './fs-stream-registry'
 import { scanWorkspaceSpaceDirectory } from './workspace-space-scan'
 import { RipgrepUnavailableError } from '../shared/ripgrep-process-availability'
+import { searchReplaceOnRelay } from './fs-handler-search-replace'
 import { RelayFilesystemWatchRegistry } from './relay-filesystem-watch-registry'
 import type { RelayWatcherProcessPool } from './relay-watcher-process-pool'
 
@@ -84,8 +85,9 @@ export class FsHandler {
     this.dispatcher.onRequest('fs.copy', (p) => copyRelayPath(p))
     this.dispatcher.onRequest('fs.realpath', (p) => realpathRelayPath(p))
     this.dispatcher.onRequest('fs.search', (p) => this.search(p))
+    this.dispatcher.onRequest('fs.searchReplace', (p) => searchReplaceOnRelay(p))
     this.dispatcher.onRequest('fs.getCapabilities', async () => ({
-      quickOpenSearchVersion: 1,
+      quickOpenSearchVersion: 2,
       rangedReadVersion: 1
     }))
     this.dispatcher.onRequest('fs.listFiles', (p, c) => this.listFiles(p, c))
@@ -209,6 +211,7 @@ export class FsHandler {
       typeof params.searchQuery === 'string' && params.searchQuery.trim().length > 0
         ? params.searchQuery
         : undefined
+    const searchMatchMode = params.searchMatchMode === 'substring' ? 'substring' : 'fuzzy'
     // Why: the main-to-relay RPC adds excludePaths so nested linked worktrees
     // don't get double-scanned. The shared helper validates the shape and
     // normalizes into root-relative prefixes; malformed input yields [] so
@@ -219,10 +222,23 @@ export class FsHandler {
     // aborting a stale scan when the workspace changes or the host cancels.
     return this.listFilesScans.run({
       clientId: context?.clientId ?? 0,
-      key: JSON.stringify([rootPath, excludePathPrefixes, maxResults, searchQuery]),
+      key: JSON.stringify([
+        rootPath,
+        excludePathPrefixes,
+        maxResults,
+        searchQuery,
+        searchMatchMode
+      ]),
       signal: context?.signal,
       start: (signal) =>
-        runListFilesScan(rootPath, excludePathPrefixes, signal, maxResults, searchQuery)
+        runListFilesScan(
+          rootPath,
+          excludePathPrefixes,
+          signal,
+          maxResults,
+          searchQuery,
+          searchMatchMode
+        )
     })
   }
 

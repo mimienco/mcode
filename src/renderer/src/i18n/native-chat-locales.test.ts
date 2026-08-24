@@ -52,6 +52,8 @@ describe('native chat locale copy', () => {
         'options',
         'sessionOptions',
         'chooseInAgentPicker',
+        'chooseModelInTerminal',
+        'directModelSwitchUnavailable',
         'toggleOption',
         'valueUnknown',
         'sentNotConfirmed'

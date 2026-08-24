@@ -66,6 +66,13 @@ function isClearCommand(command: string): boolean {
   return command.trim().toLowerCase().split(/\s+/)[0] === '/clear'
 }
 
+/** Session-option commands update the agent's controls, not the conversation.
+ *  Keep them out of the transcript even when an older cached marker survives a
+ *  view remount. */
+export function shouldRenderNativeChatCommandMarker(command: string): boolean {
+  return command.trim().toLowerCase().split(/\s+/)[0] !== '/effort'
+}
+
 function latestClearSentAt(markers: readonly NativeChatCommandMarker[]): number | null {
   let latest: number | null = null
   for (const marker of markers) {
@@ -96,13 +103,15 @@ export function applyCommandMarkerBoundaries(
 export function commandMarkersAsMessages(
   markers: readonly NativeChatCommandMarker[]
 ): NativeChatMessage[] {
-  return markers.map((marker) => ({
-    id: `command:${marker.id}`,
-    role: 'system' as const,
-    blocks: [{ type: 'text' as const, text: `Ran ${marker.command}` }],
-    timestamp: marker.sentAt,
-    source: 'scrape' as const
-  }))
+  return markers
+    .filter((marker) => shouldRenderNativeChatCommandMarker(marker.command))
+    .map((marker) => ({
+      id: `command:${marker.id}`,
+      role: 'system' as const,
+      blocks: [{ type: 'text' as const, text: `Ran ${marker.command}` }],
+      timestamp: marker.sentAt,
+      source: 'scrape' as const
+    }))
 }
 
 /** True when a message id was minted for a slash-command marker. */

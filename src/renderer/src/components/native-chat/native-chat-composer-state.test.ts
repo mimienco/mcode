@@ -13,6 +13,7 @@ import {
   pushHistory,
   recallNext,
   recallPrevious,
+  removeActiveMentionQuery,
   slashCommandDispatchText,
   type SlashCommandSuggestion
 } from './native-chat-composer-state'
@@ -92,6 +93,14 @@ describe('deriveComposerAutocomplete — mention', () => {
 
   it('does not fire for an email-like `@` (no preceding whitespace)', () => {
     expect(deriveComposerAutocomplete('me@example', 10, COMMANDS).mode).toBe('none')
+  })
+
+  it('keeps spaces searchable inside an unfinished quoted mention', () => {
+    const result = deriveComposerAutocomplete('open @"My Report', 16, COMMANDS)
+    expect(result.mode).toBe('mention')
+    if (result.mode === 'mention') {
+      expect(result.query).toBe('My Report')
+    }
   })
 })
 
@@ -189,8 +198,23 @@ describe('apply suggestions', () => {
 
   it('applyMentionSuggestion replaces the active @token at the caret', () => {
     const result = applyMentionSuggestion('open @sr more', 8, 'src/app.ts')
-    expect(result.draft).toBe('open @src/app.ts  more')
-    expect(result.caret).toBe('open @src/app.ts '.length)
+    expect(result.draft).toBe('open @src/app.ts more')
+    expect(result.caret).toBe('open @src/app.ts'.length)
+  })
+
+  it('quotes paths with spaces and does not introduce duplicate whitespace', () => {
+    const result = applyMentionSuggestion('open @"My Rep later', 13, 'docs/My Report.md')
+    expect(result.draft).toBe('open @"docs/My Report.md" later')
+    expect(result.caret).toBe('open @"docs/My Report.md"'.length)
+  })
+
+  it('removes the accepted mention query while preserving surrounding prose', () => {
+    expect(removeActiveMentionQuery('open @sr later', 8)).toEqual({
+      draft: 'open later',
+      caret: 'open '.length
+    })
+    expect(removeActiveMentionQuery('@sr', 3)).toEqual({ draft: '', caret: 0 })
+    expect(removeActiveMentionQuery('@sr later', 3)).toEqual({ draft: 'later', caret: 0 })
   })
 
   it('applyPickerSuggestion replaces the active $token at the caret', () => {

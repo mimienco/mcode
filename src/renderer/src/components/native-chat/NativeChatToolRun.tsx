@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -11,18 +11,20 @@ import { diffFromText, diffFromToolCall, type DiffLine } from './native-chat-dif
 import {
   countToolCalls,
   createToolInputDisplay,
+  MAX_TOOL_DETAIL_LENGTH,
   summarizeToolRun,
   truncateToolDetail
 } from './native-chat-tool-summary'
 import { NativeChatDiffView } from './NativeChatDiffView'
+import { NativeChatCopyButton } from './NativeChatCopyButton'
 
-/** A single inline tool line — `▸ ToolName  preview` — that expands in place to
- *  show the call's diff/input or the result's body. Tool calls read as flat
- *  lines in the conversation rather than boxed blocks (mobile parity). Lines only
- *  mount while the parent run is open, so each starts expanded (opening the run
- *  reveals every line at once) and is then individually collapsible. */
+/** A single tool line that expands in place to show its diff, input, or result.
+ *  Lines only mount while the parent run is open, so each starts expanded
+ *  (opening the run reveals every line at once) and remains individually
+ *  collapsible. */
 function ToolLine({ block }: { block: NativeChatBlock }): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(true)
+  const detailId = useId()
 
   let name: string
   let preview: string
@@ -50,15 +52,27 @@ function ToolLine({ block }: { block: NativeChatBlock }): React.JSX.Element | nu
   const hasDetail = diff !== null || body !== null || inputHasDetail
 
   return (
-    <div>
+    <div className="min-w-0">
       <button
         type="button"
         onClick={() => hasDetail && setExpanded((v) => !v)}
+        aria-expanded={hasDetail ? expanded : undefined}
+        aria-controls={hasDetail ? detailId : undefined}
         className={cn(
-          'group flex w-full items-center gap-1.5 py-0.5 text-left',
+          'group flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-background/55',
           hasDetail ? 'cursor-pointer' : 'cursor-default'
         )}
       >
+        {hasDetail ? (
+          <ChevronRight
+            className={cn(
+              'size-3 shrink-0 text-muted-foreground/70 transition-transform',
+              expanded && 'rotate-90'
+            )}
+          />
+        ) : (
+          <span className="size-3 shrink-0" aria-hidden="true" />
+        )}
         <code className="shrink-0 font-mono text-xs font-semibold text-foreground/90 transition-colors group-hover:text-foreground">
           {name}
         </code>
@@ -70,32 +84,42 @@ function ToolLine({ block }: { block: NativeChatBlock }): React.JSX.Element | nu
             {preview}
           </span>
         ) : null}
-        {hasDetail ? (
-          // Chevron sits on the right; hidden until hover when collapsed, always
-          // shown (pointing down) when expanded — mirrors Codex's disclosure affordance.
-          <ChevronRight
-            className={cn(
-              'size-3.5 shrink-0 text-muted-foreground transition-all',
-              expanded ? 'rotate-90 opacity-100' : 'opacity-0 group-hover:opacity-100'
-            )}
-          />
-        ) : null}
       </button>
       {hasDetail && expanded ? (
-        <div className="space-y-1.5 py-1">
+        <div id={detailId} className="space-y-1.5 py-1 pr-1 pl-6">
           {diff ? <NativeChatDiffView lines={diff} /> : null}
           {!diff && body ? (
-            <pre
-              className={cn(
-                'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-accent p-2 font-mono text-[11px] scrollbar-sleek',
-                body.isError ? 'text-destructive' : 'text-foreground/80'
-              )}
-            >
-              {truncateToolDetail(body.output)}
-            </pre>
+            <>
+              <pre
+                className={cn(
+                  'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/55 p-2 font-mono text-[11px] scrollbar-sleek',
+                  body.isError ? 'text-destructive' : 'text-foreground/80'
+                )}
+              >
+                {truncateToolDetail(body.output)}
+              </pre>
+              {body.output.length > MAX_TOOL_DETAIL_LENGTH ? (
+                <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span>
+                    {translate(
+                      'components.native-chat.tool.truncated',
+                      'Showing the first {{value0}} characters',
+                      { value0: MAX_TOOL_DETAIL_LENGTH }
+                    )}
+                  </span>
+                  <NativeChatCopyButton
+                    text={body.output}
+                    label={translate(
+                      'components.native-chat.tool.copyFullOutput',
+                      'Copy full output'
+                    )}
+                  />
+                </div>
+              ) : null}
+            </>
           ) : null}
           {!diff && !body && detail ? (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-accent p-2 font-mono text-[11px] text-foreground/80 scrollbar-sleek">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/55 p-2 font-mono text-[11px] text-foreground/80 scrollbar-sleek">
               {detail}
             </pre>
           ) : null}
@@ -117,6 +141,7 @@ export function NativeChatToolRun({
   expandSignal: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(expandSignal)
+  const contentId = useId()
   // Re-sync when the global toolbar toggle flips.
   useEffect(() => setOpen(expandSignal), [expandSignal])
 
@@ -130,15 +155,18 @@ export function NativeChatToolRun({
         })
 
   return (
-    // Extra top margin sets the tool run apart from the assistant prose above it
-    // so the turn's activity doesn't crowd the message text.
-    <div className="mt-3">
+    <div
+      data-native-chat-tool-run
+      className="mt-3 overflow-hidden rounded-lg border border-border/60 bg-muted/25"
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-center gap-1.5 py-0.5 text-left"
+        aria-expanded={open}
+        aria-controls={contentId}
+        className="group flex min-h-9 w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-muted/45"
       >
-        <span className="shrink-0 font-mono text-[11px] font-bold text-muted-foreground transition-colors group-hover:text-foreground/80">
+        <span className="readout shrink-0 text-[10px] font-semibold text-muted-foreground transition-colors group-hover:text-foreground/80">
           {callCount}×
         </span>
         <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground transition-colors group-hover:text-foreground/80">
@@ -148,13 +176,13 @@ export function NativeChatToolRun({
             down when open — matches Codex's tool-run disclosure. */}
         <ChevronRight
           className={cn(
-            'size-3.5 shrink-0 text-muted-foreground transition-all',
-            open ? 'rotate-90 opacity-100' : 'opacity-0 group-hover:opacity-100'
+            'ml-auto size-3.5 shrink-0 text-muted-foreground/70 transition-transform',
+            open && 'rotate-90'
           )}
         />
       </button>
       {open ? (
-        <div className="mt-1">
+        <div id={contentId} className="border-t border-border/50 px-2 py-2">
           {blocks.map((block, i) => (
             <ToolLine key={i} block={block} />
           ))}

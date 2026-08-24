@@ -56,20 +56,26 @@ let hardenedDirectoryPathsThisProcess = new SecurePathHardeningCache<true>(
   DEFAULT_HARDENING_CACHE_BOUNDS
 )
 
-function hardenSecureDirectoryOnce(dirPath: string): void {
-  // Why: dir hardening stays async — re-applying it stormed the main thread (#4901); files inside are hardened synchronously anyway.
-  if (hardenedDirectoryPathsThisProcess.get(dirPath)) {
-    return
+function hardenSecureDirectoryOnce(dirPath: string): boolean {
+  const cached = hardenedDirectoryPathsThisProcess.get(dirPath)
+  if (cached !== undefined) {
+    return cached
   }
-  applySecurePathRestriction(dirPath, true, process.platform, false)
-  // Cache even though the async ACL may still be in flight — dir restriction is best-effort, no retry.
-  hardenedDirectoryPathsThisProcess.set(dirPath, true)
+  // Why sync (Windows): a confirmed-restricted dir means every file created inside it
+  // inherits the restricted ACEs at create time, so writeSecureFile can skip its
+  // per-file icacls spawnSync — each blocked the main thread ~100ms and boot ran
+  // dozens (~3s of stalls, see startup profile 2026-08-23). Failures stay uncached
+  // so the next write retries instead of publishing wide-open.
+  const hardened = applySecurePathRestriction(dirPath, true, process.platform, true)
+  if (hardened) {
+    hardenedDirectoryPathsThisProcess.set(dirPath, true)
+  }
+  return hardened
 }
 
 function hardenSecurePathOnce(targetPath: string, isDirectory: boolean): boolean {
   if (isDirectory && process.platform === 'win32') {
-    hardenSecureDirectoryOnce(targetPath)
-    return true
+    return hardenSecureDirectoryOnce(targetPath)
   }
 
   const currentEntry = getHardenedPathCacheEntry(targetPath, isDirectory)
@@ -105,8 +111,12 @@ export function writeSecureFile(
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 })
   }
-  // Windows dir hardening stays async + path-cached (it stormed the main thread, #4901); POSIX keeps the metadata cache to catch chmod/ctime drift.
-  hardenSecurePathOnce(dir, true)
+  // Windows dir hardening runs once per dir, synchronously confirmed (#4901 history);
+  // POSIX keeps the metadata cache to catch chmod/ctime drift.
+  // Why the per-file ACL below is conditional: once the dir's inheritance is stripped
+  // and restricted, every file created inside inherits only user/SYSTEM/admins — the
+  // tmp+published icacls spawnSync pair is then redundant work on the main thread.
+  const dirHardened = hardenSecurePathOnce(dir, true)
 
   const tmpFile = `${targetPath}.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`
   try {
@@ -117,11 +127,15 @@ export function writeSecureFile(
     if (options.durable) {
       fsyncFileSync(tmpFile)
     }
-    // Why: writeFileSync mode is a no-op on Windows, so restrict the credential's ACL synchronously before the rename publishes it under inherited ACLs.
-    applySecurePathRestriction(tmpFile, false, process.platform, true)
+    // Why: writeFileSync mode is a no-op on Windows. With a confirmed-hardened dir the
+    // rename publishes under inherited restricted ACEs; without one (harden failed),
+    // restrict synchronously so the credential is never briefly readable wide-open.
+    if (!dirHardened) {
+      applySecurePathRestriction(tmpFile, false, process.platform, true)
+    }
     renameSync(tmpFile, targetPath)
     // Why: these hold auth credentials, so the published path must stay current-user only; cache only on confirmed success so failures retry.
-    if (applySecurePathRestriction(targetPath, false, process.platform, true)) {
+    if (dirHardened || applySecurePathRestriction(targetPath, false, process.platform, true)) {
       rememberHardenedPath(targetPath, false)
     }
     if (options.durable) {

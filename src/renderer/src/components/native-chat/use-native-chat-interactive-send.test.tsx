@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   inferQuestionAnswered: vi.fn(() => Promise.resolve(true)),
-  sendRuntimePtyInput: vi.fn(),
+  sendRuntimePtyInputVerified: vi.fn(),
   sendNativeChatAskAnswer: vi.fn(),
   sendNativeChatMessage: vi.fn(),
   // Mutable so a test can swap the live status between sendAnswer and settle.
@@ -32,7 +32,7 @@ vi.mock('../../store', () => ({
 }))
 
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
-  sendRuntimePtyInput: (...args: unknown[]) => mocks.sendRuntimePtyInput(...args)
+  sendRuntimePtyInputVerified: (...args: unknown[]) => mocks.sendRuntimePtyInputVerified(...args)
 }))
 
 vi.mock('@/lib/agent-paste-draft', () => ({
@@ -62,6 +62,7 @@ describe('useNativeChatInteractiveSend', () => {
     const handle = { cancel: mocks.cancel, settleAfterMs: 500 }
     mocks.sendNativeChatAskAnswer.mockReturnValue(handle)
     mocks.sendNativeChatMessage.mockReturnValue(handle)
+    mocks.sendRuntimePtyInputVerified.mockResolvedValue(true)
   })
 
   it('routes a non-selector answer through the pasted-text send path', () => {
@@ -192,10 +193,24 @@ describe('useNativeChatInteractiveSend', () => {
     act(() => result.current.cancel())
 
     expect(mocks.cancel).toHaveBeenCalledOnce()
-    expect(mocks.sendRuntimePtyInput).toHaveBeenCalledWith(
+    expect(mocks.sendRuntimePtyInputVerified).toHaveBeenCalledWith(
       { terminalTabId: 'tab-1' },
       'pty-1',
       '\x1b'
+    )
+  })
+
+  it('reports the verified runtime result for approval choices', async () => {
+    mocks.sendRuntimePtyInputVerified.mockResolvedValue(false)
+    const { result } = renderHook(() =>
+      useNativeChatInteractiveSend('tab-1', PANE_KEY, 'pty-1', 'claude')
+    )
+
+    await expect(result.current.sendRaw('1')).resolves.toBe(false)
+    expect(mocks.sendRuntimePtyInputVerified).toHaveBeenCalledWith(
+      { terminalTabId: 'tab-1' },
+      'pty-1',
+      '1'
     )
   })
 
@@ -208,7 +223,7 @@ describe('useNativeChatInteractiveSend', () => {
     act(() => result.current.cancelPending())
 
     expect(mocks.cancel).toHaveBeenCalledOnce()
-    expect(mocks.sendRuntimePtyInput).not.toHaveBeenCalled()
+    expect(mocks.sendRuntimePtyInputVerified).not.toHaveBeenCalled()
   })
 
   it('infers a Claude question answer only after every runtime write was delivered', () => {

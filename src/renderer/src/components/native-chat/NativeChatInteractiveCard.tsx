@@ -79,6 +79,7 @@ export function NativeChatInteractiveCard({
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const submittingRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
+  const [deliveryFailed, setDeliveryFailed] = useState(false)
   const clearDismissTimer = useCallback((): void => {
     if (dismissTimerRef.current) {
       clearTimeout(dismissTimerRef.current)
@@ -103,8 +104,10 @@ export function NativeChatInteractiveCard({
     if (!present) {
       setDismissedKey(null)
       clearDismissTimer()
+      setDeliveryFailed(false)
     }
   }, [present, clearDismissTimer])
+  useEffect(() => setDeliveryFailed(false), [cardKey])
 
   // Tell the view when a question card is up so it can hide the composer (this
   // card supplies its own input). Reset on unmount so the composer comes back.
@@ -123,12 +126,14 @@ export function NativeChatInteractiveCard({
         key={cardKey ?? 'question'}
         prompt={card.prompt}
         isSubmitting={submitting}
+        deliveryFailed={deliveryFailed}
         answerInputRef={answerInputRef}
         onAnswer={(selections) => {
           if (submittingRef.current) {
             return
           }
           submittingRef.current = true
+          setDeliveryFailed(false)
           const dismissAnsweredCard = (): void => {
             setDismissedKey(cardKey)
             submittingRef.current = false
@@ -138,6 +143,7 @@ export function NativeChatInteractiveCard({
           const keepRejectedAnswerVisible = (): void => {
             submittingRef.current = false
             setSubmitting(false)
+            setDeliveryFailed(true)
           }
           const result = sendAnswer(card.prompt, selections, (delivered) => {
             if (delivered) {
@@ -168,6 +174,7 @@ export function NativeChatInteractiveCard({
         }}
         onCancel={() => {
           clearDismissTimer()
+          setDeliveryFailed(false)
           setDismissedKey(cardKey)
           cancel()
         }}
@@ -177,9 +184,31 @@ export function NativeChatInteractiveCard({
   return (
     <NativeChatApprovalCard
       approval={card.approval}
+      isSubmitting={submitting}
+      deliveryFailed={deliveryFailed}
       onChoose={(raw) => {
-        setDismissedKey(cardKey)
-        sendRaw(raw)
+        if (submittingRef.current) {
+          return
+        }
+        submittingRef.current = true
+        setSubmitting(true)
+        setDeliveryFailed(false)
+        void sendRaw(raw).then(
+          (delivered) => {
+            submittingRef.current = false
+            setSubmitting(false)
+            if (delivered) {
+              setDismissedKey(cardKey)
+            } else {
+              setDeliveryFailed(true)
+            }
+          },
+          () => {
+            submittingRef.current = false
+            setSubmitting(false)
+            setDeliveryFailed(true)
+          }
+        )
       }}
     />
   )

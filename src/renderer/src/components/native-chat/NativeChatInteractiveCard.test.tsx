@@ -212,6 +212,46 @@ describe('NativeChatInteractiveCard answer lifecycle', () => {
   })
 })
 
+describe('NativeChatInteractiveCard approval lifecycle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    storeState.agentStatusByPaneKey['tab-1:leaf-1'].interactivePrompt = JSON.stringify({
+      approval: { tool: 'Bash', summary: 'pnpm test' }
+    })
+  })
+
+  afterEach(() => cleanup())
+
+  it('keeps the approval pending until verified delivery succeeds', async () => {
+    let settle: ((delivered: boolean) => void) | undefined
+    mocks.sendRaw.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        settle = resolve
+      })
+    )
+    renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Deny' })).toBeDisabled()
+
+    await act(async () => settle?.(true))
+    expect(screen.queryByRole('region', { name: 'Permission request' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the approval retryable when verified delivery fails', async () => {
+    mocks.sendRaw.mockResolvedValue(false)
+    renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await screen.findByRole('alert')
+
+    expect(screen.getByText(/choice was not delivered/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Allow once' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled()
+  })
+})
+
 // A headless host, a relay gap, or a replay can leave the pane with no live
 // `interactivePrompt` while the transcript still holds the unresolved call (#11761).
 // Which asks the transcript still counts as pending (orphaned calls, turn boundaries)

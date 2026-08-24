@@ -47,9 +47,12 @@ afterEach(async () => {
 })
 
 describe('Codex state DB backfill recovery', () => {
-  it('does not restart an exhausted supervisor when later triggers arrive', async () => {
+  it('restarts an exhausted supervisor when later triggers arrive', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {})
-    const run = vi.fn(async () => ({ outcome: 'gave-up' as const, spawnCount: 5 }))
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ outcome: 'gave-up' as const, spawnCount: 5 })
+      .mockResolvedValueOnce({ outcome: 'completed' as const, spawnCount: 1 })
     const withLock = vi.fn(
       async (_home: string, _signal: AbortSignal | undefined, claim: () => Promise<unknown>) =>
         await claim()
@@ -64,11 +67,11 @@ describe('Codex state DB backfill recovery', () => {
     await expect(first).resolves.toEqual({ outcome: 'gave-up', spawnCount: 5 })
     const repeated = startCodexStateDbBackfillRecoveryInBackground('/managed-home', dependencies)
 
-    expect(repeated).toBe(first)
-    await expect(repeated).resolves.toEqual({ outcome: 'gave-up', spawnCount: 5 })
-    expect(dependencies.isPending).toHaveBeenCalledTimes(1)
-    expect(withLock).toHaveBeenCalledTimes(1)
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(repeated).not.toBe(first)
+    await expect(repeated).resolves.toEqual({ outcome: 'completed', spawnCount: 1 })
+    expect(dependencies.isPending).toHaveBeenCalledTimes(2)
+    expect(withLock).toHaveBeenCalledTimes(2)
+    expect(run).toHaveBeenCalledTimes(2)
   })
 
   it('releases a completed supervisor entry', async () => {
@@ -121,7 +124,7 @@ describe('Codex state DB backfill recovery', () => {
     expect(dependencies.run).toHaveBeenCalledTimes(1)
   })
 
-  it('bounds permanent coordinator failures across later triggers', async () => {
+  it('retries permanent coordinator failures after the cap instead of getting stuck', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const dependencies = {
       isPending: vi.fn(() => true),
@@ -141,9 +144,9 @@ describe('Codex state DB backfill recovery', () => {
       await expect(task).resolves.toBeNull()
     }
 
-    expect(tasks[5]).toBe(tasks[4])
-    expect(dependencies.isPending).toHaveBeenCalledTimes(5)
-    expect(dependencies.withLock).toHaveBeenCalledTimes(5)
+    expect(tasks[5]).not.toBe(tasks[4])
+    expect(dependencies.isPending).toHaveBeenCalledTimes(6)
+    expect(dependencies.withLock).toHaveBeenCalledTimes(6)
     expect(dependencies.run).not.toHaveBeenCalled()
   })
 
@@ -365,6 +368,74 @@ describe('Codex state DB backfill recovery', () => {
       })
     ).resolves.toEqual({ outcome: 'completed', spawnCount: 1 })
     expect(terminate).toHaveBeenCalledWith(child)
+  })
+
+  it('uses stable read-only app-server arguments accepted across CLI approval-policy versions', async () => {
+    const child = createFakeChild()
+    const spawnProcess = vi.fn(() => child)
+    const readStatus = vi
+      .fn()
+      .mockReturnValueOnce({ kind: 'incomplete', stateDbPath: '/state.sqlite', status: 'running' })
+      .mockReturnValue({ kind: 'complete', stateDbPath: '/state.sqlite' })
+
+    await runCodexStateDbBackfillRecovery('/managed-home', new AbortController().signal, {
+      spawnProcess: spawnProcess as never,
+      resolveCommand: vi.fn(() => 'codex'),
+      readStatus,
+      terminate: vi.fn(async () => {}),
+      sleep: vi.fn(async () => {}),
+      now: vi.fn(() => 1_000)
+    })
+
+    expect(spawnProcess).toHaveBeenCalledWith(
+      'codex',
+      ['-s', 'read-only', 'app-server'],
+      expect.objectContaining({
+        cwd: '/managed-home',
+        env: expect.objectContaining({ CODEX_HOME: '/managed-home' })
+      })
+    )
+  })
+
+  it('quarantines a stalled state DB once and retries from a fresh database', async () => {
+    let now = 0
+    let repaired = false
+    const children: ReturnType<typeof createFakeChild>[] = []
+    const spawnProcess = vi.fn(() => {
+      const child = createFakeChild()
+      children.push(child)
+      if (children.length <= 5) {
+        queueMicrotask(() => child.emit('exit', 1, null))
+      }
+      return child
+    })
+    const readStatus = vi.fn(
+      (): CodexStateDbBackfillStatus =>
+        repaired && children.length >= 6
+          ? { kind: 'complete', stateDbPath: '/state.sqlite' }
+          : { kind: 'incomplete', stateDbPath: '/state.sqlite', status: 'running' }
+    )
+    const quarantineStateDb = vi.fn(async () => {
+      repaired = true
+      return '/managed-home/.mcode/state-db-recovery/backup'
+    })
+
+    await expect(
+      runCodexStateDbBackfillRecovery('/managed-home', new AbortController().signal, {
+        spawnProcess: spawnProcess as never,
+        readStatus,
+        quarantineStateDb,
+        terminate: vi.fn(async () => {}),
+        sleep: vi.fn(async (ms: number) => {
+          now += ms
+          await Promise.resolve()
+        }),
+        now: () => now
+      })
+    ).resolves.toEqual({ outcome: 'completed', spawnCount: 6 })
+
+    expect(quarantineStateDb).toHaveBeenCalledTimes(1)
+    expect(spawnProcess).toHaveBeenCalledTimes(6)
   })
 
   it('retries a live foreign lease until one durable claimant can recover it', async () => {

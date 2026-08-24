@@ -10,6 +10,7 @@ export type NativeChatLeafTitleAgentInput = {
   leafId: string | null
   panes: readonly NativeChatLeafTitlePane[]
   runtimePaneTitlesByPaneId: Readonly<Record<number, string>>
+  persistedSessionAgent?: TuiAgent | null
   tabLabel?: string | null
   terminalTitle?: string | null
 }
@@ -18,6 +19,7 @@ export function resolveNativeChatLeafTitleAgent({
   leafId,
   panes,
   runtimePaneTitlesByPaneId,
+  persistedSessionAgent,
   tabLabel,
   terminalTitle
 }: NativeChatLeafTitleAgentInput): TuiAgent | null {
@@ -37,6 +39,7 @@ export function resolveNativeChatLeafTitleAgent({
     return null
   }
   return (
+    persistedSessionAgent ??
     resolveCommittedTitleAgentType(tabLabel ?? '') ??
     resolveCommittedTitleAgentType(terminalTitle ?? '')
   )

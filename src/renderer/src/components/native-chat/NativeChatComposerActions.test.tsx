@@ -57,6 +57,6 @@ describe('NativeChatComposerActions', () => {
 
     const pickers = screen.getByTestId('session-option-pickers')
     const dictation = screen.getByRole('button', { name: 'Start dictation' })
-    expect(pickers.nextElementSibling).toBe(dictation)
+    expect(pickers.parentElement?.nextElementSibling?.contains(dictation)).toBe(true)
   })
 })

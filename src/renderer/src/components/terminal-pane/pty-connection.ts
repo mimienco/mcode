@@ -7412,6 +7412,8 @@ export function connectPanePty(
       pendingEscapeTailAnsi?: string
       kittyKeyboardFlags?: number
     }): Promise<void> {
+      // Why timed: replay parse cost lands in the activation frame; this makes it attributable.
+      const replayStartedAtMs = Date.now()
       const restorePtyId = transport.getPtyId()
       const restoreGeneration = hiddenOutputRestoreGeneration
       if (hiddenOutputSnapshotScrollRestore) {
@@ -7581,6 +7583,15 @@ export function connectPanePty(
       } finally {
         if (hiddenOutputSnapshotScrollRestore === scrollRestore) {
           hiddenOutputSnapshotScrollRestore = null
+        }
+        const replayElapsedMs = Date.now() - replayStartedAtMs
+        if (replayElapsedMs >= 150) {
+          warnTerminalLifecycleAnomaly('hidden output snapshot replay slow', {
+            ptyId: restorePtyId,
+            reason: `ms=${replayElapsedMs} chars=${
+              snapshot.data.length + (snapshot.scrollbackAnsi?.length ?? 0)
+            } seq=${typeof snapshot.seq === 'number' ? snapshot.seq : 'none'}`
+          })
         }
       }
     }
