@@ -76,10 +76,13 @@ export function resolveStateSerializeWorkerPath(
   isPackaged: boolean,
   pathExists: (candidate: string) => boolean = existsSync
 ): string | null {
-  const adjacentBuildEntry = join(appPath, 'state-serialize-worker-entry.js')
-  if (!isPackaged && pathExists(adjacentBuildEntry)) {
-    return adjacentBuildEntry
-  }
-  const packagedEntry = join(appPath, 'out', 'main', 'state-serialize-worker-entry.js')
-  return pathExists(packagedEntry) ? packagedEntry : null
+  // Why: rolldown nests entries by their input-key directory
+  // ('persistence/...'); cover the flat legacy layout and the dev root too.
+  const candidates = [
+    join(appPath, 'persistence', 'state-serialize-worker-entry.js'),
+    join(appPath, 'out', 'main', 'persistence', 'state-serialize-worker-entry.js'),
+    join(appPath, 'out', 'main', 'state-serialize-worker-entry.js'),
+    join(appPath, 'state-serialize-worker-entry.js')
+  ]
+  return candidates.find((candidate) => pathExists(candidate)) ?? null
 }
