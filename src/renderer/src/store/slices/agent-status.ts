@@ -1445,6 +1445,21 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
   let batchedAgentStatusEffects: (() => void)[] | null = null
   let batchedGeneratedTabTitleUpdates: GeneratedTabTitleUpdate[] | null = null
   let batchedAgentStatusFreshnessRequested = false
+  // Why: PERF-06 — maps privatized by the current batch are safe to mutate in
+  // place; the per-batch WeakSet keeps committed store maps untouchable.
+  let batchPrivatizedMaps: WeakSet<object> | null = null
+
+  function ensureMutableBatchDraftMap<T extends object>(map: T): T {
+    if (!batchPrivatizedMaps || !batchedAgentStatusState) {
+      return { ...map }
+    }
+    if (batchPrivatizedMaps.has(map)) {
+      return map
+    }
+    const copy = { ...map }
+    batchPrivatizedMaps.add(copy)
+    return copy
+  }
   const get = (): AppState => batchedAgentStatusState ?? storeGet()
   // Deliberately narrower than zustand's `set`: no `replace` parameter, so no call site in
   // this slice can compile into a REPLACE the batch commit is unable to express.
@@ -1518,6 +1533,7 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
     batchedAgentStatusState = initialState
     batchedAgentStatusEffects = []
     batchedGeneratedTabTitleUpdates = []
+    batchPrivatizedMaps = new WeakSet()
     try {
       const result = operation(batchTransaction)
       const nextState = batchedAgentStatusState
@@ -1543,7 +1559,7 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
       return result
     } finally {
       batchedAgentStatusState = null
-      batchedAgentStatusEffects = null
+      batchPrivatizedMaps = null
       batchedGeneratedTabTitleUpdates = null
       batchedAgentStatusFreshnessRequested = false
     }
@@ -2482,21 +2498,22 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
           (providerSessionChanged || (entry.state === 'done' && entry.sessionBoundary !== true)) &&
           paneKey in s.agentLaunchConfigByPaneKey
         ) {
-          nextLaunchConfigs = { ...s.agentLaunchConfigByPaneKey }
+          nextLaunchConfigs = ensureMutableBatchDraftMap(s.agentLaunchConfigByPaneKey)
           delete nextLaunchConfigs[paneKey]
         }
         if (liveRecoveryRecord) {
           if (!recoveryRecordMatches(existingSleepingRecord, liveRecoveryRecord)) {
-            nextSleepingAgentSessions = {
-              ...s.sleepingAgentSessionsByPaneKey,
-              [paneKey]: liveRecoveryRecord
-            }
+            nextSleepingAgentSessions = ensureMutableBatchDraftMap(nextSleepingAgentSessions)
+            nextSleepingAgentSessions[paneKey] = liveRecoveryRecord
           }
         } else if (existingSleepingRecord) {
-          nextSleepingAgentSessions = { ...s.sleepingAgentSessionsByPaneKey }
+          nextSleepingAgentSessions = ensureMutableBatchDraftMap(nextSleepingAgentSessions)
           delete nextSleepingAgentSessions[paneKey]
         }
-        const nextLive = { ...s.agentStatusByPaneKey, [paneKey]: entry }
+        // Why: PERF-06 — during a batch this map is a private draft, so the
+        // per-event spread collapses into an in-place write.
+        const nextLive = ensureMutableBatchDraftMap(s.agentStatusByPaneKey)
+        nextLive[paneKey] = entry
         // Why: cap the live map so a huge map's per-ping spread copy can't OOM the renderer (#9872).
         const evictedPaneKeys = capLiveAgentStatusesInPlace(
           nextLive,
