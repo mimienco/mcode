@@ -15,7 +15,14 @@ import { buildDuplicatedBrowserTabOptions } from '@/lib/duplicate-browser-tab-op
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { translate } from '@/i18n/i18n'
 import type { TabGroupWorktreeSnapshot } from './useTabGroupItemProjections'
+import {
+  launchTabGroupWorkspaceTemplate,
+  type TabGroupWorkspaceTemplateId
+} from './tab-group-workspace-template'
+import type { TuiAgent } from '../../../../shared/tui-agent'
 
 export function recordTerminalTabGroupSplit(createdTerminal: TerminalTab | null | undefined): void {
   if (!createdTerminal) {
@@ -39,6 +46,7 @@ export function useTabGroupCreationCommands({
   const setActiveTabType = useAppStore((state) => state.setActiveTabType)
   const createBrowserTab = useAppStore((state) => state.createBrowserTab)
   const createEmptySplitGroup = useAppStore((state) => state.createEmptySplitGroup)
+  const closeEmptyGroup = useAppStore((state) => state.closeEmptyGroup)
   const openNewBrowserTabInActiveWorkspace = useAppStore(
     (state) => state.openNewBrowserTabInActiveWorkspace
   )
@@ -73,9 +81,65 @@ export function useTabGroupCreationCommands({
     ]
   )
 
+  const launchWorkspaceTemplate = useCallback(
+    async (templateId: TabGroupWorkspaceTemplateId, agent: TuiAgent) => {
+      focusGroup(worktreeId, groupId)
+      try {
+        const outcome = await launchTabGroupWorkspaceTemplate({
+          templateId,
+          agent,
+          worktreeId,
+          sourceGroupId: groupId,
+          createEmptySplitGroup,
+          closeEmptyGroup,
+          openAgent: async (targetAgent, targetGroupId) => {
+            const result = launchAgentInNewTab({
+              agent: targetAgent,
+              worktreeId,
+              groupId: targetGroupId,
+              launchSource: 'tab_bar_quick_launch'
+            })
+            if (!result) {
+              throw new Error(
+                translate(
+                  'auto.components.tab.group.TabGroupEmptyState.templateAgentLaunchFailed',
+                  'Could not prepare the agent for this workspace.'
+                )
+              )
+            }
+          },
+          openBrowser: openNewBrowserTabInActiveWorkspace,
+          openMarkdown: openNewMarkdownInActiveWorkspace,
+          openTerminal: openNewTerminalTabInActiveWorkspace
+        })
+        if (outcome === 'split-unavailable') {
+          toast.error(
+            translate(
+              'auto.components.tab.group.TabGroupEmptyState.templateSplitFailed',
+              'Could not create the workspace split.'
+            )
+          )
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+      }
+    },
+    [
+      createEmptySplitGroup,
+      closeEmptyGroup,
+      focusGroup,
+      groupId,
+      openNewBrowserTabInActiveWorkspace,
+      openNewMarkdownInActiveWorkspace,
+      openNewTerminalTabInActiveWorkspace,
+      worktreeId
+    ]
+  )
+
   // Why: these stay unmemoized plain lambdas — the original built them inline in the returned commands object.
   return {
     createSplitGroup,
+    launchWorkspaceTemplate,
     newBrowserTab: () => {
       void openNewBrowserTabInActiveWorkspace(groupId).catch((error) => {
         toast.error(error instanceof Error ? error.message : String(error))

@@ -3147,7 +3147,26 @@
             "launchAgentTooltip": "Launch {{value0}} × {{value1}}",
             "sessionCountLabel": "Sessions to open",
             "decrementSessions": "Fewer {{value0}} sessions",
-            "incrementSessions": "More {{value0}} sessions"
+            "incrementSessions": "More {{value0}} sessions",
+            "workspaceHeading": "Build your workspace",
+            "workspaceDescription": "Choose agents and tools to work side by side.",
+            "agentsHeading": "Agents",
+            "toolsHeading": "Tools",
+            "startWorkspace": "Start workspace",
+            "templateResearch": "Research",
+            "templateResearchDescription": "Explore, gather, and synthesize information from the web.",
+            "templateResearchLayout": "Browser + agent",
+            "templateBuild": "Build",
+            "templateBuildDescription": "Plan, code, and test with developer tools.",
+            "templateBuildLayout": "Agent + terminal",
+            "templateReview": "Review",
+            "templateReviewDescription": "Review changes, run checks, and refine output.",
+            "templateReviewLayout": "Markdown + agent",
+            "templateHeading": "Start with a template",
+            "templateDescription": "Choose a setup or build your own.",
+            "templateAgentLaunchFailed": "Could not prepare the agent for this workspace.",
+            "templateSplitFailed": "Could not create the workspace split.",
+            "useTemplate": "Use template"
           }
         },
         "bar": {

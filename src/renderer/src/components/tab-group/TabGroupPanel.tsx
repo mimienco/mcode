@@ -321,6 +321,7 @@ export default function TabGroupPanel({
               void commands.newFileTab()
             }}
             onNewSimulator={commands.newSimulatorTab}
+            onUseTemplate={commands.launchWorkspaceTemplate}
             onActivateTerminal={commands.activateTerminal}
           />
         ) : null}

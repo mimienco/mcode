@@ -4,14 +4,21 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { launchMock, openSettingsPageMock, openSettingsTargetMock, openUrlMock, detectedIdsBox } =
-  vi.hoisted(() => ({
-    launchMock: vi.fn(),
-    openSettingsPageMock: vi.fn(),
-    openSettingsTargetMock: vi.fn(),
-    openUrlMock: vi.fn(),
-    detectedIdsBox: { value: ['claude', 'codex'] as string[] | null }
-  }))
+const {
+  launchMock,
+  openSettingsPageMock,
+  openSettingsTargetMock,
+  openUrlMock,
+  useTemplateMock,
+  detectedIdsBox
+} = vi.hoisted(() => ({
+  launchMock: vi.fn(),
+  openSettingsPageMock: vi.fn(),
+  openSettingsTargetMock: vi.fn(),
+  openUrlMock: vi.fn(),
+  useTemplateMock: vi.fn(),
+  detectedIdsBox: { value: ['claude', 'codex'] as string[] | null }
+}))
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), message: vi.fn() } }))
@@ -76,6 +83,7 @@ function renderEmptyState(): { activated: string[] } {
       onNewTerminal={() => {}}
       onNewBrowser={() => {}}
       onNewMarkdown={() => {}}
+      onUseTemplate={useTemplateMock}
       onActivateTerminal={(terminalId) => {
         activated.push(terminalId)
       }}
@@ -107,11 +115,11 @@ beforeEach(() => {
   openSettingsPageMock.mockReset()
   openSettingsTargetMock.mockReset()
   openUrlMock.mockReset().mockResolvedValue(undefined)
+  useTemplateMock.mockReset().mockResolvedValue(undefined)
   Object.defineProperty(window, 'api', {
     configurable: true,
     value: { shell: { openUrl: openUrlMock } }
   })
-
 })
 
 afterEach(cleanup)
@@ -126,6 +134,25 @@ describe('TabGroupEmptyState', () => {
     // Undetected featured agents render as install entries, not launch rows.
     expect(required('[data-agent-install-row="opencode"]')).toBeInTheDocument()
     expect(document.querySelector('[data-agent-launch-row="opencode"]')).toBeNull()
+  })
+
+  it('offers functional workspace templates and starts the selected template with the default agent', async () => {
+    renderEmptyState()
+
+    expect(required('[data-workspace-template="research"]')).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(required('[data-workspace-template="build"]'))
+    fireEvent.click(required('[data-start-workspace-template]'))
+
+    await vi.waitFor(() => expect(useTemplateMock).toHaveBeenCalledWith('build', 'claude'))
+  })
+
+  it('launches a template directly from its explicit action', async () => {
+    renderEmptyState()
+
+    fireEvent.click(required('[data-use-workspace-template="review"]'))
+
+    await vi.waitFor(() => expect(useTemplateMock).toHaveBeenCalledWith('review', 'claude'))
+    expect(required('[data-workspace-template="review"]')).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('launches the chosen number of sessions and focuses the last created tab', () => {
