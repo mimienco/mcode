@@ -4,6 +4,11 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { preloadE2EConfig } from './e2e-config'
 import { glApi } from './gitlab'
 import type { AppIdentity } from '../shared/app-identity'
+import {
+  RENDERER_HEALTH_CHANNEL,
+  RENDERER_HEALTH_PROBE_CHANNEL,
+  type RendererHealthReport
+} from '../shared/renderer-bootstrap-health'
 import type { MacCapturedDigitRowChord } from '../shared/macos-symbolic-hotkeys'
 import type { ComputerAwakeStatus } from '../shared/computer-awake-mode'
 import type {
@@ -534,6 +539,17 @@ ipcRenderer.on('ui:findInBrowserPage', (_event, source: unknown) => {
 // Custom APIs for renderer
 const api = {
   app: {
+    reportRendererHealth: (report: RendererHealthReport): void =>
+      ipcRenderer.send(RENDERER_HEALTH_CHANNEL, report),
+    onRendererHealthProbe: (listener: (probeId: number) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, probeId: unknown): void => {
+        if (typeof probeId === 'number') {
+          listener(probeId)
+        }
+      }
+      ipcRenderer.on(RENDERER_HEALTH_PROBE_CHANNEL, handler)
+      return () => ipcRenderer.removeListener(RENDERER_HEALTH_PROBE_CHANNEL, handler)
+    },
     getIdentity: (): Promise<AppIdentity> => ipcRenderer.invoke('app:getIdentity'),
     getFeatureWallAssetBaseUrl: (): Promise<string> =>
       ipcRenderer.invoke('app:getFeatureWallAssetBaseUrl'),

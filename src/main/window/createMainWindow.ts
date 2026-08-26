@@ -63,6 +63,7 @@ import { registerPluginPanelNavigationGuard } from '../plugins/plugin-panel-navi
 import { installWindowsPathRegistryChangeListener } from '../pty/windows-path-registry-change'
 import { installMainLoopStallDiagnostics } from './main-loop-stall-diagnostics'
 import { installRendererResponsivenessDiagnostics } from './renderer-responsiveness-diagnostics'
+import { installDevRendererHealthRecovery } from './dev-renderer-health-recovery'
 
 // Why: show/restore/resume can overlap before the size nudge resets; never capture the temporary width as the next baseline.
 const activeRepaintJiggles = new WeakSet<BrowserWindow>()
@@ -221,7 +222,9 @@ type CreateMainWindowOptions = {
 
 export function loadMainWindow(mainWindow: BrowserWindow): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL).catch((error) => {
+      console.error('[window] Failed to load the dev renderer:', error)
+    })
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -318,6 +321,19 @@ export function createMainWindow(
     mainWindow.setTitle(nativeWindowTitle)
   })
   const rendererWebContentsId = mainWindow.webContents.id
+  // Why: all in-place renderer recoveries share one budget so independent fault detectors cannot reload-loop together.
+  const rendererRecoveryCircuitBreaker = new RendererRecoveryCircuitBreaker({
+    windowMs: DEFAULT_RENDERER_RECOVERY_WINDOW_MS,
+    maxRecoveries: DEFAULT_RENDERER_RECOVERY_MAX_RECOVERIES
+  })
+  const devRendererHealthRecovery = installDevRendererHealthRecovery({
+    enabled: is.dev && Boolean(process.env.ELECTRON_RENDERER_URL),
+    window: mainWindow,
+    isClosing: () => windowClosing,
+    reload: () => loadMainWindow(mainWindow),
+    recoveryCircuitBreaker: rendererRecoveryCircuitBreaker,
+    onBeforeReload: opts?.onBeforeRecoveryReload
+  })
   installWindowsPathRegistryChangeListener(mainWindow)
   // Why: native paste fallback is privileged IPC; only the top-level renderer may request it.
   setTrustedUIRendererWebContentsId(rendererWebContentsId)
@@ -349,6 +365,7 @@ export function createMainWindow(
       return
     }
     forceRepaint(mainWindow)
+    devRendererHealthRecovery.systemResumed()
     mainWindow.webContents.send('system:resumed')
   }
   powerMonitor.on('resume', onSystemResume)
@@ -612,11 +629,6 @@ export function createMainWindow(
   }
   let rendererProcessGone = false
   let rendererRecoveryTimer: ReturnType<typeof setTimeout> | null = null
-  // Why: stop a deterministic per-load renderer fault from auto-reloading forever; breaker opens after too many recoveries in a rolling window.
-  const rendererRecoveryCircuitBreaker = new RendererRecoveryCircuitBreaker({
-    windowMs: DEFAULT_RENDERER_RECOVERY_WINDOW_MS,
-    maxRecoveries: DEFAULT_RENDERER_RECOVERY_MAX_RECOVERIES
-  })
   const clearRendererRecoveryTimer = (): void => {
     if (rendererRecoveryTimer) {
       clearTimeout(rendererRecoveryTimer)
@@ -685,6 +697,7 @@ export function createMainWindow(
   })
   mainWindow.webContents.on('did-start-navigation', (_e, _url, _isInPlace, isMainFrame) => {
     if (isMainFrame) {
+      devRendererHealthRecovery.navigationStarted()
       resetMarkdownEditorFocus()
       resetTerminalInputFocus()
       resetFloatingTerminalInputFocus()
@@ -694,7 +707,14 @@ export function createMainWindow(
   mainWindow.webContents.on('did-finish-load', () => {
     rendererProcessGone = false
     clearRendererRecoveryTimer()
+    devRendererHealthRecovery.documentLoaded()
   })
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
+      devRendererHealthRecovery.documentLoadFailed(errorCode, isMainFrame)
+    }
+  )
 
   const doubleTapDetector = new ModifierDoubleTapDetector()
 
@@ -1167,6 +1187,7 @@ export function createMainWindow(
     floatingPanelFocused = false
     shortcutRecorderFocused = false
     clearRendererRecoveryTimer()
+    devRendererHealthRecovery.dispose()
     ipcMain.removeListener(trafficLightChannel, onSyncTrafficLights)
     ipcMain.removeListener(minimizeChannel, onMinimize)
     ipcMain.removeListener(maximizeChannel, onMaximize)

@@ -15,6 +15,7 @@ import { I18nProvider } from './i18n/I18nProvider'
 import { translate } from './i18n/i18n'
 import { getOrCreateRendererRoot } from './lib/react-renderer-root'
 import { SkillWarningPreviewLauncher } from './components/skills/SkillWarningPreviewLauncher'
+import { installRendererBootstrapHealthReporter } from './lib/renderer-bootstrap-health-reporter'
 
 recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.env.DEV })
 installRendererCrashDiagnostics()
@@ -38,6 +39,22 @@ if (!rootElement) {
   recordRendererCrashBreadcrumb('renderer_root_missing')
   throw new Error('Renderer root element not found.')
 }
+const rendererRootElement = rootElement
+
+type RendererHotData = { rendererHealthReporterInstalled?: boolean }
+const rendererHotData = import.meta.hot?.data as RendererHotData | undefined
+// Why: document ownership lets the watchdog survive the Fast Refresh unmount that can empty #root.
+if (import.meta.env.DEV && !rendererHotData?.rendererHealthReporterInstalled) {
+  installRendererBootstrapHealthReporter({
+    root: rendererRootElement,
+    reportHealth: (report) => window.api.app.reportRendererHealth?.(report),
+    onHealthProbe: (listener) =>
+      window.api.app.onRendererHealthProbe?.(listener) ?? (() => undefined)
+  })
+  if (rendererHotData) {
+    rendererHotData.rendererHealthReporterInstalled = true
+  }
+}
 
 function RendererRoot(): React.JSX.Element {
   useTranslation()
@@ -57,7 +74,7 @@ function RendererRoot(): React.JSX.Element {
   )
 }
 
-getOrCreateRendererRoot(rootElement, import.meta.hot?.data).render(
+getOrCreateRendererRoot(rendererRootElement, import.meta.hot?.data).render(
   <StrictMode>
     <I18nProvider>
       <RendererRoot />

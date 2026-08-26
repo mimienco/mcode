@@ -12,8 +12,13 @@ import type { FloatingTerminalCwdRequest } from '../../shared/ui-chrome-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { KeyboardLayoutSnapshot } from '../../shared/keyboard-layout-snapshot'
 import type { KeyboardLayoutChangeEvent } from '../../shared/keyboard-layout-events'
+import type { RendererHealthReport } from '../../shared/renderer-bootstrap-health'
 
 export type AppApi = {
+  /** Reports whether the desktop renderer root is mounted. Dev recovery uses this to detect blank Vite loads. */
+  reportRendererHealth?: (report: RendererHealthReport) => void
+  /** Subscribes to main-process health probes for the current document generation. */
+  onRendererHealthProbe?: (listener: (probeId: number) => void) => () => void
   /** Returns the app identity currently exposed to native chrome and the titlebar. */
   getIdentity: () => Promise<AppIdentity>
   /** Returns a URL base for feature-wall assets. In dev this is Vite /@fs;
