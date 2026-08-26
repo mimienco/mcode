@@ -25,7 +25,7 @@
   align-items: center;
 }
 
-.tab-group-empty-state-agent-launch {
+.tab-group-empty-state-agent-identity {
   width: auto;
   height: 100%;
   flex: 1 1 0%;
@@ -63,7 +63,7 @@
     margin-right: 8px;
   }
 
-  .tab-group-empty-state-agent-launch {
+  .tab-group-empty-state-agent-identity {
     gap: 8px;
     padding-inline: 8px;
   }
@@ -92,7 +92,7 @@
     height: 72px;
   }
 
-  .tab-group-empty-state-agent-launch {
+  .tab-group-empty-state-agent-identity {
     height: 100%;
     gap: 16px;
     padding-inline: 16px;

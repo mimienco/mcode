@@ -125,25 +125,26 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('TabGroupEmptyState', () => {
-  it('renders one launch row per detected agent with a per-agent session count', () => {
+  it('renders every detected agent unselected and disables the workspace action', () => {
     renderEmptyState()
 
     expect(screen.getByText('Claude')).toBeInTheDocument()
     expect(screen.getByText('Codex')).toBeInTheDocument()
-    expect(required('[data-agent-count="claude"]')).toHaveTextContent('1')
-    // Undetected featured agents render as install entries, not launch rows.
+    expect(required('[data-agent-count="claude"]')).toHaveTextContent('0')
+    expect(required('[data-agent-count="codex"]')).toHaveTextContent('0')
+    expect(required<HTMLButtonElement>('[data-start-workspace]')).toBeDisabled()
+    // Undetected featured agents render as install entries, not selectable rows.
     expect(required('[data-agent-install-row="opencode"]')).toBeInTheDocument()
-    expect(document.querySelector('[data-agent-launch-row="opencode"]')).toBeNull()
+    expect(document.querySelector('[data-agent-row="opencode"]')).toBeNull()
   })
 
-  it('offers functional workspace templates and starts the selected template with the default agent', async () => {
+  it('offers selectable workspace templates', () => {
     renderEmptyState()
 
     expect(required('[data-workspace-template="research"]')).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(required('[data-workspace-template="build"]'))
-    fireEvent.click(required('[data-start-workspace-template]'))
-
-    await vi.waitFor(() => expect(useTemplateMock).toHaveBeenCalledWith('build', 'claude'))
+    expect(required('[data-workspace-template="build"]')).toHaveAttribute('aria-pressed', 'true')
+    expect(useTemplateMock).not.toHaveBeenCalled()
   })
 
   it('launches a template directly from its explicit action', async () => {
@@ -155,24 +156,34 @@ describe('TabGroupEmptyState', () => {
     expect(required('[data-workspace-template="review"]')).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('launches the chosen number of sessions and focuses the last created tab', () => {
+  it('does not launch an agent when its identity is clicked', () => {
+    renderEmptyState()
+
+    fireEvent.click(required('[data-agent-row="claude"]'))
+
+    expect(launchMock).not.toHaveBeenCalled()
+  })
+
+  it('starts every selected agent session and focuses the last created tab', () => {
     const { activated } = renderEmptyState()
 
     fireEvent.click(required('[data-agent-count-increment="claude"]'))
     fireEvent.click(required('[data-agent-count-increment="claude"]'))
-    expect(required('[data-agent-count="claude"]')).toHaveTextContent('3')
+    fireEvent.click(required('[data-agent-count-increment="codex"]'))
+    expect(required('[data-agent-count="claude"]')).toHaveTextContent('2')
+    expect(required('[data-agent-count="codex"]')).toHaveTextContent('1')
 
-    fireEvent.click(required('[data-agent-launch-row="claude"]'))
+    fireEvent.click(required('[data-start-workspace]'))
 
     expect(launchMock).toHaveBeenCalledTimes(3)
     expect(launchMock).toHaveBeenCalledWith(
       expect.objectContaining({ agent: 'claude', worktreeId: 'wt-1', groupId: 'group-1' })
     )
     expect(activated).toEqual(['tab-3'])
-    expect(launchedAgents()).toEqual(['claude', 'claude', 'claude'])
+    expect(launchedAgents()).toEqual(['claude', 'claude', 'codex'])
   })
 
-  it('clamps the session count to 1..10', () => {
+  it('clamps the session count to 0..10', () => {
     renderEmptyState()
 
     const increment = required<HTMLButtonElement>('[data-agent-count-increment="claude"]')
@@ -186,7 +197,7 @@ describe('TabGroupEmptyState', () => {
     for (let index = 0; index < 15; index += 1) {
       fireEvent.click(decrement)
     }
-    expect(required('[data-agent-count="claude"]')).toHaveTextContent('1')
+    expect(required('[data-agent-count="claude"]')).toHaveTextContent('0')
     expect(decrement).toBeDisabled()
   })
 
@@ -212,7 +223,7 @@ describe('TabGroupEmptyState', () => {
     try {
       renderEmptyState()
       expect(screen.getByText('No agents detected')).toBeInTheDocument()
-      expect(document.querySelector('[data-agent-launch-row="claude"]')).toBeNull()
+      expect(document.querySelector('[data-agent-row="claude"]')).toBeNull()
     } finally {
       detectedIdsBox.value = ['claude', 'codex']
     }

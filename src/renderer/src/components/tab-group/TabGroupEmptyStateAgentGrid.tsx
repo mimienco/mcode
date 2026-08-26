@@ -14,34 +14,28 @@ export function TabGroupEmptyStateAgentGrid({
   launchEntries,
   sessionCounts,
   maxSessions,
-  onLaunch,
   onSetSessionCount
 }: {
   launchEntries: QuickLaunchAgentMenuEntry[]
   sessionCounts: Record<string, number>
   maxSessions: number
-  onLaunch: (agent: TuiAgent) => void
   onSetSessionCount: (agent: TuiAgent, count: number) => void
 }): React.JSX.Element {
   return (
     <div className="grid gap-2 @min-[560px]/empty-state:grid-cols-2 @min-[860px]/empty-state:gap-4">
       {launchEntries.map(({ agent }) => {
-        const count = sessionCounts[agent] ?? 1
+        const count = sessionCounts[agent] ?? 0
         const label = getEmptyStateAgentLabel(agent)
         return (
           <div
             key={agent}
-            className="tab-group-empty-state-agent-card flex min-w-0 rounded-lg border border-border bg-card transition-colors hover:border-muted-foreground/35"
+            data-agent-row={agent}
+            data-agent-selected={count > 0 ? '' : undefined}
+            className={`tab-group-empty-state-agent-card flex min-w-0 rounded-lg border bg-card transition-colors ${
+              count > 0 ? 'border-ai-action-accent/70' : 'border-border'
+            }`}
           >
-            <Button
-              type="button"
-              variant="ghost"
-              data-agent-launch-row={agent}
-              onClick={() => {
-                onLaunch(agent)
-              }}
-              className="tab-group-empty-state-agent-launch flex h-10 w-full min-w-0 items-center justify-start gap-2 rounded-l-lg px-2 text-left outline-none hover:bg-accent/35 focus-visible:bg-accent/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ai-action-accent"
-            >
+            <div className="tab-group-empty-state-agent-identity flex h-10 w-full min-w-0 items-center justify-start gap-2 px-2 text-left">
               <span
                 aria-hidden
                 data-agent-channel-led={agent}
@@ -54,7 +48,7 @@ export function TabGroupEmptyStateAgentGrid({
               <span className="tab-group-empty-state-agent-label min-w-0 flex-1 whitespace-nowrap text-[10px] font-semibold text-foreground @min-[360px]/empty-state:text-sm @min-[860px]/empty-state:text-base">
                 {label}
               </span>
-            </Button>
+            </div>
 
             <div
               role="group"
@@ -73,7 +67,7 @@ export function TabGroupEmptyStateAgentGrid({
                   'Fewer {{value0}} sessions',
                   { value0: label }
                 )}
-                disabled={count <= 1}
+                disabled={count <= 0}
                 data-agent-count-decrement={agent}
                 className="text-muted-foreground hover:text-foreground @min-[860px]/empty-state:size-8"
                 onClick={() => {
@@ -85,7 +79,7 @@ export function TabGroupEmptyStateAgentGrid({
               <span
                 data-agent-count={agent}
                 className={`readout w-7 text-center text-xs @min-[860px]/empty-state:w-8 @min-[860px]/empty-state:text-sm ${
-                  count > 1 ? 'font-medium text-ai-action-accent' : 'text-muted-foreground'
+                  count > 0 ? 'font-medium text-ai-action-accent' : 'text-muted-foreground'
                 }`}
               >
                 {count}

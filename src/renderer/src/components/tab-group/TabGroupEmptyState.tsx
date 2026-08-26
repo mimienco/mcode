@@ -69,6 +69,10 @@ export default function TabGroupEmptyState({
   const launchEntries = entries.filter((entry) => entry.action === 'launch')
   const installEntries = entries.filter((entry) => entry.action === 'install')
   const templateAgent = launchEntries[0]?.agent ?? null
+  const selectedSessionCount = launchEntries.reduce(
+    (total, entry) => total + (sessionCounts[entry.agent] ?? 0),
+    0
+  )
 
   const openAgentSettings = useCallback(() => {
     openSettingsTarget({ pane: 'agents', repoId: null })
@@ -78,15 +82,18 @@ export default function TabGroupEmptyState({
   const setSessionCount = useCallback((agent: TuiAgent, count: number) => {
     setSessionCounts((previous) => ({
       ...previous,
-      [agent]: Math.min(MAX_TABS_PER_AGENT, Math.max(1, count))
+      [agent]: Math.min(MAX_TABS_PER_AGENT, Math.max(0, count))
     }))
   }, [])
 
-  const runLaunch = useCallback(
-    (agent: TuiAgent) => {
+  const launchSelectedAgents = useCallback(() => {
+    let lastTabId: string | null = null
+    for (const { agent } of launchEntries) {
+      const count = sessionCounts[agent] ?? 0
+      if (count === 0) {
+        continue
+      }
       const label = getEmptyStateAgentLabel(agent)
-      const count = sessionCounts[agent] ?? 1
-      let lastTabId: string | null = null
       for (let index = 0; index < count; index += 1) {
         const result = launchAgentInNewTab({
           agent,
@@ -108,12 +115,11 @@ export default function TabGroupEmptyState({
           lastTabId = result.tabId
         }
       }
-      if (lastTabId) {
-        onActivateTerminal(lastTabId)
-      }
-    },
-    [groupId, onActivateTerminal, sessionCounts, worktreeId]
-  )
+    }
+    if (lastTabId) {
+      onActivateTerminal(lastTabId)
+    }
+  }, [groupId, launchEntries, onActivateTerminal, sessionCounts, worktreeId])
 
   const openInstallPage = useCallback((agent: TuiAgent) => {
     const homepageUrl = getAgentCatalog().find((entry) => entry.id === agent)?.homepageUrl
@@ -246,7 +252,6 @@ export default function TabGroupEmptyState({
                   launchEntries={launchEntries}
                   sessionCounts={sessionCounts}
                   maxSessions={MAX_TABS_PER_AGENT}
-                  onLaunch={runLaunch}
                   onSetSessionCount={setSessionCount}
                 />
               </>
@@ -301,17 +306,16 @@ export default function TabGroupEmptyState({
             </Button>
             <Button
               type="button"
-              data-start-workspace-template
-              disabled={!templateAgent || isStartingTemplate}
-              onClick={() => {
-                void startTemplate(selectedTemplateId)
-              }}
+              data-start-workspace
+              disabled={selectedSessionCount === 0 || isStartingTemplate}
+              onClick={launchSelectedAgents}
               className="min-w-36 @min-[860px]/empty-state:h-12 @min-[860px]/empty-state:min-w-48 @min-[860px]/empty-state:text-base"
             >
               {translate(
                 'auto.components.tab.group.TabGroupEmptyState.startWorkspace',
                 'Start workspace'
               )}
+              <span className="readout text-xs opacity-75">{selectedSessionCount}</span>
               <ArrowRight />
             </Button>
           </footer>
