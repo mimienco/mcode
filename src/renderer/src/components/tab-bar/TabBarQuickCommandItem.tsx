@@ -1,5 +1,5 @@
-import type { MouseEvent, PointerEvent } from 'react'
-import { Check, Copy, Pencil, Play, Trash2 } from 'lucide-react'
+import type { DragEvent, MouseEvent, PointerEvent } from 'react'
+import { Check, Copy, GripVertical, Pencil, Play, Trash2 } from 'lucide-react'
 import { CommandItem } from '@/components/ui/command'
 import {
   getTerminalQuickCommandBody,
@@ -10,11 +10,18 @@ import { translate } from '@/i18n/i18n'
 import { useClipboardTextCopyFeedback } from '@/hooks/use-clipboard-text-copy-feedback'
 import type { HostedTerminalQuickCommand } from '@/hooks/use-terminal-quick-command-hosts'
 import { cn } from '@/lib/utils'
+import {
+  consumeQuickCommandDropHandled,
+  writeQuickCommandDragData
+} from '@/lib/quick-command-drag-data'
 
 type TabBarQuickCommandItemProps = {
   entry: HostedTerminalQuickCommand
   showHostLabel: boolean
+  onInsert: () => void
   onRun: () => void
+  onDragStarted?: () => void
+  onDragFinished?: (dropped: boolean) => void
   onEdit: () => void
   onDelete: () => void
 }
@@ -27,16 +34,37 @@ function stopRowSelect(event: MouseEvent | PointerEvent): void {
   event.stopPropagation()
 }
 
+function isQuickCommandInsertionSurfaceAt(clientX: number, clientY: number): boolean {
+  const target = document.elementFromPoint(clientX, clientY)
+  return Boolean(
+    target?.closest(
+      '[data-native-chat-composer-surface], [data-terminal-tab-id][data-terminal-layout-leaf-ids]'
+    )
+  )
+}
+
 export function TabBarQuickCommandItem({
   entry,
   showHostLabel,
+  onInsert,
   onRun,
+  onDragStarted,
+  onDragFinished,
   onEdit,
   onDelete
 }: TabBarQuickCommandItemProps): React.JSX.Element {
   const { command } = entry
   const body = getTerminalQuickCommandBody(command)
   const { canCopy, copyText, status } = useClipboardTextCopyFeedback(body)
+  const insertVerb = translate(
+    'auto.components.terminal.pane.TerminalContextMenu.c2f0b72b8d',
+    'Insert'
+  )
+  const runLabel = translate(
+    'auto.components.tab.bar.TabBarQuickCommandsButton.37e1bb90ce',
+    'Run: {{value0}}',
+    { value0: command.label }
+  )
 
   const copyLabel =
     status === 'copied'
@@ -57,9 +85,30 @@ export function TabBarQuickCommandItem({
   return (
     <CommandItem
       value={entry.key}
-      onSelect={onRun}
-      className="group/qc mx-1 my-0.5 cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
+      onSelect={onInsert}
+      aria-label={`${insertVerb} ${command.label}`}
+      draggable
+      onDragStart={(event) => {
+        if (!writeQuickCommandDragData(event.dataTransfer, command.label, body)) {
+          event.preventDefault()
+          return
+        }
+        onDragStarted?.()
+      }}
+      onDragEnd={(event: DragEvent<HTMLDivElement>) => {
+        const handledInternally = consumeQuickCommandDropHandled()
+        const insertedByFallback =
+          !handledInternally && isQuickCommandInsertionSurfaceAt(event.clientX, event.clientY)
+        if (insertedByFallback) {
+          onInsert()
+        }
+        onDragFinished?.(
+          handledInternally || insertedByFallback || event.dataTransfer.dropEffect !== 'none'
+        )
+      }}
+      className="group/qc mx-1 my-0.5 cursor-grab items-center gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 active:cursor-grabbing data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
     >
+      <GripVertical className="size-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
       {isTerminalAgentQuickCommand(command) ? (
         <span className="shrink-0 text-muted-foreground">
           <AgentIcon agent={command.agent} size={12} />
@@ -94,6 +143,18 @@ export function TabBarQuickCommandItem({
         )}
         className="flex shrink-0 items-center gap-0.5 can-hover:opacity-0 transition-opacity group-hover/qc:opacity-100 group-data-[selected=true]/qc:opacity-100"
       >
+        <button
+          type="button"
+          onPointerDown={stopRowSelect}
+          onClick={(event) => {
+            stopRowSelect(event)
+            onRun()
+          }}
+          className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label={runLabel}
+        >
+          <Play className="size-3" fill="currentColor" strokeWidth={0} />
+        </button>
         <button
           type="button"
           disabled={!canCopy}

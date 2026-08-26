@@ -234,8 +234,12 @@ export default function TabGroupPanel({
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
             <div className={focusedActionChromeClassName}>
-              {isFocused ? (
-                <TabBarQuickCommandsButton worktreeId={worktreeId} groupId={groupId} />
+              {isFocused && activeTab?.contentType === 'terminal' ? (
+                <TabBarQuickCommandsButton
+                  worktreeId={worktreeId}
+                  groupId={groupId}
+                  targetTerminalTabId={activeTab.entityId}
+                />
               ) : null}
               {isFocused && hasSplitGroups ? (
                 <Tooltip>

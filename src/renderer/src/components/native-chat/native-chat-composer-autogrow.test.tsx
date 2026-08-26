@@ -6,8 +6,9 @@
  *  has no layout engine, so real pixel growth is covered by app validation. */
 
 import { createRef } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { QUICK_COMMAND_DRAG_MIME } from '@/lib/quick-command-drag-data'
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
@@ -26,7 +27,7 @@ import { NativeChatComposerField } from './NativeChatComposerField'
 
 afterEach(() => cleanup())
 
-function renderField(draft: string): HTMLTextAreaElement {
+function renderField(draft: string, onInsertQuickCommand = vi.fn()): HTMLTextAreaElement {
   render(
     <NativeChatComposerField
       textareaRef={createRef<HTMLTextAreaElement>()}
@@ -51,6 +52,7 @@ function renderField(draft: string): HTMLTextAreaElement {
       onCompositionStart={vi.fn()}
       onCompositionEnd={vi.fn()}
       onPaste={vi.fn()}
+      onInsertQuickCommand={onInsertQuickCommand}
       pickerListboxId="picker"
       onChoosePickerItem={vi.fn()}
       onRetrySkills={vi.fn()}
@@ -101,5 +103,26 @@ describe('native chat composer autogrow', () => {
     // A JS measure pass writes style.height and only re-measures on the next
     // value change, so a re-wrap from a window/pane resize would strand it.
     expect(renderField('a\n'.repeat(6)).style.height).toBe('')
+  })
+
+  it('accepts an internal quick command drop as unsent composer text', () => {
+    const onInsertQuickCommand = vi.fn()
+    renderField('draft', onInsertQuickCommand)
+    const surface = document.querySelector('[data-native-chat-composer-surface]')
+    if (!(surface instanceof HTMLElement)) {
+      throw new Error('composer surface not found')
+    }
+    const dataTransfer = {
+      types: [QUICK_COMMAND_DRAG_MIME],
+      dropEffect: 'none',
+      getData: (type: string) =>
+        type === QUICK_COMMAND_DRAG_MIME
+          ? JSON.stringify({ version: 1, label: 'Review', text: 'Review this diff' })
+          : ''
+    }
+
+    expect(fireEvent.dragOver(surface, { dataTransfer })).toBe(false)
+    expect(fireEvent.drop(surface, { dataTransfer })).toBe(false)
+    expect(onInsertQuickCommand).toHaveBeenCalledWith('Review this diff')
   })
 })

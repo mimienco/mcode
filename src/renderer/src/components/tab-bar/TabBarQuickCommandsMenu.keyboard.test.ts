@@ -100,7 +100,8 @@ vi.mock('@/i18n/i18n', () => ({
 vi.mock('lucide-react', () => ({
   ChevronDown: () => null,
   Play: () => null,
-  Plus: () => null
+  Plus: () => null,
+  TextCursorInput: () => null
 }))
 
 vi.mock('@/components/ui/command', () => ({
@@ -134,6 +135,7 @@ function makeProps() {
     onAddCommand: vi.fn(),
     onDeleteCommand: vi.fn(),
     onEditCommand: vi.fn(),
+    onInsertCommand: vi.fn(),
     onMenuOpen: vi.fn(),
     onRunCommand: vi.fn()
   }

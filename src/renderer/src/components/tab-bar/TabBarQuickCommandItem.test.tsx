@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Command } from '@/components/ui/command'
 import type { HostedTerminalQuickCommand } from '@/hooks/use-terminal-quick-command-hosts'
+import { QUICK_COMMAND_DRAG_MIME } from '@/lib/quick-command-drag-data'
 import { TabBarQuickCommandItem } from './TabBarQuickCommandItem'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -59,10 +60,12 @@ afterEach(() => {
 })
 
 function renderItem(item: HostedTerminalQuickCommand = entry): {
+  onInsert: ReturnType<typeof vi.fn>
   onRun: ReturnType<typeof vi.fn>
   onEdit: ReturnType<typeof vi.fn>
   onDelete: ReturnType<typeof vi.fn>
 } {
+  const onInsert = vi.fn()
   const onRun = vi.fn()
   const onEdit = vi.fn()
   const onDelete = vi.fn()
@@ -74,6 +77,7 @@ function renderItem(item: HostedTerminalQuickCommand = entry): {
         createElement(TabBarQuickCommandItem, {
           entry: item,
           showHostLabel: false,
+          onInsert,
           onRun,
           onEdit,
           onDelete
@@ -81,7 +85,7 @@ function renderItem(item: HostedTerminalQuickCommand = entry): {
       )
     )
   })
-  return { onRun, onEdit, onDelete }
+  return { onInsert, onRun, onEdit, onDelete }
 }
 
 describe('TabBarQuickCommandItem', () => {
@@ -190,6 +194,49 @@ describe('TabBarQuickCommandItem', () => {
 
     expect(stopPropagation).toHaveBeenCalled()
     expect(preventDefault).toHaveBeenCalled()
+    expect(onRun).not.toHaveBeenCalled()
+  })
+
+  it('inserts on row activation and keeps Run as an explicit action', () => {
+    const { onInsert, onRun } = renderItem()
+    const row = container.querySelector('[cmdk-item]')
+    const runButton = container.querySelector('button[aria-label="Run: Git status"]')
+    if (!(row instanceof HTMLElement) || !(runButton instanceof HTMLButtonElement)) {
+      throw new Error('command controls not found')
+    }
+
+    act(() => row.click())
+    expect(onInsert).toHaveBeenCalledOnce()
+    expect(onRun).not.toHaveBeenCalled()
+
+    act(() => runButton.click())
+    expect(onRun).toHaveBeenCalledOnce()
+  })
+
+  it('publishes a copy-only drag payload without running the command', () => {
+    const { onRun } = renderItem()
+    const row = container.querySelector('[cmdk-item]')
+    if (!(row instanceof HTMLElement)) {
+      throw new Error('command row not found')
+    }
+    const values = new Map<string, string>()
+    const dataTransfer = {
+      effectAllowed: 'uninitialized',
+      setData: vi.fn((type: string, value: string) => values.set(type, value))
+    }
+    const event = new Event('dragstart', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
+
+    act(() => row.dispatchEvent(event))
+
+    expect(row.getAttribute('draggable')).toBe('true')
+    expect(dataTransfer.effectAllowed).toBe('copy')
+    expect(values.get('text/plain')).toBe('git status')
+    expect(JSON.parse(values.get(QUICK_COMMAND_DRAG_MIME) ?? '{}')).toEqual({
+      version: 1,
+      label: 'Git status',
+      text: 'git status'
+    })
     expect(onRun).not.toHaveBeenCalled()
   })
 })

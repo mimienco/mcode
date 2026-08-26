@@ -148,6 +148,15 @@ import { isEditableTarget } from '@/lib/editable-target'
 import { copyTerminalSelection } from './terminal-selection-copy'
 import { CODEX_ACCOUNT_RESTART_STARTUP } from '@/lib/codex-session-restart'
 import { WORKSPACE_FILE_PATH_MIME, WORKSPACE_FILE_PATHS_MIME } from '@/lib/workspace-file-drag'
+import {
+  hasQuickCommandDragData,
+  markQuickCommandDropHandled,
+  readQuickCommandDragData
+} from '@/lib/quick-command-drag-data'
+import {
+  dispatchQuickCommandInsert,
+  subscribeQuickCommandInsert
+} from '@/lib/quick-command-insert-event'
 import { isTerminalSessionStateSaveFailure } from '../../../../shared/terminal-session-state-save-failure'
 import { isTerminalZeroDimensionsDiagnostic } from '../../../../shared/terminal-zero-dimensions-diagnostic'
 import {
@@ -256,6 +265,7 @@ import {
 import { windowTerminalFocusCoordinator } from './window-terminal-focus-coordinator'
 import { useTerminalQuickCommandHosts } from '@/hooks/use-terminal-quick-command-hosts'
 import { refreshTerminalImeInputContext } from './terminal-ime-input-context-refresh'
+import { resolveInternalTerminalDropPane } from './terminal-drop-pane-resolution'
 
 type TerminalPaneProps = {
   tabId: string
@@ -394,6 +404,7 @@ function TerminalPane(
     copyKind: CloseTerminalDialogCopyKind
   } | null>(null)
   const [quickCommandEditorOpen, setQuickCommandEditorOpen] = useState(false)
+  const [quickCommandDragActive, setQuickCommandDragActive] = useState(false)
   const [quickCommandEditorHostId, setQuickCommandEditorHostId] =
     useState<ExecutionHostId>(LOCAL_EXECUTION_HOST_ID)
   const [chatLeafId, setChatLeafId] = useState<string | null>(null)
@@ -2025,6 +2036,29 @@ function TerminalPane(
       })
     }
 
+    const insertQuickCommandIntoPane = (pane: ManagedPane, text: string): void => {
+      const protectedOptions = resolvePaneProtectedMultilinePasteOptions(pane)
+      void executePanePasteText(pane, 'quick-command', document.activeElement, text, {
+        ...protectedOptions,
+        forceBracketedPasteForMultiline: true
+      }).then(() => pane.terminal.focus())
+    }
+
+    const releaseQuickCommandInsert = subscribeQuickCommandInsert(tabId, (text, targetPaneId) => {
+      if (effectiveChatViewMode) {
+        return
+      }
+      const manager = managerRef.current
+      const panes = manager?.getPanes() ?? []
+      const pane =
+        (targetPaneId === undefined
+          ? manager?.getActivePane()
+          : panes.find((candidate) => candidate.id === targetPaneId)) ?? panes[0]
+      if (pane) {
+        insertQuickCommandIntoPane(pane, text)
+      }
+    })
+
     const pasteFromClipboard = (
       pane: ManagedPane,
       source: Extract<TerminalPasteSource, 'keyboard' | 'paste-event'>,
@@ -2239,6 +2273,7 @@ function TerminalPane(
     window.addEventListener(APP_MENU_PASTE_EVENT, onAppMenuPaste)
     window.addEventListener(APP_MENU_SELECTION_ACTION_EVENT, onAppMenuSelectionAction)
     return () => {
+      releaseQuickCommandInsert()
       if (pasteSuppressionTimerId !== null) {
         window.clearTimeout(pasteSuppressionTimerId)
       }
@@ -2247,7 +2282,14 @@ function TerminalPane(
       window.removeEventListener(APP_MENU_PASTE_EVENT, onAppMenuPaste)
       window.removeEventListener(APP_MENU_SELECTION_ACTION_EVENT, onAppMenuSelectionAction)
     }
-  }, [isActive, worktreeId, keybindings, forceBracketedMultilineTextPaste, tabId])
+  }, [
+    effectiveChatViewMode,
+    isActive,
+    worktreeId,
+    keybindings,
+    forceBracketedMultilineTextPaste,
+    tabId
+  ])
 
   // Dismiss the pane's attention indicator on click (ghostty "show until interact"); pointerdown covers the mouse path onData doesn't.
   // NOT gated on isActive: clicking a visible-but-inactive split pane must clear the worktree dot before focusGroup re-renders it active.
@@ -3116,7 +3158,9 @@ function TerminalPane(
     <>
       <div
         ref={setContainerRef}
-        className="absolute inset-0 min-h-0 min-w-0"
+        className={`absolute inset-0 min-h-0 min-w-0${
+          quickCommandDragActive ? ' ring-2 ring-inset ring-ring/70' : ''
+        }`}
         data-native-file-drop-target="terminal"
         data-terminal-tab-id={tabId}
         data-terminal-layout-leaf-ids={expectedLayoutLeafIdsAttr}
@@ -3125,6 +3169,13 @@ function TerminalPane(
         onContextMenuCapture={contextMenu.onContextMenuCapture}
         onMouseDownCapture={handlePrimarySelectionMiddleMouseDown}
         onAuxClickCapture={handlePrimarySelectionAuxClick}
+        onDragOverCapture={(e) => {
+          if (!hasQuickCommandDragData(e.dataTransfer) || effectiveChatViewMode) {
+            return
+          }
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
         onDragOver={(e) => {
           if (
             e.dataTransfer.types.includes(WORKSPACE_FILE_PATH_MIME) ||
@@ -3132,6 +3183,38 @@ function TerminalPane(
           ) {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'copy'
+          }
+        }}
+        onDragEnterCapture={(e) => {
+          if (hasQuickCommandDragData(e.dataTransfer)) {
+            if (effectiveChatViewMode) {
+              return
+            }
+            e.preventDefault()
+            setQuickCommandDragActive(true)
+          }
+        }}
+        onDragLeaveCapture={(e) => {
+          if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) {
+            setQuickCommandDragActive(false)
+          }
+        }}
+        onDropCapture={(e) => {
+          if (!hasQuickCommandDragData(e.dataTransfer)) {
+            return
+          }
+          e.preventDefault()
+          e.stopPropagation()
+          setQuickCommandDragActive(false)
+          if (effectiveChatViewMode) {
+            return
+          }
+          const payload = readQuickCommandDragData(e.dataTransfer)
+          const manager = managerRef.current
+          const pane = manager ? resolveInternalTerminalDropPane(manager, e.target) : null
+          if (payload && pane) {
+            markQuickCommandDropHandled()
+            dispatchQuickCommandInsert(tabId, payload.text, pane.id)
           }
         }}
         onDrop={(e) => {

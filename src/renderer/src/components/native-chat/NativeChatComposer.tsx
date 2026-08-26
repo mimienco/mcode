@@ -1,4 +1,12 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { useAppStore } from '../../store'
 import { sendRuntimePtyInput } from '@/runtime/runtime-terminal-inspection'
 import { getSettingsForAgentTabRuntimeOwner } from '@/lib/agent-paste-draft'
@@ -21,6 +29,7 @@ import { useNativeChatSessionOptionCommand } from './use-native-chat-session-opt
 import { useNativeChatPickerState } from './use-native-chat-picker-state'
 import { useNativeChatPickerCommandDispatch } from './use-native-chat-picker-command-dispatch'
 import { useNativeChatTypedInsertion } from './use-native-chat-typed-insertion'
+import { subscribeQuickCommandInsert } from '@/lib/quick-command-insert-event'
 import { useNativeChatDeliveryRecovery } from './use-native-chat-delivery-recovery'
 import { useNativeChatComposerSend } from './use-native-chat-composer-send'
 import type {
@@ -190,6 +199,10 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       setHistory,
       setActiveSuggestion
     })
+    useEffect(
+      () => subscribeQuickCommandInsert(terminalTabId, insertTypedText),
+      [insertTypedText, terminalTabId]
+    )
 
     const { attachExternalPaths, resolveAttachmentOwner } = useNativeChatExternalAttachments({
       terminalTabId,
@@ -380,6 +393,7 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
           }
         }}
         onPaste={handlePaste}
+        onInsertQuickCommand={insertTypedText}
         pickerListboxId={picker.listboxId}
         onChoosePickerItem={completeItem}
         onRetrySkills={picker.retrySkills}

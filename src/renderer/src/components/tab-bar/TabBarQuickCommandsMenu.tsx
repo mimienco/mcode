@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Play } from 'lucide-react'
+import { ChevronDown, TextCursorInput } from 'lucide-react'
 import {
   Command,
   CommandEmpty,
@@ -14,11 +14,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
-import {
-  getTerminalQuickCommandBody,
-  isTerminalAgentQuickCommand
-} from '../../../../shared/terminal-quick-commands'
-import { getAgentLabel } from '@/lib/agent-catalog'
 import { TabBarQuickCommandItem } from './TabBarQuickCommandItem'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -29,6 +24,8 @@ import { TabBarQuickCommandAddActions } from './TabBarQuickCommandAddActions'
 import { TabBarQuickCommandHostLoadStatus } from './TabBarQuickCommandHostLoadStatus'
 import { searchHostedTerminalQuickCommands } from './hosted-terminal-quick-command-search'
 import { useTabBarQuickCommandSearchInput } from './use-tab-bar-quick-command-search-input'
+import { getQuickCommandInsertDescription } from './quick-command-insert-label'
+import { useTabBarQuickCommandDrag } from './use-tab-bar-quick-command-drag'
 import type {
   HostedTerminalQuickCommand,
   TerminalQuickCommandHost
@@ -43,6 +40,7 @@ type TabBarQuickCommandsMenuProps = {
   onAddCommand: (hostId: TerminalQuickCommandHost['hostId']) => void
   onDeleteCommand: (entry: HostedTerminalQuickCommand) => void
   onEditCommand: (entry: HostedTerminalQuickCommand) => void
+  onInsertCommand: (entry: HostedTerminalQuickCommand) => void
   onMenuOpen: () => void
   onRunCommand: (entry: HostedTerminalQuickCommand) => void
 }
@@ -57,6 +55,7 @@ export function TabBarQuickCommandsMenu({
   onAddCommand,
   onDeleteCommand,
   onEditCommand,
+  onInsertCommand,
   onMenuOpen,
   onRunCommand
 }: TabBarQuickCommandsMenuProps): React.JSX.Element {
@@ -68,9 +67,8 @@ export function TabBarQuickCommandsMenu({
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const commandListRef = useRef<HTMLDivElement | null>(null)
   const focusFrameRef = useRef<number | null>(null)
+  const preserveDestinationFocusRef = useRef(false)
   const menuImeEnter = useImeEnterGestureOwnership()
-  // Why: closing restores focus to the chevron for accessibility, but that
-  // focus restoration should not immediately reopen its tooltip.
   const suppressMoreCommandsTooltipRef = useRef(false)
   const showSearch = repoCommands.length + globalCommands.length > 1
   const filteredRepoCommands = useMemo(
@@ -150,16 +148,21 @@ export function TabBarQuickCommandsMenu({
     },
     [cancelFocusFrame, onMenuOpen]
   )
+  const quickCommandDrag = useTabBarQuickCommandDrag({
+    onOpenChange: handleOpenChange,
+    preserveDestinationFocusRef
+  })
   const closeMenu = useCallback((): void => {
-    handleOpenChange(false)
-  }, [handleOpenChange])
-  useTabBarQuickCommandsShortcut({ menuOpen, onOpenChange: handleOpenChange })
+    quickCommandDrag.handleOpenChange(false)
+  }, [quickCommandDrag])
+  useTabBarQuickCommandsShortcut({
+    menuOpen,
+    onOpenChange: quickCommandDrag.handleOpenChange
+  })
   useEffect(() => {
     if (!menuOpen || !showSearch) {
       return
     }
-    // Why: Radix focuses the menu surface by default; search-first UX needs
-    // the input ready so Enter can run the highlighted command.
     focusSearchInput()
     return cancelFocusFrame
   }, [cancelFocusFrame, focusSearchInput, menuOpen, showSearch])
@@ -170,19 +173,28 @@ export function TabBarQuickCommandsMenu({
     },
     [closeMenu, onRunCommand]
   )
+  const insertAndClose = useCallback(
+    (entry: HostedTerminalQuickCommand): void => {
+      preserveDestinationFocusRef.current = true
+      closeMenu()
+      onInsertCommand(entry)
+    },
+    [closeMenu, onInsertCommand]
+  )
   const searchInput = useTabBarQuickCommandSearchInput({
     commandListRef,
     commandValue,
     filteredCommands: filteredVisibleCommands,
     getCommandId: (entry) => entry.key,
     onCommandValueChange: setCommandValueOverride,
-    onRun: runAndClose,
+    onRun: insertAndClose,
     selectedCommand
   })
   const moreCommandsLabel = translate(
     'auto.components.tab.bar.TabBarQuickCommandsButton.b82e237a4b',
     'More quick commands'
   )
+  const insertVerb = translate('auto.components.github.GitHubMarkdownComposer.e3bd59143c', 'Insert')
   const splitButtonClass =
     'my-auto flex h-7 shrink-0 items-stretch overflow-hidden rounded-md border border-border/60 text-muted-foreground'
   const innerButtonBase =
@@ -193,52 +205,22 @@ export function TabBarQuickCommandsMenu({
         <TooltipTrigger asChild>
           <button
             type="button"
-            onClick={() => mostRecent && runAndClose(mostRecent)}
+            onClick={() => mostRecent && insertAndClose(mostRecent)}
             disabled={!mostRecent}
             className={cn(innerButtonBase, 'gap-1.5 rounded-l-md rounded-r-none px-1.5')}
-            aria-label={
-              mostRecent
-                ? translate(
-                    'auto.components.tab.bar.TabBarQuickCommandsButton.b775303755',
-                    'Run quick command: {{value0}}',
-                    { value0: mostRecent.command.label }
-                  )
-                : translate(
-                    'auto.components.tab.bar.TabBarQuickCommandsButton.85482c57bc',
-                    'Run quick command'
-                  )
-            }
+            aria-label={mostRecent ? `${insertVerb}: ${mostRecent.command.label}` : insertVerb}
           >
-            <Play className="size-3 shrink-0" fill="currentColor" strokeWidth={0} />
+            <TextCursorInput className="size-3 shrink-0" />
             <span className="max-w-[160px] truncate text-[12px] font-medium">
-              {mostRecent?.command.label ??
-                translate('auto.components.tab.bar.TabBarQuickCommandsButton.7b1c9d6ae1', 'Run')}
+              {mostRecent?.command.label ?? insertVerb}
             </span>
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={6}>
-          {mostRecent
-            ? isTerminalAgentQuickCommand(mostRecent.command)
-              ? translate(
-                  'auto.components.tab.bar.TabBarQuickCommandsButton.77ac113df0',
-                  'Start {{value0}}: {{value1}}',
-                  {
-                    value0: getAgentLabel(mostRecent.command.agent),
-                    value1: getTerminalQuickCommandBody(mostRecent.command)
-                  }
-                )
-              : translate(
-                  'auto.components.tab.bar.TabBarQuickCommandsButton.37e1bb90ce',
-                  'Run: {{value0}}',
-                  { value0: getTerminalQuickCommandBody(mostRecent.command) }
-                )
-            : translate(
-                'auto.components.tab.bar.TabBarQuickCommandsButton.85482c57bc',
-                'Run quick command'
-              )}
+          {mostRecent ? getQuickCommandInsertDescription(mostRecent, insertVerb) : insertVerb}
         </TooltipContent>
       </Tooltip>
-      <DropdownMenu modal={false} open={menuOpen} onOpenChange={handleOpenChange}>
+      <DropdownMenu modal={false} open={menuOpen} onOpenChange={quickCommandDrag.handleOpenChange}>
         <Tooltip open={moreCommandsTooltipOpen} onOpenChange={handleMoreCommandsTooltipOpenChange}>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
@@ -277,6 +259,13 @@ export function TabBarQuickCommandsMenu({
           side="bottom"
           sideOffset={6}
           className="w-80 p-0"
+          onCloseAutoFocus={(event) => {
+            if (preserveDestinationFocusRef.current) {
+              preserveDestinationFocusRef.current = false
+              event.preventDefault()
+            }
+          }}
+          onInteractOutside={quickCommandDrag.preventOutsideInteraction}
           onCompositionStart={() => {
             if (!showSearch) {
               menuImeEnter.setComposing(true)
@@ -295,7 +284,7 @@ export function TabBarQuickCommandsMenu({
               return
             }
             event.preventDefault()
-            runAndClose(filteredVisibleCommands[0])
+            insertAndClose(filteredVisibleCommands[0])
           }}
           onKeyUp={(event) => {
             if (!showSearch) {
@@ -321,8 +310,6 @@ export function TabBarQuickCommandsMenu({
                 )}
                 value={query}
                 onValueChange={(nextQuery) => {
-                  // Why: a new query changes the filtered list, so keyboard
-                  // selection should jump to the best match immediately.
                   setCommandValueOverride(null)
                   setQuery(nextQuery)
                 }}
@@ -355,7 +342,10 @@ export function TabBarQuickCommandsMenu({
                   key={entry.key}
                   entry={entry}
                   showHostLabel={addHosts.length > 1}
+                  onInsert={() => insertAndClose(entry)}
                   onRun={() => runAndClose(entry)}
+                  onDragStarted={quickCommandDrag.startDrag}
+                  onDragFinished={quickCommandDrag.finishDrag}
                   onEdit={() => {
                     closeMenu()
                     onEditCommand(entry)
@@ -374,7 +364,10 @@ export function TabBarQuickCommandsMenu({
                   key={entry.key}
                   entry={entry}
                   showHostLabel={addHosts.length > 1}
+                  onInsert={() => insertAndClose(entry)}
                   onRun={() => runAndClose(entry)}
+                  onDragStarted={quickCommandDrag.startDrag}
+                  onDragFinished={quickCommandDrag.finishDrag}
                   onEdit={() => {
                     closeMenu()
                     onEditCommand(entry)

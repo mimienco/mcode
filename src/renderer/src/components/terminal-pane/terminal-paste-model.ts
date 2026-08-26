@@ -5,6 +5,7 @@ export type TerminalPasteSource =
   | 'context-menu'
   | 'right-click'
   | 'middle-click'
+  | 'quick-command'
   | 'programmatic'
 
 export type TerminalPasteRuntime = {

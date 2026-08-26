@@ -4,6 +4,7 @@ import type {
   KeyboardEventHandler,
   RefObject
 } from 'react'
+import { useState } from 'react'
 import { CircleAlert } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,11 @@ import type {
   SessionOptionDescriptor,
   SessionOptionsSurface
 } from '../../../../shared/native-chat-session-options'
+import {
+  hasQuickCommandDragData,
+  markQuickCommandDropHandled,
+  readQuickCommandDragData
+} from '@/lib/quick-command-drag-data'
 
 export type NativeChatComposerFieldProps = {
   textareaRef: RefObject<HTMLTextAreaElement | null>
@@ -44,6 +50,7 @@ export type NativeChatComposerFieldProps = {
   onCompositionStart: CompositionEventHandler<HTMLTextAreaElement>
   onCompositionEnd: CompositionEventHandler<HTMLTextAreaElement>
   onPaste: ClipboardEventHandler<HTMLTextAreaElement>
+  onInsertQuickCommand: (text: string) => void
   pickerListboxId: string
   onChoosePickerItem: (item: NativeChatPickerItem) => void
   onRetrySkills: () => void
@@ -92,6 +99,7 @@ export function NativeChatComposerField({
   onCompositionStart,
   onCompositionEnd,
   onPaste,
+  onInsertQuickCommand,
   pickerListboxId,
   onChoosePickerItem,
   onRetrySkills,
@@ -111,6 +119,7 @@ export function NativeChatComposerField({
   sessionOptionsSurface,
   sessionOptionsSnapshot
 }: NativeChatComposerFieldProps): React.JSX.Element {
+  const [quickCommandDragActive, setQuickCommandDragActive] = useState(false)
   const activeOptionCount =
     autocomplete.mode === 'mention'
       ? mentionFiles.length
@@ -156,9 +165,58 @@ export function NativeChatComposerField({
           <div
             data-native-file-drop-target={NATIVE_FILE_DROP_TARGET.composer}
             data-native-chat-composer-surface
+            onDragEnter={(event) => {
+              if (!hasQuickCommandDragData(event.dataTransfer)) {
+                return
+              }
+              event.stopPropagation()
+              if (!disabled) {
+                event.preventDefault()
+                setQuickCommandDragActive(true)
+              }
+            }}
+            onDragLeave={(event) => {
+              if (hasQuickCommandDragData(event.dataTransfer)) {
+                event.stopPropagation()
+              }
+              if (
+                !(event.relatedTarget instanceof Node) ||
+                !event.currentTarget.contains(event.relatedTarget)
+              ) {
+                setQuickCommandDragActive(false)
+              }
+            }}
+            onDragOver={(event) => {
+              if (!hasQuickCommandDragData(event.dataTransfer)) {
+                return
+              }
+              event.stopPropagation()
+              if (!disabled) {
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'copy'
+              }
+            }}
+            onDrop={(event) => {
+              if (!hasQuickCommandDragData(event.dataTransfer)) {
+                return
+              }
+              event.stopPropagation()
+              if (disabled) {
+                return
+              }
+              const payload = readQuickCommandDragData(event.dataTransfer)
+              if (!payload) {
+                return
+              }
+              event.preventDefault()
+              setQuickCommandDragActive(false)
+              markQuickCommandDropHandled()
+              onInsertQuickCommand(payload.text)
+            }}
             className={cn(
               'rounded-xl border border-border/80 bg-card/80 p-2 transition-colors',
-              'focus-within:border-ring/55'
+              'focus-within:border-ring/55',
+              quickCommandDragActive && 'border-ring/70 bg-accent/30'
             )}
           >
             {fileReferences.length > 0 || imageAttachments.length > 0 ? (

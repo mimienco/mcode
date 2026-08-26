@@ -7,6 +7,7 @@ import {
   TerminalQuickCommandDialog
 } from '@/components/terminal-quick-commands/TerminalQuickCommandDialog'
 import {
+  getTerminalQuickCommandBody,
   getTerminalQuickCommandScope,
   isTerminalQuickCommandComplete
 } from '../../../../shared/terminal-quick-commands'
@@ -25,15 +26,18 @@ import {
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { useProjectHostSetupProjection } from '@/store/selectors'
 import { terminalQuickCommandMatchesWorkspaceProject } from '@/lib/terminal-quick-command-project-scope'
+import { dispatchQuickCommandInsert } from '@/lib/quick-command-insert-event'
 
 type TabBarQuickCommandsButtonProps = {
   worktreeId: string
   groupId: string
+  targetTerminalTabId: string
 }
 
 export function TabBarQuickCommandsButton({
   worktreeId,
-  groupId
+  groupId,
+  targetTerminalTabId
 }: TabBarQuickCommandsButtonProps): React.JSX.Element | null {
   const recentByGroup = useAppStore((s) => s.recentQuickCommandIdByGroup)
   const repos = useAppStore((s) => s.repos)
@@ -156,6 +160,10 @@ export function TabBarQuickCommandsButton({
       historyId: entry.key
     })
   }
+  const handleInsert = (entry: HostedTerminalQuickCommand): void => {
+    dispatchQuickCommandInsert(targetTerminalTabId, getTerminalQuickCommandBody(entry.command))
+    useAppStore.getState().setRecentQuickCommandForGroup(groupId, entry.key)
+  }
   const editorRepos = editor?.hostId.startsWith('runtime:')
     ? repos.filter((repo) => getRepoExecutionHostId(repo) === editor.hostId)
     : repos
@@ -226,6 +234,7 @@ export function TabBarQuickCommandsButton({
           setEditor({ mode: 'edit', command: entry.command, hostId: entry.hostId })
         }
         onDeleteCommand={(entry) => void handleDeleteCommand(entry)}
+        onInsertCommand={handleInsert}
         onRunCommand={handleRun}
       />
       <TerminalQuickCommandDialog
