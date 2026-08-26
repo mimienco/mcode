@@ -14,7 +14,10 @@ import {
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { runQuickCommandInNewTab } from '@/lib/run-quick-command-in-new-tab'
-import type { TerminalQuickCommand } from '../../../../shared/terminal-quick-command-types'
+import type {
+  TerminalQuickCommand,
+  TerminalQuickCommandScope
+} from '../../../../shared/terminal-quick-command-types'
 import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { translate } from '@/i18n/i18n'
 import { TabBarQuickCommandsMenu } from './TabBarQuickCommandsMenu'
@@ -115,14 +118,15 @@ export function TabBarQuickCommandsButton({
     ? executionHostId
     : hosts[0]?.hostId
 
-  const addRepoCommand = (hostId: ExecutionHostId): void => {
-    if (!repoId) {
-      return
-    }
+  const commandScope: TerminalQuickCommandScope = repoId
+    ? { type: 'repo', repoId }
+    : { type: 'global' }
+
+  const addCommand = (hostId: ExecutionHostId): void => {
     setEditor({
       mode: 'add',
       hostId,
-      command: createTerminalQuickCommandDraft({ type: 'repo', repoId })
+      command: createTerminalQuickCommandDraft(commandScope)
     })
   }
 
@@ -173,14 +177,14 @@ export function TabBarQuickCommandsButton({
     : repos
 
   // Empty state: single button that opens the dialog directly.
-  if (!hasAnyCommands && repoId && defaultHostId && hosts.length === 1 && !remoteHostPending) {
+  if (!hasAnyCommands && defaultHostId && !remoteHostPending) {
     return (
       <>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
-              onClick={() => addRepoCommand(defaultHostId)}
+              onClick={() => addCommand(defaultHostId)}
               className="my-auto flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label={translate(
                 'auto.components.tab.bar.TabBarQuickCommandsButton.8f1e971966',
@@ -197,16 +201,21 @@ export function TabBarQuickCommandsButton({
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6}>
-            {translate(
-              'auto.components.tab.bar.TabBarQuickCommandsButton.1d411fb6a5',
-              'Save a quick command for this repo'
-            )}
+            {repoId
+              ? translate(
+                  'auto.components.tab.bar.TabBarQuickCommandsButton.1d411fb6a5',
+                  'Save a quick command for this repo'
+                )
+              : translate(
+                  'components.tab.bar.quickCommands.saveGlobal',
+                  'Save a quick command for chats and terminals'
+                )}
           </TooltipContent>
         </Tooltip>
         <TerminalQuickCommandDialog
           open={editor !== null}
           mode={editor?.mode ?? 'add'}
-          command={editor?.command ?? createTerminalQuickCommandDraft({ type: 'repo', repoId })}
+          command={editor?.command ?? createTerminalQuickCommandDraft(commandScope)}
           repos={editorRepos}
           onOpenChange={(open) => !open && setEditor(null)}
           onSave={handleSaveCommand}
@@ -225,11 +234,11 @@ export function TabBarQuickCommandsButton({
         repoCommands={repoCommands}
         globalCommands={globalCommands}
         mostRecent={mostRecent}
-        addHosts={repoId ? hosts : []}
+        addHosts={hosts}
         hostLoadFailed={remoteHostLoadFailed}
         hostOwnershipPending={remoteHostPending}
         onMenuOpen={refreshRemoteHost}
-        onAddCommand={addRepoCommand}
+        onAddCommand={addCommand}
         onEditCommand={(entry) =>
           setEditor({ mode: 'edit', command: entry.command, hostId: entry.hostId })
         }
@@ -240,12 +249,7 @@ export function TabBarQuickCommandsButton({
       <TerminalQuickCommandDialog
         open={editor !== null}
         mode={editor?.mode ?? 'add'}
-        command={
-          editor?.command ??
-          createTerminalQuickCommandDraft(
-            repoId ? { type: 'repo', repoId } : { type: 'global' }
-          )
-        }
+        command={editor?.command ?? createTerminalQuickCommandDraft(commandScope)}
         repos={editorRepos}
         onOpenChange={(open) => !open && setEditor(null)}
         onSave={handleSaveCommand}
