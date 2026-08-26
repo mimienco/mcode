@@ -3,10 +3,9 @@ import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { PtyTransport } from './pty-transport'
 import type { PaneCwdMap } from './resolve-split-cwd'
 import type { TerminalQuickCommand } from '../../../../shared/terminal-quick-command-types'
-import { isTerminalAgentQuickCommand } from '../../../../shared/terminal-quick-commands'
-import { sendTerminalQuickCommandToPane } from './terminal-quick-command-dispatch'
+import { getTerminalQuickCommandBody } from '../../../../shared/terminal-quick-commands'
 import type { TerminalPasteSource } from './terminal-paste-coordinator'
-import { runQuickCommandInNewTab } from '@/lib/run-quick-command-in-new-tab'
+import { dispatchQuickCommandInsert } from '@/lib/quick-command-insert-event'
 import type { PreparedAgentSessionFork } from './terminal-agent-session-fork'
 import type { AgentSessionContinuationRequest } from '@/lib/agent-session-continuation'
 import { pasteTerminalPaneMenuClipboard } from './terminal-pane-menu-paste'
@@ -66,7 +65,7 @@ type TerminalMenuState = {
   onForkAgentSession: () => Promise<void>
   onContinueAgentSessionInNewSession: () => void
   onCopyAgentSessionContext: () => Promise<void>
-  onQuickCommand: (command: TerminalQuickCommand, historyId: string) => void
+  onInsertQuickCommand: (command: TerminalQuickCommand, historyId: string) => void
   onToggleExpand: () => void
   onSetTitle: () => void
   onClearPaneTitle: () => void
@@ -204,22 +203,12 @@ export function useTerminalPaneContextMenu({
   const onCopyAgentSessionContext = async (): Promise<void> =>
     copyAgentSessionContextFromMenuPane(resolveMenuPane())
 
-  const onQuickCommand = (command: TerminalQuickCommand, historyId: string): void => {
-    if (isTerminalAgentQuickCommand(command)) {
-      runQuickCommandInNewTab({ command, worktreeId, groupId, historyId })
-      return
-    }
-
+  const onInsertQuickCommand = (command: TerminalQuickCommand, _historyId: string): void => {
     const pane = resolveMenuPane()
     if (!pane) {
       return
     }
-    sendTerminalQuickCommandToPane({
-      command,
-      pane,
-      tabId,
-      transport: paneTransportsRef.current.get(pane.id)
-    })
+    dispatchQuickCommandInsert(tabId, getTerminalQuickCommandBody(command), pane.id)
   }
 
   const onToggleExpand = (): void => {
@@ -283,7 +272,7 @@ export function useTerminalPaneContextMenu({
     onForkAgentSession,
     onContinueAgentSessionInNewSession,
     onCopyAgentSessionContext,
-    onQuickCommand,
+    onInsertQuickCommand,
     onToggleExpand,
     onSetTitle: handleSetTitle,
     onClearPaneTitle: handleClearPaneTitle,

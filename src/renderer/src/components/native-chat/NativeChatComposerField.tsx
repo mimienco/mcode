@@ -4,7 +4,7 @@ import type {
   KeyboardEventHandler,
   RefObject
 } from 'react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CircleAlert } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -24,7 +24,8 @@ import type {
 import {
   hasQuickCommandDragData,
   markQuickCommandDropHandled,
-  readQuickCommandDragData
+  readQuickCommandDragData,
+  subscribeQuickCommandDragFinish
 } from '@/lib/quick-command-drag-data'
 
 export type NativeChatComposerFieldProps = {
@@ -120,6 +121,21 @@ export function NativeChatComposerField({
   sessionOptionsSnapshot
 }: NativeChatComposerFieldProps): React.JSX.Element {
   const [quickCommandDragActive, setQuickCommandDragActive] = useState(false)
+  const quickCommandSurfaceRef = useRef<HTMLDivElement>(null)
+  useEffect(
+    () =>
+      subscribeQuickCommandDragFinish((payload, point) => {
+        const surface = quickCommandSurfaceRef.current
+        const target = document.elementFromPoint(point.clientX, point.clientY)
+        if (disabled || !surface || !target || !surface.contains(target)) {
+          return false
+        }
+        setQuickCommandDragActive(false)
+        onInsertQuickCommand(payload.text)
+        return true
+      }),
+    [disabled, onInsertQuickCommand]
+  )
   const activeOptionCount =
     autocomplete.mode === 'mention'
       ? mentionFiles.length
@@ -163,6 +179,7 @@ export function NativeChatComposerField({
             </div>
           ) : null}
           <div
+            ref={quickCommandSurfaceRef}
             data-native-file-drop-target={NATIVE_FILE_DROP_TARGET.composer}
             data-native-chat-composer-surface
             onDragEnter={(event) => {

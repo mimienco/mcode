@@ -64,7 +64,7 @@ type TerminalContextMenuProps = {
   quickCommandHostLoadFailed: boolean
   quickCommandHostOwnershipPending: boolean
   quickCommandRepoLabel: string | null
-  onQuickCommand: (command: TerminalQuickCommand, historyId: string) => void
+  onInsertQuickCommand: (command: TerminalQuickCommand, historyId: string) => void
   onAddQuickCommand: (hostId: ExecutionHostId) => void
   onToggleExpand: () => void
   onSetTitle: () => void
@@ -103,7 +103,7 @@ export default function TerminalContextMenu({
   quickCommandHostLoadFailed,
   quickCommandHostOwnershipPending,
   quickCommandRepoLabel,
-  onQuickCommand,
+  onInsertQuickCommand,
   onAddQuickCommand,
   onToggleExpand,
   onSetTitle,
@@ -194,7 +194,7 @@ export default function TerminalContextMenu({
           hostLoadFailed={quickCommandHostLoadFailed}
           hostOwnershipPending={quickCommandHostOwnershipPending}
           repoLabel={quickCommandRepoLabel}
-          onRun={onQuickCommand}
+          onInsert={onInsertQuickCommand}
           onClose={() => onOpenChange(false)}
           onAdd={onAddQuickCommand}
         />

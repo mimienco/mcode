@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, waitFor } from '@testing-library/react'
+import type { RefObject } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   SessionOptionDescriptor,
@@ -13,6 +14,8 @@ import { clearNativeChatModelEnrichmentForTests } from './native-chat-session-op
 const mocks = vi.hoisted(() => ({
   cancelPendingSends: vi.fn(),
   fieldProps: null as {
+    textareaRef?: RefObject<HTMLTextAreaElement | null>
+    draft?: string
     onSend?: () => void
     onStop?: () => void
     onCompositionStart?: () => void
@@ -108,9 +111,14 @@ vi.mock('./native-chat-draft-cache', () => ({
   readNativeChatDraftCache: () => ''
 }))
 vi.mock('./NativeChatComposerField', () => ({
-  NativeChatComposerField: (props: { onSend?: () => void; onStop?: () => void }) => {
+  NativeChatComposerField: (props: {
+    textareaRef?: RefObject<HTMLTextAreaElement | null>
+    draft?: string
+    onSend?: () => void
+    onStop?: () => void
+  }) => {
     mocks.fieldProps = props
-    return null
+    return <textarea ref={props.textareaRef} value={props.draft} readOnly />
   }
 }))
 vi.mock('./use-native-chat-skills', () => ({
@@ -154,6 +162,7 @@ vi.mock('./use-native-chat-send-lifecycle', () => ({
 }))
 
 import { NativeChatComposer } from './NativeChatComposer'
+import { dispatchQuickCommandChatInsert } from '@/lib/quick-command-insert-event'
 
 describe('NativeChatComposer', () => {
   beforeEach(() => {
@@ -218,6 +227,26 @@ describe('NativeChatComposer', () => {
   })
 
   afterEach(() => cleanup())
+
+  it('inserts a routed quick command at the caret without sending it', () => {
+    const leafId = '123e4567-e89b-42d3-a456-426614174000'
+    const { getByRole } = render(
+      <NativeChatComposer
+        terminalTabId="tab-1"
+        paneKey={`tab-1:${leafId}`}
+        targetPtyId="pty-1"
+        agent="codex"
+      />
+    )
+    const textarea = getByRole('textbox') as HTMLTextAreaElement
+    textarea.setSelectionRange(2, 4)
+
+    act(() => dispatchQuickCommandChatInsert('tab-1', leafId, 'Review'))
+
+    expect(mocks.setDraft).toHaveBeenCalledWith('heReviewo')
+    expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
+    expect(mocks.sendNativeChatMessageReliably).not.toHaveBeenCalled()
+  })
 
   it('cancels delayed composer writes before the Stop button interrupts the agent', () => {
     const onStop = vi.fn()

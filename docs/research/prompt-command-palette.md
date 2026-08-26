@@ -60,6 +60,7 @@ Clipboard Copy remains useful for pasting outside MCode, but it should be explic
 3. **Drag codec:** add one shared MIME constant plus pure encode/decode/size-validation functions, following the existing AI Vault/Linear drag modules. Use one synchronous DOM listener boundary and pass decoded plain data to async adapters.
 4. **Palette UI:** evolve the existing tab-bar Quick Commands button/menu rather than adding another launcher. Make Insert the result-row activation, expose Run and Copy as clearly separate actions, preserve configurable cross-platform shortcut handling, and restore/move focus deliberately.
 5. **Drop targets:** add the custom MIME type alongside the existing file MIME checks in terminal and native-chat surfaces. Resolve the precise split pane/composer, show copy-cursor/drop highlighting, and never accept a drop while the target is disabled or stale.
+   Keep destination eligibility authoritative if Electron/xterm omits the final DOM `drop`: a synchronous drag-finish handshake may carry final coordinates, but the source row must never insert on the destination's behalf.
 6. **Verification:** unit-test codec version/size/tampering/protected-mode cases; caret/selection insertion; no-submit guarantees; multiline/control-character terminal handling; disabled/stale targets; SSH/remote transport; and IME. Add Playwright coverage for mouse drag plus keyboard/click insertion and focus restoration.
 
 ## Decision summary

@@ -1,10 +1,13 @@
+// @vitest-environment happy-dom
+
 import { describe, expect, it, vi } from 'vitest'
 import {
   QUICK_COMMAND_DRAG_MIME,
-  consumeQuickCommandDropHandled,
+  finishQuickCommandDrag,
   hasQuickCommandDragData,
   markQuickCommandDropHandled,
   readQuickCommandDragData,
+  subscribeQuickCommandDragFinish,
   writeQuickCommandDragData
 } from './quick-command-drag-data'
 
@@ -50,12 +53,36 @@ describe('quick command drag data', () => {
     expect(readQuickCommandDragData(malformed)).toBeNull()
   })
 
-  it('records whether an internal target handled the current drag', () => {
+  it('lets an eligible destination accept the Electron dragend fallback', () => {
     writeQuickCommandDragData(createDataTransfer(), 'Status', 'git status')
-    expect(consumeQuickCommandDropHandled()).toBe(false)
+    const destination = vi.fn(() => true)
+    const release = subscribeQuickCommandDragFinish(destination)
+
+    expect(finishQuickCommandDrag(12, 34)).toBe(true)
+    expect(destination).toHaveBeenCalledWith(
+      { label: 'Status', text: 'git status' },
+      { clientX: 12, clientY: 34 }
+    )
+    release()
+  })
+
+  it('does not treat a rejected fallback destination as a successful drop', () => {
+    writeQuickCommandDragData(createDataTransfer(), 'Status', 'git status')
+    const release = subscribeQuickCommandDragFinish(() => false)
+
+    expect(finishQuickCommandDrag(12, 34)).toBe(false)
+    release()
+  })
+
+  it('does not dispatch a fallback after a real destination handled the drop', () => {
+    writeQuickCommandDragData(createDataTransfer(), 'Status', 'git status')
+    const destination = vi.fn(() => true)
+    const release = subscribeQuickCommandDragFinish(destination)
     markQuickCommandDropHandled()
-    expect(consumeQuickCommandDropHandled()).toBe(true)
-    expect(consumeQuickCommandDropHandled()).toBe(false)
+
+    expect(finishQuickCommandDrag(12, 34)).toBe(true)
+    expect(destination).not.toHaveBeenCalled()
+    release()
   })
 
   it('refuses empty or oversized text at both write and read boundaries', () => {

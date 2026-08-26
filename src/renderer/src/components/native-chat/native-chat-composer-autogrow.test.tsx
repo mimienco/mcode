@@ -8,7 +8,11 @@
 import { createRef } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { QUICK_COMMAND_DRAG_MIME } from '@/lib/quick-command-drag-data'
+import {
+  QUICK_COMMAND_DRAG_MIME,
+  finishQuickCommandDrag,
+  writeQuickCommandDragData
+} from '@/lib/quick-command-drag-data'
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
@@ -27,12 +31,16 @@ import { NativeChatComposerField } from './NativeChatComposerField'
 
 afterEach(() => cleanup())
 
-function renderField(draft: string, onInsertQuickCommand = vi.fn()): HTMLTextAreaElement {
+function renderField(
+  draft: string,
+  onInsertQuickCommand = vi.fn(),
+  disabled = false
+): HTMLTextAreaElement {
   render(
     <NativeChatComposerField
       textareaRef={createRef<HTMLTextAreaElement>()}
       draft={draft}
-      disabled={false}
+      disabled={disabled}
       hasPty
       canSend
       autocomplete={{ mode: 'none' }}
@@ -124,5 +132,37 @@ describe('native chat composer autogrow', () => {
     expect(fireEvent.dragOver(surface, { dataTransfer })).toBe(false)
     expect(fireEvent.drop(surface, { dataTransfer })).toBe(false)
     expect(onInsertQuickCommand).toHaveBeenCalledWith('Review this diff')
+  })
+
+  it('owns the Electron dragend fallback and rejects it while disabled', () => {
+    const enabledInsert = vi.fn()
+    renderField('draft', enabledInsert)
+    const surface = document.querySelector('[data-native-chat-composer-surface]')
+    if (!(surface instanceof HTMLElement)) {
+      throw new Error('composer surface not found')
+    }
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(surface)
+    const values = new Map<string, string>()
+    const dataTransfer = {
+      effectAllowed: 'none',
+      setData: (type: string, value: string) => values.set(type, value)
+    } as unknown as DataTransfer
+    writeQuickCommandDragData(dataTransfer, 'Review', 'Review this diff')
+
+    expect(finishQuickCommandDrag(10, 20)).toBe(true)
+    expect(enabledInsert).toHaveBeenCalledWith('Review this diff')
+
+    cleanup()
+    const disabledInsert = vi.fn()
+    renderField('draft', disabledInsert, true)
+    const disabledSurface = document.querySelector('[data-native-chat-composer-surface]')
+    if (!(disabledSurface instanceof HTMLElement)) {
+      throw new Error('disabled composer surface not found')
+    }
+    vi.mocked(document.elementFromPoint).mockReturnValue(disabledSurface)
+    writeQuickCommandDragData(dataTransfer, 'Review', 'Review this diff')
+
+    expect(finishQuickCommandDrag(10, 20)).toBe(false)
+    expect(disabledInsert).not.toHaveBeenCalled()
   })
 })

@@ -28,6 +28,21 @@ export function resolveInternalTerminalDropPane(
   return manager.getActivePane() ?? panes[0] ?? null
 }
 
+export function resolveQuickCommandTerminalDropPane({
+  manager,
+  dropTarget,
+  chatLeafId,
+  chatViewEnabled
+}: {
+  manager: PaneManager
+  dropTarget: EventTarget | null | undefined
+  chatLeafId: string | null
+  chatViewEnabled: boolean
+}): ManagedPane | null {
+  const pane = resolveInternalTerminalDropPane(manager, dropTarget)
+  return pane && (!chatViewEnabled || pane.leafId !== chatLeafId) ? pane : null
+}
+
 function paneContainsDropTarget(pane: ManagedPane, dropTarget: EventTarget): boolean {
   try {
     // Why: synthetic drag targets are not always DOM Nodes, but browser drops are.

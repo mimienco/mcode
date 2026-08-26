@@ -8,6 +8,7 @@ Let developers reuse saved terminal commands and agent prompts without retyping 
 
 - Keep **Quick Commands** as the single saved-item library and persistence model.
 - Keep the existing project/global scopes, local/remote host ownership, search, edit, copy, and delete flows.
+- Keep global commands available in folder workspaces and floating terminals even when no repository scope exists.
 - Make every command row visibly draggable and expose the same drag payload to terminal and native-chat surfaces.
 - Make result activation insert by default for keyboard, touch, and pointer users; keep **Run** as a separate explicit row action.
 - Retain Copy as a secondary action for reuse outside MCode.
@@ -47,6 +48,8 @@ NativeChatComposerField   TerminalPane
 4. Terminal insertion resolves the pane under the drop target, sends the literal saved body without a carriage return, records user input activity, and focuses that pane.
 5. Dragging an agent prompt and dragging a terminal command use the same body-text contract; the destination decides what that text means.
 6. Existing file-drop behavior remains unchanged and can coexist on both surfaces.
+7. Each destination owns eligibility. Mixed chat/terminal splits route by the exact leaf under the pointer, and a disabled composer cannot be bypassed by a source-side fallback.
+8. Electron/xterm's missing-`drop` edge case uses an in-memory drag-finish handshake; only the eligible destination under the final coordinates may acknowledge and insert it.
 
 ## Verification
 

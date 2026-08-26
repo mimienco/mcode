@@ -2,7 +2,9 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
+  dispatchQuickCommandChatInsert,
   dispatchQuickCommandInsert,
+  subscribeQuickCommandChatInsert,
   subscribeQuickCommandInsert
 } from './quick-command-insert-event'
 
@@ -17,6 +19,20 @@ describe('quick command insert event', () => {
 
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledWith('Review this diff', 42)
+    releaseFirst()
+    releaseSecond()
+  })
+
+  it('routes chat insertion to one exact split leaf', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const releaseFirst = subscribeQuickCommandChatInsert('tab-1', 'leaf-1', first)
+    const releaseSecond = subscribeQuickCommandChatInsert('tab-1', 'leaf-2', second)
+
+    dispatchQuickCommandChatInsert('tab-1', 'leaf-2', 'Review this diff')
+
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith('Review this diff')
     releaseFirst()
     releaseSecond()
   })

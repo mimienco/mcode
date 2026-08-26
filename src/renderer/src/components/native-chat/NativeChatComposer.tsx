@@ -29,7 +29,8 @@ import { useNativeChatSessionOptionCommand } from './use-native-chat-session-opt
 import { useNativeChatPickerState } from './use-native-chat-picker-state'
 import { useNativeChatPickerCommandDispatch } from './use-native-chat-picker-command-dispatch'
 import { useNativeChatTypedInsertion } from './use-native-chat-typed-insertion'
-import { subscribeQuickCommandInsert } from '@/lib/quick-command-insert-event'
+import { subscribeQuickCommandChatInsert } from '@/lib/quick-command-insert-event'
+import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { useNativeChatDeliveryRecovery } from './use-native-chat-delivery-recovery'
 import { useNativeChatComposerSend } from './use-native-chat-composer-send'
 import type {
@@ -199,10 +200,13 @@ export const NativeChatComposer = forwardRef<NativeChatComposerHandle, NativeCha
       setHistory,
       setActiveSuggestion
     })
-    useEffect(
-      () => subscribeQuickCommandInsert(terminalTabId, insertTypedText),
-      [insertTypedText, terminalTabId]
-    )
+    useEffect(() => {
+      const leafId = parsePaneKey(paneKey)?.leafId
+      if (!leafId) {
+        return
+      }
+      return subscribeQuickCommandChatInsert(terminalTabId, leafId, insertTypedText)
+    }, [insertTypedText, paneKey, terminalTabId])
 
     const { attachExternalPaths, resolveAttachmentOwner } = useNativeChatExternalAttachments({
       terminalTabId,

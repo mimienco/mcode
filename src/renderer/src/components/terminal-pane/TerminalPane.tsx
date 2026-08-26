@@ -151,9 +151,11 @@ import { WORKSPACE_FILE_PATH_MIME, WORKSPACE_FILE_PATHS_MIME } from '@/lib/works
 import {
   hasQuickCommandDragData,
   markQuickCommandDropHandled,
-  readQuickCommandDragData
+  readQuickCommandDragData,
+  subscribeQuickCommandDragFinish
 } from '@/lib/quick-command-drag-data'
 import {
+  dispatchQuickCommandChatInsert,
   dispatchQuickCommandInsert,
   subscribeQuickCommandInsert
 } from '@/lib/quick-command-insert-event'
@@ -265,7 +267,7 @@ import {
 import { windowTerminalFocusCoordinator } from './window-terminal-focus-coordinator'
 import { useTerminalQuickCommandHosts } from '@/hooks/use-terminal-quick-command-hosts'
 import { refreshTerminalImeInputContext } from './terminal-ime-input-context-refresh'
-import { resolveInternalTerminalDropPane } from './terminal-drop-pane-resolution'
+import { resolveQuickCommandTerminalDropPane } from './terminal-drop-pane-resolution'
 
 type TerminalPaneProps = {
   tabId: string
@@ -2045,18 +2047,39 @@ function TerminalPane(
     }
 
     const releaseQuickCommandInsert = subscribeQuickCommandInsert(tabId, (text, targetPaneId) => {
-      if (effectiveChatViewMode) {
-        return
-      }
       const manager = managerRef.current
       const panes = manager?.getPanes() ?? []
       const pane =
         (targetPaneId === undefined
           ? manager?.getActivePane()
           : panes.find((candidate) => candidate.id === targetPaneId)) ?? panes[0]
-      if (pane) {
+      if (!pane) {
+        return
+      }
+      if (effectiveChatViewMode && pane.leafId === chatLeafId) {
+        dispatchQuickCommandChatInsert(tabId, pane.leafId, text)
+      } else {
         insertQuickCommandIntoPane(pane, text)
       }
+    })
+    const releaseQuickCommandDragFinish = subscribeQuickCommandDragFinish((payload, point) => {
+      const manager = managerRef.current
+      const target = document.elementFromPoint(point.clientX, point.clientY)
+      if (!manager || !target || !containerRef.current?.contains(target)) {
+        return false
+      }
+      const pane = resolveQuickCommandTerminalDropPane({
+        manager,
+        dropTarget: target,
+        chatLeafId,
+        chatViewEnabled: effectiveChatViewMode
+      })
+      if (!pane) {
+        return false
+      }
+      setQuickCommandDragActive(false)
+      insertQuickCommandIntoPane(pane, payload.text)
+      return true
     })
 
     const pasteFromClipboard = (
@@ -2274,6 +2297,7 @@ function TerminalPane(
     window.addEventListener(APP_MENU_SELECTION_ACTION_EVENT, onAppMenuSelectionAction)
     return () => {
       releaseQuickCommandInsert()
+      releaseQuickCommandDragFinish()
       if (pasteSuppressionTimerId !== null) {
         window.clearTimeout(pasteSuppressionTimerId)
       }
@@ -2283,6 +2307,7 @@ function TerminalPane(
       window.removeEventListener(APP_MENU_SELECTION_ACTION_EVENT, onAppMenuSelectionAction)
     }
   }, [
+    chatLeafId,
     effectiveChatViewMode,
     isActive,
     worktreeId,
@@ -3170,7 +3195,19 @@ function TerminalPane(
         onMouseDownCapture={handlePrimarySelectionMiddleMouseDown}
         onAuxClickCapture={handlePrimarySelectionAuxClick}
         onDragOverCapture={(e) => {
-          if (!hasQuickCommandDragData(e.dataTransfer) || effectiveChatViewMode) {
+          if (!hasQuickCommandDragData(e.dataTransfer)) {
+            return
+          }
+          const manager = managerRef.current
+          const pane = manager
+            ? resolveQuickCommandTerminalDropPane({
+                manager,
+                dropTarget: e.target,
+                chatLeafId,
+                chatViewEnabled: effectiveChatViewMode
+              })
+            : null
+          if (!pane) {
             return
           }
           e.preventDefault()
@@ -3187,7 +3224,16 @@ function TerminalPane(
         }}
         onDragEnterCapture={(e) => {
           if (hasQuickCommandDragData(e.dataTransfer)) {
-            if (effectiveChatViewMode) {
+            const manager = managerRef.current
+            const pane = manager
+              ? resolveQuickCommandTerminalDropPane({
+                  manager,
+                  dropTarget: e.target,
+                  chatLeafId,
+                  chatViewEnabled: effectiveChatViewMode
+                })
+              : null
+            if (!pane) {
               return
             }
             e.preventDefault()
@@ -3203,16 +3249,25 @@ function TerminalPane(
           if (!hasQuickCommandDragData(e.dataTransfer)) {
             return
           }
+          const manager = managerRef.current
+          const pane = manager
+            ? resolveQuickCommandTerminalDropPane({
+                manager,
+                dropTarget: e.target,
+                chatLeafId,
+                chatViewEnabled: effectiveChatViewMode
+              })
+            : null
+          // Native chat is portaled under this root. Its composer must remain the
+          // authoritative destination, including its disabled-state check.
+          if (!pane) {
+            return
+          }
           e.preventDefault()
           e.stopPropagation()
           setQuickCommandDragActive(false)
-          if (effectiveChatViewMode) {
-            return
-          }
           const payload = readQuickCommandDragData(e.dataTransfer)
-          const manager = managerRef.current
-          const pane = manager ? resolveInternalTerminalDropPane(manager, e.target) : null
-          if (payload && pane) {
+          if (payload) {
             markQuickCommandDropHandled()
             dispatchQuickCommandInsert(tabId, payload.text, pane.id)
           }
@@ -3407,7 +3462,7 @@ function TerminalPane(
         quickCommandHostLoadFailed={quickCommandHostLoadFailed}
         quickCommandHostOwnershipPending={quickCommandHostOwnershipPending}
         quickCommandRepoLabel={quickCommandRepoLabel}
-        onQuickCommand={contextMenu.onQuickCommand}
+        onInsertQuickCommand={contextMenu.onInsertQuickCommand}
         onAddQuickCommand={(hostId) =>
           quickCommandRepoId
             ? openQuickCommandEditor({ type: 'repo', repoId: quickCommandRepoId }, hostId)

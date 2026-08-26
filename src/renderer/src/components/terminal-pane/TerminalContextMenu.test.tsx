@@ -87,7 +87,7 @@ function renderMenu(overrides: Record<string, unknown> = {}): string {
     quickCommandHostLoadFailed: false,
     quickCommandHostOwnershipPending: false,
     quickCommandRepoLabel: 'MCode',
-    onQuickCommand: vi.fn(),
+    onInsertQuickCommand: vi.fn(),
     onAddQuickCommand: vi.fn(),
     onToggleExpand: vi.fn(),
     onSetTitle: vi.fn(),
@@ -232,8 +232,8 @@ describe('TerminalContextMenu', () => {
     expect(rendered).not.toContain('Local Mac')
   })
 
-  it('passes hosted identity when running a command', () => {
-    const onQuickCommand = vi.fn()
+  it('passes hosted identity when inserting a command', () => {
+    const onInsertQuickCommand = vi.fn()
     const command = {
       id: 'review',
       label: 'Remote review',
@@ -243,7 +243,7 @@ describe('TerminalContextMenu', () => {
       scope: { type: 'global' as const }
     }
     renderMenu({
-      onQuickCommand,
+      onInsertQuickCommand,
       quickCommandHosts: [
         {
           hostId: 'runtime:build',
@@ -254,10 +254,12 @@ describe('TerminalContextMenu', () => {
       ]
     })
 
-    const commandItem = items.list.find((item) => childrenText(item.children) === 'Remote review')
+    const commandItem = items.list.find((item) =>
+      childrenText(item.children).startsWith('Remote review')
+    )
     commandItem?.onSelect?.()
 
-    expect(onQuickCommand).toHaveBeenCalledWith(command, 'runtime:build\0review')
+    expect(onInsertQuickCommand).toHaveBeenCalledWith(command, 'runtime:build\0review')
   })
 
   it('suppresses add actions while remote host ownership is loading', () => {

@@ -48,7 +48,8 @@ export function TabBarQuickCommandsButton({
   // Why: floating terminals share a synthetic worktree id (`global-floating-terminal`)
   // that has no separator, so naive `getRepoIdFromWorktreeId` would return that
   // sentinel as a "repo id" and the button would point at a repo that doesn't
-  // exist. Resolve to a real repo from the workspace; otherwise hide the button.
+  // exist. A missing repo suppresses repo-scoped commands and add actions, but
+  // global commands remain useful in folder workspaces and floating terminals.
   const repoId = useMemo(() => {
     if (worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
       return null
@@ -112,13 +113,16 @@ export function TabBarQuickCommandsButton({
   const hasAnyCommands = totalVisible > 0
   const defaultHostId = hosts.some((host) => host.hostId === executionHostId)
     ? executionHostId
-    : hosts[0].hostId
+    : hosts[0]?.hostId
 
   const addRepoCommand = (hostId: ExecutionHostId): void => {
+    if (!repoId) {
+      return
+    }
     setEditor({
       mode: 'add',
       hostId,
-      command: createTerminalQuickCommandDraft({ type: 'repo', repoId: repoId ?? '' })
+      command: createTerminalQuickCommandDraft({ type: 'repo', repoId })
     })
   }
 
@@ -168,16 +172,8 @@ export function TabBarQuickCommandsButton({
     ? repos.filter((repo) => getRepoExecutionHostId(repo) === editor.hostId)
     : repos
 
-  // Why: hidden in folder-mode worktrees (no repoId) and floating terminals.
-  // Without a repoId the button can't represent a repo-scoped run target, and
-  // global-only mode would be confusing in a context that doesn't belong to a
-  // repo at all.
-  if (!repoId) {
-    return null
-  }
-
   // Empty state: single button that opens the dialog directly.
-  if (!hasAnyCommands && hosts.length === 1 && !remoteHostPending) {
+  if (!hasAnyCommands && repoId && defaultHostId && hosts.length === 1 && !remoteHostPending) {
     return (
       <>
         <Tooltip>
@@ -219,13 +215,17 @@ export function TabBarQuickCommandsButton({
     )
   }
 
+  if (!hasAnyCommands) {
+    return null
+  }
+
   return (
     <>
       <TabBarQuickCommandsMenu
         repoCommands={repoCommands}
         globalCommands={globalCommands}
         mostRecent={mostRecent}
-        addHosts={hosts}
+        addHosts={repoId ? hosts : []}
         hostLoadFailed={remoteHostLoadFailed}
         hostOwnershipPending={remoteHostPending}
         onMenuOpen={refreshRemoteHost}
@@ -240,7 +240,12 @@ export function TabBarQuickCommandsButton({
       <TerminalQuickCommandDialog
         open={editor !== null}
         mode={editor?.mode ?? 'add'}
-        command={editor?.command ?? createTerminalQuickCommandDraft({ type: 'repo', repoId })}
+        command={
+          editor?.command ??
+          createTerminalQuickCommandDraft(
+            repoId ? { type: 'repo', repoId } : { type: 'global' }
+          )
+        }
         repos={editorRepos}
         onOpenChange={(open) => !open && setEditor(null)}
         onSave={handleSaveCommand}

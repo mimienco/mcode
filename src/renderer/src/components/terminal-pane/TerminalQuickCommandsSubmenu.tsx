@@ -1,4 +1,4 @@
-import { Play, Plus } from 'lucide-react'
+import { GripVertical, Play, Plus } from 'lucide-react'
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -10,7 +10,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { TerminalQuickCommand } from '../../../../shared/terminal-quick-command-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import { isTerminalAgentQuickCommand } from '../../../../shared/terminal-quick-commands'
+import {
+  getTerminalQuickCommandBody,
+  isTerminalAgentQuickCommand
+} from '../../../../shared/terminal-quick-commands'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
 import {
@@ -18,6 +21,10 @@ import {
   shouldShowTerminalQuickCommandHostOwnership,
   type TerminalQuickCommandMenuHost
 } from '@/hooks/use-terminal-quick-command-hosts'
+import {
+  finishQuickCommandDrag,
+  writeQuickCommandDragData
+} from '@/lib/quick-command-drag-data'
 
 type TerminalQuickCommandsSubmenuProps = {
   hosts: TerminalQuickCommandMenuHost[]
@@ -26,7 +33,7 @@ type TerminalQuickCommandsSubmenuProps = {
   repoLabel: string | null
   onAdd: (hostId: ExecutionHostId) => void
   onClose: () => void
-  onRun: (command: TerminalQuickCommand, historyId: string) => void
+  onInsert: (command: TerminalQuickCommand, historyId: string) => void
 }
 
 export function TerminalQuickCommandsSubmenu({
@@ -36,7 +43,7 @@ export function TerminalQuickCommandsSubmenu({
   repoLabel,
   onAdd,
   onClose,
-  onRun
+  onInsert
 }: TerminalQuickCommandsSubmenuProps): React.JSX.Element {
   const nonEmptyHosts = hosts.filter(
     (host) => host.repoCommands.length > 0 || host.globalCommands.length > 0
@@ -46,8 +53,24 @@ export function TerminalQuickCommandsSubmenu({
   const renderCommand = (hostId: ExecutionHostId, command: TerminalQuickCommand) => (
     <DropdownMenuItem
       key={`${hostId}:${command.id}`}
-      onSelect={() => onRun(command, getHostedTerminalQuickCommandKey(hostId, command.id))}
+      onSelect={() => onInsert(command, getHostedTerminalQuickCommandKey(hostId, command.id))}
+      draggable
+      onDragStart={(event) => {
+        if (
+          !writeQuickCommandDragData(
+            event.dataTransfer,
+            command.label,
+            getTerminalQuickCommandBody(command)
+          )
+        ) {
+          event.preventDefault()
+        }
+      }}
+      onDragEnd={(event) => {
+        finishQuickCommandDrag(event.clientX, event.clientY)
+      }}
     >
+      <GripVertical className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
       {isTerminalAgentQuickCommand(command) ? (
         <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
           <AgentIcon agent={command.agent} size={14} />
@@ -60,11 +83,9 @@ export function TerminalQuickCommandsSubmenu({
         />
       )}
       <span className="min-w-0 flex-1 truncate">{command.label}</span>
-      {!isTerminalAgentQuickCommand(command) && !command.appendEnter ? (
-        <DropdownMenuShortcut className="shrink-0">
-          {translate('auto.components.terminal.pane.TerminalContextMenu.c2f0b72b8d', 'Insert')}
-        </DropdownMenuShortcut>
-      ) : null}
+      <DropdownMenuShortcut className="shrink-0">
+        {translate('auto.components.terminal.pane.TerminalContextMenu.c2f0b72b8d', 'Insert')}
+      </DropdownMenuShortcut>
     </DropdownMenuItem>
   )
 

@@ -14,7 +14,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
-import { TabBarQuickCommandItem } from './TabBarQuickCommandItem'
+import {
+  TabBarQuickCommandActions,
+  TabBarQuickCommandItem
+} from './TabBarQuickCommandItem'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
@@ -343,17 +346,8 @@ export function TabBarQuickCommandsMenu({
                   entry={entry}
                   showHostLabel={addHosts.length > 1}
                   onInsert={() => insertAndClose(entry)}
-                  onRun={() => runAndClose(entry)}
                   onDragStarted={quickCommandDrag.startDrag}
                   onDragFinished={quickCommandDrag.finishDrag}
-                  onEdit={() => {
-                    closeMenu()
-                    onEditCommand(entry)
-                  }}
-                  onDelete={() => {
-                    closeMenu()
-                    onDeleteCommand(entry)
-                  }}
                 />
               ))}
               {filteredRepoCommands.length > 0 && filteredGlobalCommands.length > 0 ? (
@@ -365,20 +359,25 @@ export function TabBarQuickCommandsMenu({
                   entry={entry}
                   showHostLabel={addHosts.length > 1}
                   onInsert={() => insertAndClose(entry)}
-                  onRun={() => runAndClose(entry)}
                   onDragStarted={quickCommandDrag.startDrag}
                   onDragFinished={quickCommandDrag.finishDrag}
-                  onEdit={() => {
-                    closeMenu()
-                    onEditCommand(entry)
-                  }}
-                  onDelete={() => {
-                    closeMenu()
-                    onDeleteCommand(entry)
-                  }}
                 />
               ))}
             </CommandList>
+            {selectedCommand ? (
+              <TabBarQuickCommandActions
+                entry={selectedCommand}
+                onRun={() => runAndClose(selectedCommand)}
+                onEdit={() => {
+                  closeMenu()
+                  onEditCommand(selectedCommand)
+                }}
+                onDelete={() => {
+                  closeMenu()
+                  onDeleteCommand(selectedCommand)
+                }}
+              />
+            ) : null}
             {hostOwnershipPending ? (
               <TabBarQuickCommandHostLoadStatus failed={hostLoadFailed} />
             ) : (

@@ -3,10 +3,13 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Command } from '@/components/ui/command'
+import { Command, CommandList } from '@/components/ui/command'
 import type { HostedTerminalQuickCommand } from '@/hooks/use-terminal-quick-command-hosts'
 import { QUICK_COMMAND_DRAG_MIME } from '@/lib/quick-command-drag-data'
-import { TabBarQuickCommandItem } from './TabBarQuickCommandItem'
+import {
+  TabBarQuickCommandActions,
+  TabBarQuickCommandItem
+} from './TabBarQuickCommandItem'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -74,10 +77,17 @@ function renderItem(item: HostedTerminalQuickCommand = entry): {
       createElement(
         Command,
         { shouldFilter: false },
-        createElement(TabBarQuickCommandItem, {
+        createElement(
+          CommandList,
+          null,
+          createElement(TabBarQuickCommandItem, {
+            entry: item,
+            showHostLabel: false,
+            onInsert
+          })
+        ),
+        createElement(TabBarQuickCommandActions, {
           entry: item,
-          showHostLabel: false,
-          onInsert,
           onRun,
           onEdit,
           onDelete
@@ -178,23 +188,15 @@ describe('TabBarQuickCommandItem', () => {
     expect(container.querySelector('button[aria-label="Copied"]')).toBeNull()
   })
 
-  it('prevents nested action pointerdown from selecting the command row', () => {
-    const { onRun } = renderItem()
-    const copyButton = container.querySelector('button[aria-label="Copy Git status"]')
-    if (!(copyButton instanceof HTMLButtonElement)) {
-      throw new Error('copy button not found')
-    }
+  it('keeps the action toolbar outside the listbox', () => {
+    renderItem()
+    const row = container.querySelector('[cmdk-item]')
+    const listbox = container.querySelector('[cmdk-list]')
+    const actions = container.querySelector('[role="toolbar"]')
 
-    const event = new MouseEvent('pointerdown', { bubbles: true, cancelable: true })
-    const stopPropagation = vi.spyOn(event, 'stopPropagation')
-    const preventDefault = vi.spyOn(event, 'preventDefault')
-    act(() => {
-      copyButton.dispatchEvent(event)
-    })
-
-    expect(stopPropagation).toHaveBeenCalled()
-    expect(preventDefault).toHaveBeenCalled()
-    expect(onRun).not.toHaveBeenCalled()
+    expect(row?.querySelector('button')).toBeNull()
+    expect(actions).not.toBeNull()
+    expect(listbox?.contains(actions)).toBe(false)
   })
 
   it('inserts on row activation and keeps Run as an explicit action', () => {

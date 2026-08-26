@@ -8,7 +8,10 @@ export function TabBarQuickCommandAddActions({
 }: {
   hosts: readonly TerminalQuickCommandHost[]
   onAdd: (hostId: TerminalQuickCommandHost['hostId']) => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (hosts.length === 0) {
+    return null
+  }
   return (
     <div className="border-t border-border/50 p-1">
       {hosts.map((host) => (
