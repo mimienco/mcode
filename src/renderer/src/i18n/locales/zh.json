@@ -123,6 +123,8 @@
       "12e77cf12b": "会话恢复失败",
       "shutdownCheckpointFailed": "MCode 无法保存您的会话",
       "shutdownCheckpointFailedDescription": "窗口仍保持打开。请再次尝试关闭。",
+      "windowCloseFailed": "MCode 无法关闭此窗口",
+      "windowCloseFailedDescription": "窗口仍保持打开。请再次尝试关闭。",
       "332dbfa497": "工作区已上传",
       "e960d18540": "关闭",
       "c9d6f98459": "最大化",

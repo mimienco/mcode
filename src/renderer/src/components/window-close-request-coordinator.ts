@@ -70,9 +70,8 @@ export async function finalizeAndConfirmWindowClose(
     for (const finalizer of closeFinalizers) {
       await finalizer()
     }
-    await desktopWindow.confirmClose()
   } catch (error) {
-    console.error('[app] Final window close failed', error)
+    console.error('[app] Final window-close durability work failed', error)
     toast.error(
       translate('auto.App.shutdownCheckpointFailed', 'MCode could not save your session'),
       {
@@ -85,6 +84,18 @@ export async function finalizeAndConfirmWindowClose(
     if (typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new Event(MCODE_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT))
     }
+    return false
+  }
+  try {
+    await desktopWindow.confirmClose()
+  } catch (error) {
+    console.error('[app] Native window close confirmation failed', error)
+    toast.error(translate('auto.App.windowCloseFailed', 'MCode could not close this window'), {
+      description: translate(
+        'auto.App.windowCloseFailedDescription',
+        'The window stayed open. Try closing it again.'
+      )
+    })
     return false
   }
   return true

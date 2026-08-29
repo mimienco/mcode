@@ -54,6 +54,52 @@ fn workspace_session(active_worktree_id: Option<&str>) -> WorkspaceSessionState 
     .unwrap()
 }
 
+const RECONCILIATION_LEAF_ID: &str = "11111111-1111-4111-8111-111111111111";
+
+fn terminal_binding_session(pty_id: Option<&str>) -> WorkspaceSessionState {
+    let bindings = pty_id
+        .map(|value| json!({ (RECONCILIATION_LEAF_ID): value }))
+        .unwrap_or_else(|| json!({}));
+    let buffers = pty_id
+        .map(|_| json!({ (RECONCILIATION_LEAF_ID): "buffer" }))
+        .unwrap_or_else(|| json!({}));
+    let scrollback_refs = pty_id
+        .map(|_| json!({ (RECONCILIATION_LEAF_ID): "scrollback-1" }))
+        .unwrap_or_else(|| json!({}));
+    let titles = pty_id
+        .map(|_| json!({ (RECONCILIATION_LEAF_ID): "Pane title" }))
+        .unwrap_or_else(|| json!({}));
+    serde_json::from_value(json!({
+        "activeRepoId": "repo-1",
+        "activeWorktreeId": "repo-1::D:/workspace",
+        "activeTabId": "tab-1",
+        "tabsByWorktree": {
+            "repo-1::D:/workspace": [{
+                "id": "tab-1",
+                "ptyId": pty_id,
+                "worktreeId": "repo-1::D:/workspace",
+                "title": "Terminal",
+                "customTitle": null,
+                "color": null,
+                "sortOrder": 0,
+                "createdAt": 1
+            }]
+        },
+        "terminalLayoutsByTabId": {
+            "tab-1": {
+                "root": { "type": "leaf", "leafId": RECONCILIATION_LEAF_ID },
+                "activeLeafId": RECONCILIATION_LEAF_ID,
+                "expandedLeafId": null,
+                "ptyIdsByLeafId": bindings,
+                "buffersByLeafId": buffers,
+                "scrollbackRefsByLeafId": scrollback_refs,
+                "titlesByLeafId": titles
+            }
+        }
+    }))
+    .unwrap()
+}
+
 #[test]
 fn local_session_and_ui_patch_preserve_unrelated_persisted_state() {
     let existing = json!({
@@ -208,6 +254,104 @@ fn shared_v1_fixture_covers_the_rust_checkpoint_contract() {
         serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
     }
 
+    for direction in fixture["terminalPaneSplitDirections"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["terminalLayoutsByTabId"]["tab-1"]["root"] = json!({
+            "type": "split",
+            "direction": direction,
+            "first": { "type": "leaf", "leafId": "leaf-1" },
+            "second": { "type": "leaf", "leafId": "leaf-2" }
+        });
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for direction in fixture["tabGroupSplitDirections"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["tabGroupLayouts"]["worktree-1"] = json!({
+            "type": "split",
+            "direction": direction,
+            "first": { "type": "leaf", "groupId": "group-1" },
+            "second": { "type": "leaf", "groupId": "group-2" }
+        });
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for content_type in fixture["tabContentTypes"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["unifiedTabs"]["worktree-1"][0]["contentType"] =
+            content_type.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for visible_type in fixture["workspaceVisibleTabTypes"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["activeTabTypeByWorktree"]["worktree-1"] =
+            visible_type.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for view_mode in fixture["tabViewModes"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["unifiedTabs"]["worktree-1"][0]["viewMode"] =
+            view_mode.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for agent in fixture["aiVaultTitleAgents"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["tabsByWorktree"]["worktree-1"][0]["aiVaultTitle"]["agent"] =
+            agent.clone();
+        checkpoint["sessions"][0]["state"]["unifiedTabs"]["worktree-1"][0]["aiVaultTitle"] = json!({
+            "agent": agent,
+            "sessionId": "session-1",
+            "title": "Parity session"
+        });
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for preset in fixture["browserViewportPresetIds"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["browserPagesByWorkspace"]["browser-workspace-1"][0]["viewportPresetId"] =
+            preset.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for key in fixture["providerSessionKeys"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        let session = &mut checkpoint["sessions"][0]["state"]["sleepingAgentSessionsByPaneKey"]["tab-1:leaf-1"];
+        session["providerSession"]["key"] = key.clone();
+        session["agent"] = if key == "conversation_id" {
+            json!("antigravity")
+        } else {
+            json!("codex")
+        };
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for state in fixture["sleepingAgentStates"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["sleepingAgentSessionsByPaneKey"]["tab-1:leaf-1"]["state"] =
+            state.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for origin in fixture["sleepingAgentOrigins"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["sleepingAgentSessionsByPaneKey"]["tab-1:leaf-1"]["origin"] =
+            origin.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for reason in fixture["automaticResumeBlockedByValues"]
+        .as_array()
+        .unwrap()
+    {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["sleepingAgentSessionsByPaneKey"]["tab-1:leaf-1"]["automaticResumeBlockedBy"] =
+            reason.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
     for host_id in fixture["executionHostIds"].as_array().unwrap() {
         ExecutionHostId::parse(host_id.as_str().unwrap()).unwrap();
     }
@@ -225,6 +369,134 @@ fn execution_host_ids_share_the_renderer_normalization_boundary() {
             "accepted {invalid}"
         );
     }
+}
+
+#[test]
+fn local_checkpoint_preserves_restorable_bindings_from_a_stale_renderer_snapshot() {
+    let existing = json!({
+        "ui": {},
+        "workspaceSession": serde_json::to_value(terminal_binding_session(Some("pty-1"))).unwrap()
+    });
+    let checkpoint = ShutdownCheckpoint {
+        version: 1,
+        sessions: vec![ShutdownSession {
+            host_id: None,
+            state: terminal_binding_session(None),
+        }],
+        ui: serde_json::from_value(json!({})).unwrap(),
+    };
+
+    let merged = apply_shutdown_checkpoint(existing, checkpoint).unwrap();
+    let tab = &merged["workspaceSession"]["tabsByWorktree"]["repo-1::D:/workspace"][0];
+    let layout = &merged["workspaceSession"]["terminalLayoutsByTabId"]["tab-1"];
+
+    assert_eq!(tab["ptyId"], json!("pty-1"));
+    assert_eq!(
+        layout["ptyIdsByLeafId"][RECONCILIATION_LEAF_ID],
+        json!("pty-1")
+    );
+    assert_eq!(
+        layout["buffersByLeafId"][RECONCILIATION_LEAF_ID],
+        json!("buffer")
+    );
+    assert_eq!(
+        layout["scrollbackRefsByLeafId"][RECONCILIATION_LEAF_ID],
+        json!("scrollback-1")
+    );
+    assert_eq!(
+        layout["titlesByLeafId"][RECONCILIATION_LEAF_ID],
+        json!("Pane title")
+    );
+}
+
+#[test]
+fn local_checkpoint_does_not_resurrect_a_terminated_ssh_binding() {
+    let existing = json!({
+        "ui": {},
+        "repos": [{ "id": "repo-1", "connectionId": "ssh-target" }],
+        "sshRemotePtyLeases": [{
+            "targetId": "ssh-target",
+            "ptyId": "remote-pty",
+            "worktreeId": "repo-1::D:/workspace",
+            "tabId": "tab-1",
+            "leafId": RECONCILIATION_LEAF_ID,
+            "state": "terminated",
+            "createdAt": 1,
+            "updatedAt": 2
+        }],
+        "workspaceSession": serde_json::to_value(terminal_binding_session(Some(
+            "ssh:ssh-target@@remote-pty"
+        )))
+        .unwrap()
+    });
+    let checkpoint = ShutdownCheckpoint {
+        version: 1,
+        sessions: vec![ShutdownSession {
+            host_id: None,
+            state: terminal_binding_session(None),
+        }],
+        ui: serde_json::from_value(json!({})).unwrap(),
+    };
+
+    let merged = apply_shutdown_checkpoint(existing, checkpoint).unwrap();
+    let tab = &merged["workspaceSession"]["tabsByWorktree"]["repo-1::D:/workspace"][0];
+    let layout = &merged["workspaceSession"]["terminalLayoutsByTabId"]["tab-1"];
+
+    assert!(tab["ptyId"].is_null());
+    assert_eq!(layout["ptyIdsByLeafId"], json!({}));
+}
+
+#[test]
+fn local_checkpoint_rebases_stale_terminal_membership_to_the_host_revision() {
+    let mut prior = serde_json::to_value(terminal_binding_session(Some("pty-live"))).unwrap();
+    prior["terminalTopologyRevisionByRepoId"] = json!({ "repo-1": 2 });
+    let existing = json!({ "ui": {}, "workspaceSession": prior });
+
+    let mut incoming = serde_json::to_value(terminal_binding_session(None)).unwrap();
+    incoming["terminalTopologyRevisionByRepoId"] = json!({ "repo-1": 1 });
+    incoming["tabsByWorktree"]["repo-1::D:/workspace"] = json!([{
+        "id": "stale-tab",
+        "ptyId": "pty-stale",
+        "worktreeId": "repo-1::D:/workspace",
+        "title": "Stale terminal",
+        "customTitle": null,
+        "color": null,
+        "sortOrder": 0,
+        "createdAt": 1
+    }]);
+    incoming["terminalLayoutsByTabId"] = json!({
+        "stale-tab": {
+            "root": { "type": "leaf", "leafId": RECONCILIATION_LEAF_ID },
+            "activeLeafId": RECONCILIATION_LEAF_ID,
+            "expandedLeafId": null,
+            "ptyIdsByLeafId": { (RECONCILIATION_LEAF_ID): "pty-stale" }
+        }
+    });
+    let checkpoint = ShutdownCheckpoint {
+        version: 1,
+        sessions: vec![ShutdownSession {
+            host_id: None,
+            state: serde_json::from_value(incoming).unwrap(),
+        }],
+        ui: serde_json::from_value(json!({})).unwrap(),
+    };
+
+    let merged = apply_shutdown_checkpoint(existing, checkpoint).unwrap();
+    let session = &merged["workspaceSession"];
+
+    assert_eq!(
+        session["tabsByWorktree"]["repo-1::D:/workspace"][0]["id"],
+        json!("tab-1")
+    );
+    assert_eq!(
+        session["terminalLayoutsByTabId"]["tab-1"]["ptyIdsByLeafId"][RECONCILIATION_LEAF_ID],
+        json!("pty-live")
+    );
+    assert!(session["terminalLayoutsByTabId"]["stale-tab"].is_null());
+    assert_eq!(
+        session["terminalTopologyRevisionByRepoId"]["repo-1"],
+        json!(2)
+    );
 }
 
 #[test]

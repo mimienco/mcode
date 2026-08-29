@@ -345,5 +345,32 @@
     "omp",
     "prime-agent"
   ],
+  "terminalPaneSplitDirections": ["vertical", "horizontal"],
+  "tabGroupSplitDirections": ["horizontal", "vertical"],
+  "tabContentTypes": [
+    "terminal",
+    "editor",
+    "diff",
+    "conflict-review",
+    "check-details",
+    "browser",
+    "simulator"
+  ],
+  "workspaceVisibleTabTypes": ["terminal", "editor", "browser", "simulator"],
+  "tabViewModes": ["terminal", "chat"],
+  "aiVaultTitleAgents": ["claude", "codex"],
+  "browserViewportPresetIds": [
+    "mobile-s",
+    "mobile-m",
+    "mobile-l",
+    "tablet",
+    "laptop",
+    "laptop-l",
+    "desktop"
+  ],
+  "providerSessionKeys": ["session_id", "conversation_id"],
+  "sleepingAgentStates": ["working", "blocked", "waiting", "done"],
+  "sleepingAgentOrigins": ["worktree-sleep", "quit", "live"],
+  "automaticResumeBlockedByValues": ["legacy-orchestration-worker"],
   "executionHostIds": ["local", "ssh:target-1", "runtime:host-1"]
 }

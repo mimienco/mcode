@@ -13,6 +13,7 @@ vi.mock('sonner', () => ({ toast: { error: toastError } }))
 
 describe('window-close-request-coordinator', () => {
   const confirmWindowClose = vi.fn()
+  const dispatchEvent = vi.fn()
   const unregisterFns: (() => void)[] = []
 
   const addGuard = (guard: () => boolean | Promise<boolean>): void => {
@@ -21,12 +22,18 @@ describe('window-close-request-coordinator', () => {
 
   beforeEach(() => {
     confirmWindowClose.mockClear()
+    dispatchEvent.mockClear()
     toastError.mockClear()
     // Why: dispatch falls back to the preload bridge when no rich handler is
     // registered; stub just the surface it touches.
     ;(
-      globalThis as unknown as { window: { api: { ui: { confirmWindowClose: () => void } } } }
-    ).window = { api: { ui: { confirmWindowClose } } }
+      globalThis as unknown as {
+        window: {
+          api: { ui: { confirmWindowClose: () => void } }
+          dispatchEvent: typeof dispatchEvent
+        }
+      }
+    ).window = { api: { ui: { confirmWindowClose } }, dispatchEvent }
   })
 
   afterEach(() => {
@@ -131,6 +138,7 @@ describe('window-close-request-coordinator', () => {
         description: 'The window stayed open. Try closing it again.'
       })
     )
+    expect(dispatchEvent).toHaveBeenCalledOnce()
   })
 
   it('keeps the window open and reports a native close failure', async () => {
@@ -139,11 +147,12 @@ describe('window-close-request-coordinator', () => {
     await dispatchWindowCloseRequest({ isQuitting: false }, { confirmClose } as never)
 
     expect(toastError).toHaveBeenCalledWith(
-      'MCode could not save your session',
+      'MCode could not close this window',
       expect.objectContaining({
         description: 'The window stayed open. Try closing it again.'
       })
     )
+    expect(dispatchEvent).not.toHaveBeenCalled()
   })
 
   it('short-circuits on the first vetoing guard', async () => {

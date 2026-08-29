@@ -123,6 +123,8 @@
       "12e77cf12b": "セッションの復元に失敗しました",
       "shutdownCheckpointFailed": "MCode はセッションを保存できませんでした",
       "shutdownCheckpointFailedDescription": "ウィンドウは開いたままです。もう一度閉じてみてください。",
+      "windowCloseFailed": "MCode はこのウィンドウを閉じられませんでした",
+      "windowCloseFailedDescription": "ウィンドウは開いたままです。もう一度閉じてみてください。",
       "332dbfa497": "ワークスペースがアップロードされました",
       "e960d18540": "閉じる",
       "c9d6f98459": "最大化",
