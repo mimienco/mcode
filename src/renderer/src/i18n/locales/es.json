@@ -121,6 +121,8 @@
       "caea5b51b9": "Reiniciar ahora",
       "0a9e810705": "Hasta que reinicies, los cambios no se guardarán. Tus pestañas anteriores siguen guardadas en disco.",
       "12e77cf12b": "Error al restaurar la sesión",
+      "shutdownCheckpointFailed": "MCode no pudo guardar tu sesión.",
+      "shutdownCheckpointFailedDescription": "La ventana permaneció abierta. Intenta cerrarla de nuevo.",
       "332dbfa497": "Espacio de trabajo subido",
       "e960d18540": "Cerrar",
       "c9d6f98459": "Maximizar",

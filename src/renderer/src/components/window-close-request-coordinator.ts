@@ -70,8 +70,9 @@ export async function finalizeAndConfirmWindowClose(
     for (const finalizer of closeFinalizers) {
       await finalizer()
     }
+    await desktopWindow.confirmClose()
   } catch (error) {
-    console.error('[app] Final window-close durability work failed', error)
+    console.error('[app] Final window close failed', error)
     toast.error(
       translate('auto.App.shutdownCheckpointFailed', 'MCode could not save your session'),
       {
@@ -86,7 +87,6 @@ export async function finalizeAndConfirmWindowClose(
     }
     return false
   }
-  await desktopWindow.confirmClose()
   return true
 }
 

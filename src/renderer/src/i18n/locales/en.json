@@ -188,6 +188,8 @@
       "caea5b51b9": "Restart now",
       "0a9e810705": "Changes won't be saved until restart. Your previous tabs are safe on disk.",
       "12e77cf12b": "Session restore failed",
+      "shutdownCheckpointFailed": "MCode could not save your session",
+      "shutdownCheckpointFailedDescription": "The window stayed open. Try closing it again.",
       "332dbfa497": "Workspace uploaded",
       "e960d18540": "Close",
       "c9d6f98459": "Maximize",

@@ -1,6 +1,6 @@
 use mcode_settings::{
-    CheckpointError, SettingsService, ShutdownCheckpoint, ShutdownSession, WorkspaceSessionState,
-    apply_shutdown_checkpoint,
+    CheckpointError, ExecutionHostId, SettingsService, ShutdownCheckpoint, ShutdownSession,
+    WorkspaceSessionState, apply_shutdown_checkpoint,
 };
 use serde_json::json;
 use std::fs;
@@ -92,7 +92,7 @@ fn host_session_updates_its_partition_without_replacing_the_local_session() {
     let checkpoint = ShutdownCheckpoint {
         version: 1,
         sessions: vec![ShutdownSession {
-            host_id: Some("runtime:host-1".into()),
+            host_id: Some(ExecutionHostId::parse("runtime:host-1").unwrap()),
             state: workspace_session(Some("remote")),
         }],
         ui: serde_json::from_value(json!({})).unwrap(),
@@ -155,6 +155,76 @@ fn rejects_structurally_invalid_workspace_sessions_at_deserialization() {
     }));
 
     assert!(checkpoint.is_err());
+}
+
+#[test]
+fn rejects_invalid_nested_workspace_session_records() {
+    let checkpoint = serde_json::from_value::<ShutdownCheckpoint>(json!({
+        "version": 1,
+        "sessions": [{
+            "state": {
+                "activeRepoId": null,
+                "activeWorktreeId": null,
+                "activeTabId": null,
+                "tabsByWorktree": { "worktree-1": [{}] },
+                "terminalLayoutsByTabId": {}
+            }
+        }],
+        "ui": {}
+    }));
+
+    assert!(checkpoint.is_err());
+}
+
+#[test]
+fn shared_v1_fixture_covers_the_rust_checkpoint_contract() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/shutdown-checkpoint-v1.json")).unwrap();
+
+    serde_json::from_value::<ShutdownCheckpoint>(fixture["checkpoint"].clone()).unwrap();
+
+    for active_view in fixture["topLevelViews"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["ui"]["activeView"] = active_view.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for agent in fixture["tuiAgents"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        checkpoint["sessions"][0]["state"]["tabsByWorktree"]["worktree-1"][0]["launchAgent"] =
+            agent.clone();
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for agent in fixture["resumableTuiAgents"].as_array().unwrap() {
+        let mut checkpoint = fixture["checkpoint"].clone();
+        let session = &mut checkpoint["sessions"][0]["state"]["sleepingAgentSessionsByPaneKey"]["tab-1:leaf-1"];
+        session["agent"] = agent.clone();
+        session["providerSession"]["key"] = if agent == "antigravity" {
+            json!("conversation_id")
+        } else {
+            json!("session_id")
+        };
+        serde_json::from_value::<ShutdownCheckpoint>(checkpoint).unwrap();
+    }
+
+    for host_id in fixture["executionHostIds"].as_array().unwrap() {
+        ExecutionHostId::parse(host_id.as_str().unwrap()).unwrap();
+    }
+}
+
+#[test]
+fn execution_host_ids_share_the_renderer_normalization_boundary() {
+    assert_eq!(
+        ExecutionHostId::parse("  ssh:target-1  ").unwrap(),
+        ExecutionHostId::parse("ssh:target-1").unwrap()
+    );
+    for invalid in ["", "all", "ssh:", "runtime:", "ssh:%", "runtime:%FF"] {
+        assert!(
+            ExecutionHostId::parse(invalid).is_err(),
+            "accepted {invalid}"
+        );
+    }
 }
 
 #[test]

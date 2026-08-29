@@ -1,0 +1,349 @@
+{
+  "checkpoint": {
+    "version": 1,
+    "sessions": [
+      {
+        "hostId": "runtime:host-1",
+        "state": {
+          "activeRepoId": "repo-1",
+          "activeWorkspaceKey": "worktree:worktree-1",
+          "activeWorkspaceExecutionHostId": "runtime:host-1",
+          "activeWorktreeId": "worktree-1",
+          "activeTabId": "tab-1",
+          "tabsByWorktree": {
+            "worktree-1": [
+              {
+                "id": "tab-1",
+                "ptyId": "pty-1",
+                "worktreeId": "worktree-1",
+                "title": "Terminal",
+                "defaultTitle": "Terminal",
+                "generatedTitle": null,
+                "aiVaultTitle": {
+                  "agent": "codex",
+                  "sessionId": "session-1",
+                  "title": "Parity session"
+                },
+                "quickCommandLabel": null,
+                "customTitle": null,
+                "color": null,
+                "isPinned": true,
+                "sortOrder": 0,
+                "createdAt": 1,
+                "generation": 1,
+                "startupCwd": "D:/workspace",
+                "launchAgent": "codex"
+              }
+            ]
+          },
+          "terminalLayoutsByTabId": {
+            "tab-1": {
+              "root": {
+                "type": "leaf",
+                "leafId": "leaf-1"
+              },
+              "activeLeafId": "leaf-1",
+              "expandedLeafId": null,
+              "ptyIdsByLeafId": {
+                "leaf-1": "pty-1"
+              },
+              "buffersByLeafId": {
+                "leaf-1": "buffer"
+              },
+              "scrollbackRefsByLeafId": {
+                "leaf-1": "scrollback-1"
+              },
+              "titlesByLeafId": {
+                "leaf-1": "Terminal"
+              }
+            }
+          },
+          "activeWorktreeIdsOnShutdown": ["worktree-1"],
+          "openFilesByWorktree": {
+            "worktree-1": [
+              {
+                "filePath": "D:/workspace/README.md",
+                "relativePath": "README.md",
+                "worktreeId": "worktree-1",
+                "language": "markdown",
+                "isPreview": false,
+                "runtimeEnvironmentId": null,
+                "externalSshTargetId": "ssh-target-1",
+                "dirtyDraftContent": "draft",
+                "lastKnownDiskSignature": "signature-1",
+                "readOnly": false,
+                "liveTail": false
+              }
+            ]
+          },
+          "activeFileIdByWorktree": {
+            "worktree-1": "D:/workspace/README.md"
+          },
+          "markdownFrontmatterVisible": {
+            "D:/workspace/README.md": true
+          },
+          "browserTabsByWorktree": {
+            "worktree-1": [
+              {
+                "id": "browser-workspace-1",
+                "worktreeId": "worktree-1",
+                "label": "Docs",
+                "sessionProfileId": null,
+                "sessionPartition": null,
+                "activePageId": "browser-page-1",
+                "pageIds": ["browser-page-1"],
+                "url": "https://example.com",
+                "title": "Example",
+                "loading": false,
+                "faviconUrl": null,
+                "canGoBack": false,
+                "canGoForward": false,
+                "loadError": null,
+                "createdAt": 1
+              }
+            ]
+          },
+          "browserPagesByWorkspace": {
+            "browser-workspace-1": [
+              {
+                "id": "browser-page-1",
+                "workspaceId": "browser-workspace-1",
+                "worktreeId": "worktree-1",
+                "url": "https://example.com",
+                "title": "Example",
+                "loading": false,
+                "faviconUrl": null,
+                "canGoBack": false,
+                "canGoForward": false,
+                "loadError": {
+                  "code": -1,
+                  "description": "offline",
+                  "validatedUrl": "https://example.com"
+                },
+                "createdAt": 1,
+                "browserRuntimeEnvironmentId": null,
+                "viewportPresetId": "desktop"
+              }
+            ]
+          },
+          "activeBrowserTabIdByWorktree": {
+            "worktree-1": "browser-workspace-1"
+          },
+          "activeTabTypeByWorktree": {
+            "worktree-1": "terminal"
+          },
+          "browserUrlHistory": [
+            {
+              "url": "https://example.com",
+              "normalizedUrl": "https://example.com/",
+              "title": "Example",
+              "lastVisitedAt": 1,
+              "visitCount": 1
+            }
+          ],
+          "activeTabIdByWorktree": {
+            "worktree-1": "tab-1"
+          },
+          "unifiedTabs": {
+            "worktree-1": [
+              {
+                "id": "unified-tab-1",
+                "entityId": "tab-1",
+                "groupId": "group-1",
+                "worktreeId": "worktree-1",
+                "contentType": "terminal",
+                "label": "Terminal",
+                "generatedLabel": null,
+                "aiVaultTitle": null,
+                "quickCommandLabel": null,
+                "customLabel": null,
+                "color": null,
+                "sortOrder": 0,
+                "createdAt": 1,
+                "isPreview": false,
+                "isPinned": true,
+                "viewMode": "terminal"
+              }
+            ]
+          },
+          "tabGroups": {
+            "worktree-1": [
+              {
+                "id": "group-1",
+                "worktreeId": "worktree-1",
+                "activeTabId": "unified-tab-1",
+                "tabOrder": ["unified-tab-1"],
+                "recentTabIds": ["unified-tab-1"]
+              }
+            ]
+          },
+          "tabGroupLayouts": {
+            "worktree-1": {
+              "type": "leaf",
+              "groupId": "group-1"
+            }
+          },
+          "activeGroupIdByWorktree": {
+            "worktree-1": "group-1"
+          },
+          "activeConnectionIdsAtShutdown": ["ssh-target-1"],
+          "remoteSessionIdsByTabId": {
+            "tab-1": "remote-session-1"
+          },
+          "lastVisitedAtByWorktreeId": {
+            "worktree-1": 1
+          },
+          "defaultTerminalTabsAppliedByWorktreeId": {
+            "worktree-1": true
+          },
+          "sleepingAgentSessionsByPaneKey": {
+            "tab-1:leaf-1": {
+              "paneKey": "tab-1:leaf-1",
+              "tabId": "tab-1",
+              "worktreeId": "worktree-1",
+              "agent": "codex",
+              "providerSession": {
+                "key": "session_id",
+                "id": "session-1",
+                "transcriptPath": "D:/sessions/session-1.jsonl"
+              },
+              "prompt": "Continue",
+              "state": "working",
+              "capturedAt": 1,
+              "updatedAt": 2,
+              "terminalTitle": "Codex",
+              "lastAssistantMessage": "Working",
+              "interrupted": false,
+              "connectionId": null,
+              "launchConfig": {
+                "agentCommand": "codex",
+                "agentArgs": "resume session-1",
+                "agentEnv": {
+                  "MCODE_SESSION": "session-1"
+                },
+                "ompResumeFilePath": "D:/sessions/session-1.jsonl"
+              },
+              "origin": "quit",
+              "automaticResumeBlockedBy": "legacy-orchestration-worker",
+              "restoreOnTabOpenOnly": true
+            }
+          },
+          "terminalPtyIncarnationsByPaneKey": {
+            "tab-1:leaf-1": "incarnation-1"
+          },
+          "terminalTopologyRevisionByRepoId": {
+            "repo-1": 1
+          },
+          "terminalSurfaceTombstonesByPaneKey": {
+            "tab-2:leaf-2": {
+              "worktreeId": "worktree-1",
+              "parentTabId": "tab-2",
+              "leafId": "leaf-2",
+              "ptyId": "pty-2",
+              "incarnationId": "incarnation-2",
+              "retiredAt": 1
+            }
+          }
+        }
+      }
+    ],
+    "ui": {
+      "activeView": "terminal"
+    }
+  },
+  "workspaceSessionStateKeys": [
+    "activeRepoId",
+    "activeWorkspaceKey",
+    "activeWorkspaceExecutionHostId",
+    "activeWorktreeId",
+    "activeTabId",
+    "tabsByWorktree",
+    "terminalLayoutsByTabId",
+    "activeWorktreeIdsOnShutdown",
+    "openFilesByWorktree",
+    "activeFileIdByWorktree",
+    "markdownFrontmatterVisible",
+    "browserTabsByWorktree",
+    "browserPagesByWorkspace",
+    "activeBrowserTabIdByWorktree",
+    "activeTabTypeByWorktree",
+    "browserUrlHistory",
+    "activeTabIdByWorktree",
+    "unifiedTabs",
+    "tabGroups",
+    "tabGroupLayouts",
+    "activeGroupIdByWorktree",
+    "activeConnectionIdsAtShutdown",
+    "remoteSessionIdsByTabId",
+    "lastVisitedAtByWorktreeId",
+    "defaultTerminalTabsAppliedByWorktreeId",
+    "sleepingAgentSessionsByPaneKey",
+    "terminalPtyIncarnationsByPaneKey",
+    "terminalTopologyRevisionByRepoId",
+    "terminalSurfaceTombstonesByPaneKey"
+  ],
+  "topLevelViews": [
+    "terminal",
+    "settings",
+    "tasks",
+    "activity",
+    "automations",
+    "space",
+    "skills",
+    "artifacts",
+    "mobile"
+  ],
+  "tuiAgents": [
+    "claude",
+    "claude-agent-teams",
+    "openclaude",
+    "codex",
+    "autohand",
+    "opencode",
+    "mimo-code",
+    "pi",
+    "omp",
+    "gemini",
+    "antigravity",
+    "aider",
+    "goose",
+    "amp",
+    "kilo",
+    "kiro",
+    "crush",
+    "aug",
+    "cline",
+    "codebuff",
+    "command-code",
+    "continue",
+    "cursor",
+    "droid",
+    "kimi",
+    "mistral-vibe",
+    "qwen-code",
+    "rovo",
+    "hermes",
+    "openclaw",
+    "copilot",
+    "grok",
+    "devin",
+    "ante",
+    "trae",
+    "prime-agent"
+  ],
+  "resumableTuiAgents": [
+    "claude",
+    "codex",
+    "gemini",
+    "antigravity",
+    "opencode",
+    "pi",
+    "mimo-code",
+    "droid",
+    "grok",
+    "devin",
+    "omp",
+    "prime-agent"
+  ],
+  "executionHostIds": ["local", "ssh:target-1", "runtime:host-1"]
+}

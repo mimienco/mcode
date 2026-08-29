@@ -7,7 +7,8 @@ import { WindowControls } from './WindowControls'
 
 afterEach(cleanup)
 
-type WindowControlsCapability = NonNullable<ComponentProps<typeof WindowControls>['desktopWindow']>
+type WindowControlsProps = NonNullable<ComponentProps<typeof WindowControls>>
+type WindowControlsCapability = NonNullable<WindowControlsProps['desktopWindow']>
 
 function createDesktopWindow(
   overrides: Partial<WindowControlsCapability> = {}

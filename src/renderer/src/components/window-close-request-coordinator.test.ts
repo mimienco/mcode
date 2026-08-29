@@ -133,6 +133,19 @@ describe('window-close-request-coordinator', () => {
     )
   })
 
+  it('keeps the window open and reports a native close failure', async () => {
+    const confirmClose = vi.fn(() => Promise.reject(new Error('native close failed')))
+
+    await dispatchWindowCloseRequest({ isQuitting: false }, { confirmClose } as never)
+
+    expect(toastError).toHaveBeenCalledWith(
+      'MCode could not save your session',
+      expect.objectContaining({
+        description: 'The window stayed open. Try closing it again.'
+      })
+    )
+  })
+
   it('short-circuits on the first vetoing guard', async () => {
     const second = vi.fn(() => true)
     addGuard(() => false)
