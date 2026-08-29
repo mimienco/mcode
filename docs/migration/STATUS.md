@@ -6,7 +6,7 @@ Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Window
 
 ## Last green commit
 
-`6740f9c538120796b687ffe2b6f798b488cdaf76` (copied source HEAD; no migration commit yet)
+`46e1837066` (`feat(tauri): bootstrap typed desktop lifecycle shell`), following preservation checkpoint `3b21fb44b7`.
 
 ## Completed in this session
 
@@ -26,6 +26,7 @@ Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Window
 - Built the real 10,642-module React renderer through the Tauri-specific Vite configuration.
 - Compiled, linted, contract-tested, smoke-launched, and CLI-built the initial Windows Tauri shell.
 - Marked all 16,748 present manifest files read-only in the Electron backup after baseline capture.
+- Created two local, hook-validated checkpoint commits on `rewrite/tauri-full`; nothing was pushed.
 
 ## Tests executed
 
