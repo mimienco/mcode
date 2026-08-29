@@ -21,13 +21,8 @@ import {
   createShutdownCheckpointGuard
 } from '../lib/shutdown-checkpoint-guard'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
-import {
-  dispatchWindowCloseRequest,
-  registerWindowCloseFinalizer
-} from '../components/window-close-request-coordinator'
-import { desktopWindowClient } from '../desktop/runtime-desktop-window-client'
+import { registerWindowCloseFinalizer } from '../components/window-close-request-coordinator'
 import { desktopShutdownCheckpointClient } from '../desktop/runtime-desktop-shutdown-checkpoint-client'
-import { subscribeToDesktopWindowCloseRequests } from '../desktop/desktop-window-close-subscription'
 import {
   MCODE_APP_RESTART_ABORTED_EVENT,
   MCODE_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT
@@ -200,11 +195,6 @@ export function useAppSessionPersistence(): void {
       useAppStore.getState().captureAllSleepingAgentSessions('periodic')
     }, SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [])
-
-  // Why: subscribe at the always-mounted App root — Terminal owns the confirm flow but isn't mounted on the landing page, so subscribing there left File→Exit / Ctrl+Q with no listener (#5144).
-  useEffect(() => {
-    return subscribeToDesktopWindowCloseRequests(desktopWindowClient, dispatchWindowCloseRequest)
   }, [])
 
   // Why no periodic scrollback save: the old 3-min re-serialize (#461) stalled the main thread for seconds; the out-of-process daemon (#729) is the durable replacement, non-daemon users lose in-session scrollback on unexpected exit.

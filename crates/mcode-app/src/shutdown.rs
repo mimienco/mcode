@@ -64,6 +64,7 @@ impl std::error::Error for LifecycleServiceError {}
 enum ShutdownPhase {
     Idle,
     Pending(ShutdownRequest),
+    Acknowledged(ShutdownRequest),
     Confirmed(ShutdownRequest),
     Executing(ShutdownRequest),
 }
@@ -101,7 +102,7 @@ impl ShutdownCoordinator {
             ShutdownPhase::Executing(_) => {
                 return Err(LifecycleServiceError::ShutdownAlreadyExecuting);
             }
-            ShutdownPhase::Idle | ShutdownPhase::Pending(_) => {}
+            ShutdownPhase::Idle | ShutdownPhase::Pending(_) | ShutdownPhase::Acknowledged(_) => {}
         }
         let request_id = state.next_request_id;
         state.next_request_id = request_id
@@ -119,9 +120,37 @@ impl ShutdownCoordinator {
     pub(crate) fn pending(&self) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
         let state = self.lock()?;
         Ok(match &state.phase {
-            ShutdownPhase::Pending(request) => Some(request.clone()),
+            ShutdownPhase::Pending(request) | ShutdownPhase::Acknowledged(request) => {
+                Some(request.clone())
+            }
             ShutdownPhase::Idle | ShutdownPhase::Confirmed(_) | ShutdownPhase::Executing(_) => None,
         })
+    }
+
+    pub(crate) fn acknowledge(
+        &self,
+        request_id: &str,
+    ) -> Result<ShutdownRequest, LifecycleServiceError> {
+        let mut state = self.lock()?;
+        let request = match &state.phase {
+            ShutdownPhase::Pending(request) if request.request_id == request_id => request.clone(),
+            ShutdownPhase::Acknowledged(request)
+            | ShutdownPhase::Confirmed(request)
+            | ShutdownPhase::Executing(request)
+                if request.request_id == request_id =>
+            {
+                return Ok(request.clone());
+            }
+            ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
+            | ShutdownPhase::Confirmed(_)
+            | ShutdownPhase::Executing(_) => {
+                return Err(LifecycleServiceError::StaleShutdownRequest);
+            }
+            ShutdownPhase::Idle => return Err(LifecycleServiceError::NoPendingShutdown),
+        };
+        state.phase = ShutdownPhase::Acknowledged(request.clone());
+        Ok(request)
     }
 
     pub(crate) fn confirm(
@@ -133,12 +162,15 @@ impl ShutdownCoordinator {
             ShutdownPhase::Executing(request) if request.request_id == request_id => {
                 return Ok(request.clone());
             }
-            ShutdownPhase::Pending(request) | ShutdownPhase::Confirmed(request)
+            ShutdownPhase::Pending(request)
+            | ShutdownPhase::Acknowledged(request)
+            | ShutdownPhase::Confirmed(request)
                 if request.request_id == request_id =>
             {
                 request.clone()
             }
             ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
             | ShutdownPhase::Confirmed(_)
             | ShutdownPhase::Executing(_) => {
                 return Err(LifecycleServiceError::StaleShutdownRequest);
@@ -152,7 +184,9 @@ impl ShutdownCoordinator {
     pub(crate) fn cancel(&self, request_id: &str) -> Result<(), LifecycleServiceError> {
         let mut state = self.lock()?;
         match &state.phase {
-            ShutdownPhase::Pending(request) | ShutdownPhase::Confirmed(request)
+            ShutdownPhase::Pending(request)
+            | ShutdownPhase::Acknowledged(request)
+            | ShutdownPhase::Confirmed(request)
                 if request.request_id == request_id =>
             {
                 state.phase = ShutdownPhase::Idle;
@@ -162,27 +196,32 @@ impl ShutdownCoordinator {
                 Err(LifecycleServiceError::ShutdownAlreadyExecuting)
             }
             ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
             | ShutdownPhase::Confirmed(_)
             | ShutdownPhase::Executing(_) => Err(LifecycleServiceError::StaleShutdownRequest),
             ShutdownPhase::Idle => Err(LifecycleServiceError::NoPendingShutdown),
         }
     }
 
-    pub(crate) fn commit(
+    pub(crate) fn claim_execution(
         &self,
         request_id: &str,
-    ) -> Result<ShutdownRequest, LifecycleServiceError> {
+    ) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
         let mut state = self.lock()?;
         let request = match &state.phase {
-            ShutdownPhase::Confirmed(request) | ShutdownPhase::Executing(request)
-                if request.request_id == request_id =>
-            {
+            ShutdownPhase::Confirmed(request) if request.request_id == request_id => {
                 request.clone()
             }
-            ShutdownPhase::Pending(request) if request.request_id == request_id => {
+            ShutdownPhase::Executing(request) if request.request_id == request_id => {
+                return Ok(None);
+            }
+            ShutdownPhase::Pending(request) | ShutdownPhase::Acknowledged(request)
+                if request.request_id == request_id =>
+            {
                 return Err(LifecycleServiceError::ShutdownNotConfirmed);
             }
             ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
             | ShutdownPhase::Confirmed(_)
             | ShutdownPhase::Executing(_) => {
                 return Err(LifecycleServiceError::StaleShutdownRequest);
@@ -190,7 +229,33 @@ impl ShutdownCoordinator {
             ShutdownPhase::Idle => return Err(LifecycleServiceError::NoPendingShutdown),
         };
         state.phase = ShutdownPhase::Executing(request.clone());
-        Ok(request)
+        Ok(Some(request))
+    }
+
+    pub(crate) fn force_claim_execution(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
+        let mut state = self.lock()?;
+        let request = match &state.phase {
+            ShutdownPhase::Pending(request) if request.request_id == request_id => request.clone(),
+            ShutdownPhase::Acknowledged(request)
+            | ShutdownPhase::Confirmed(request)
+            | ShutdownPhase::Executing(request)
+                if request.request_id == request_id =>
+            {
+                return Ok(None);
+            }
+            ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
+            | ShutdownPhase::Confirmed(_)
+            | ShutdownPhase::Executing(_) => {
+                return Err(LifecycleServiceError::StaleShutdownRequest);
+            }
+            ShutdownPhase::Idle => return Err(LifecycleServiceError::NoPendingShutdown),
+        };
+        state.phase = ShutdownPhase::Executing(request.clone());
+        Ok(Some(request))
     }
 
     pub(crate) fn is_executing(

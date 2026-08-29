@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  cancelPendingWindowClose,
   dispatchWindowCloseRequest,
   getWindowCloseRequestHandler,
   registerWindowCloseFinalizer,
   registerWindowCloseGuard,
   setWindowCloseRequestHandler
 } from './window-close-request-coordinator'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { MCODE_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
 
 const toastError = vi.hoisted(() => vi.fn())
@@ -156,6 +159,27 @@ describe('window-close-request-coordinator', () => {
     expect(dispatchEvent.mock.calls.map(([event]) => event.type)).toContain(
       MCODE_APP_RESTART_ABORTED_EVENT
     )
+  })
+
+  it('cancels the exact native request when a deferred dirty-file decision is vetoed', async () => {
+    const cancelClose = vi.fn(() =>
+      Promise.resolve({ version: 1 as const, requestId: '16', intent: 'quit' as const })
+    )
+
+    await cancelPendingWindowClose({ cancelClose })
+
+    expect(cancelClose).toHaveBeenCalledOnce()
+  })
+
+  it('routes the dirty-file Cancel action back to native shutdown cancellation', () => {
+    const source = readFileSync(resolve('src/renderer/src/components/Terminal.tsx'), 'utf8')
+    const cancelStart = source.indexOf('const handleSaveDialogCancel = useCallback')
+    const cancelEnd = source.indexOf('useEffect(() => {', cancelStart)
+    const cancelHandler = source.slice(cancelStart, cancelEnd)
+
+    expect(cancelStart).toBeGreaterThanOrEqual(0)
+    expect(cancelHandler).toContain('windowCloseAfterDirtyRef.current !== null')
+    expect(cancelHandler).toContain('void cancelPendingWindowClose()')
   })
 
   it('keeps the window open and reports a native close failure', async () => {

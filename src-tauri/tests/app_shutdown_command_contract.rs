@@ -1,9 +1,11 @@
 use mcode_app::{BuildLane, LifecycleService, ShutdownIntent};
 use mcode_desktop::{
-    app_cancel_shutdown_for, app_commit_shutdown_for, app_confirm_shutdown_for,
-    app_request_shutdown_for, app_should_allow_exit_for,
+    SHUTDOWN_RENDERER_ACK_TIMEOUT, app_acknowledge_shutdown_for, app_cancel_shutdown_for,
+    app_claim_shutdown_execution_for, app_confirm_shutdown_for,
+    app_force_claim_shutdown_execution_for, app_request_shutdown_for, app_should_allow_exit_for,
 };
 use serde_json::json;
+use std::time::Duration;
 
 #[test]
 fn shutdown_commands_preserve_the_versioned_renderer_contract() {
@@ -24,8 +26,8 @@ fn shutdown_commands_preserve_the_versioned_renderer_contract() {
         request
     );
     assert_eq!(
-        app_commit_shutdown_for(&service, &request.request_id).unwrap(),
-        request
+        app_claim_shutdown_execution_for(&service, &request.request_id).unwrap(),
+        Some(request)
     );
 }
 
@@ -47,9 +49,43 @@ fn native_exit_code_is_allowed_only_for_the_committed_shutdown_intent() {
     assert!(!app_should_allow_exit_for(&service, Some(tauri::RESTART_EXIT_CODE)).unwrap());
 
     app_confirm_shutdown_for(&service, &request.request_id).unwrap();
-    app_commit_shutdown_for(&service, &request.request_id).unwrap();
+    app_claim_shutdown_execution_for(&service, &request.request_id).unwrap();
 
     assert!(app_should_allow_exit_for(&service, Some(tauri::RESTART_EXIT_CODE)).unwrap());
     assert!(!app_should_allow_exit_for(&service, Some(0)).unwrap());
     assert!(!app_should_allow_exit_for(&service, None).unwrap());
+}
+
+#[test]
+fn renderer_ack_timeout_matches_the_existing_electron_quit_bound() {
+    assert_eq!(SHUTDOWN_RENDERER_ACK_TIMEOUT, Duration::from_secs(10));
+}
+
+#[test]
+fn renderer_ack_timeout_claims_the_exact_pending_request_once() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = app_request_shutdown_for(&service, ShutdownIntent::Quit).unwrap();
+
+    assert_eq!(
+        app_force_claim_shutdown_execution_for(&service, &request.request_id).unwrap(),
+        Some(request.clone())
+    );
+    assert_eq!(
+        app_force_claim_shutdown_execution_for(&service, &request.request_id).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn renderer_receipt_ack_disarms_the_force_timeout_without_confirming_exit() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = app_request_shutdown_for(&service, ShutdownIntent::Quit).unwrap();
+
+    app_acknowledge_shutdown_for(&service, &request.request_id).unwrap();
+
+    assert_eq!(
+        app_force_claim_shutdown_execution_for(&service, &request.request_id).unwrap(),
+        None
+    );
+    assert!(!app_should_allow_exit_for(&service, Some(0)).unwrap());
 }

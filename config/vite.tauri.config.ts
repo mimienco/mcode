@@ -31,6 +31,7 @@ export default defineConfig({
       preserveEntrySignatures: 'strict',
       input: {
         index: resolve('src/renderer/index.html'),
+        lifecycleSmoke: resolve('src/renderer/lifecycle-smoke.html'),
         popout: resolve('src/renderer/popout.html'),
         web: resolve('src/renderer/web-index.html')
       }

@@ -16,6 +16,9 @@ import { translate } from './i18n/i18n'
 import { getOrCreateRendererRoot } from './lib/react-renderer-root'
 import { SkillWarningPreviewLauncher } from './components/skills/SkillWarningPreviewLauncher'
 import { installRendererBootstrapHealthReporter } from './lib/renderer-bootstrap-health-reporter'
+import { subscribeToDesktopWindowCloseRequests } from './desktop/desktop-window-close-subscription'
+import { desktopWindowClient } from './desktop/runtime-desktop-window-client'
+import { dispatchWindowCloseRequest } from './components/window-close-request-coordinator'
 
 recordRendererCrashBreadcrumb('renderer_bootstrap_started', { dev: import.meta.env.DEV })
 installRendererCrashDiagnostics()
@@ -43,13 +46,21 @@ const rendererRootElement = rootElement
 
 type RendererHotData = { rendererHealthReporterInstalled?: boolean }
 const rendererHotData = import.meta.hot?.data as RendererHotData | undefined
+// Why: native quit must remain actionable even if a later Electron-only bootstrap
+// service fails while the Tauri migration is incomplete. The coordinator gains
+// its rich guards/finalizers as App mounts, but this listener exists first.
+const stopDesktopWindowCloseSubscription = subscribeToDesktopWindowCloseRequests(
+  desktopWindowClient,
+  dispatchWindowCloseRequest
+)
+import.meta.hot?.dispose(stopDesktopWindowCloseSubscription)
 // Why: document ownership lets the watchdog survive the Fast Refresh unmount that can empty #root.
 if (import.meta.env.DEV && !rendererHotData?.rendererHealthReporterInstalled) {
   installRendererBootstrapHealthReporter({
     root: rendererRootElement,
-    reportHealth: (report) => window.api.app.reportRendererHealth?.(report),
+    reportHealth: (report) => window.api?.app.reportRendererHealth?.(report),
     onHealthProbe: (listener) =>
-      window.api.app.onRendererHealthProbe?.(listener) ?? (() => undefined)
+      window.api?.app.onRendererHealthProbe?.(listener) ?? (() => undefined)
   })
   if (rendererHotData) {
     rendererHotData.rendererHealthReporterInstalled = true

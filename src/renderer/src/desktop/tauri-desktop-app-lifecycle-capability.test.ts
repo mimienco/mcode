@@ -21,14 +21,18 @@ it('subscribes to versioned native shutdown requests through one named event', a
     eventListener = listener
     return () => undefined
   })
+  const invoke = vi.fn(() => Promise.resolve())
   const listener = vi.fn()
-  const capability = createTauriDesktopAppLifecycleCapability(vi.fn(), listen)
+  const capability = createTauriDesktopAppLifecycleCapability(invoke, listen)
 
   await capability.onShutdownRequested(listener)
   eventListener?.({ payload: { version: 1, requestId: '8', intent: 'quit' } })
 
   expect(listen).toHaveBeenCalledWith('mcode://app/shutdown-requested', expect.any(Function))
-  expect(listener).toHaveBeenCalledWith({ version: 1, requestId: '8', intent: 'quit' })
+  await vi.waitFor(() => {
+    expect(listener).toHaveBeenCalledWith({ version: 1, requestId: '8', intent: 'quit' })
+  })
+  expect(invoke).toHaveBeenCalledWith('app_acknowledge_shutdown', { requestId: '8' })
 })
 
 it('acknowledges, executes, and cancels only the named shutdown request', async () => {
@@ -80,7 +84,8 @@ it('drops malformed native event payloads', async () => {
 it('reports rejected shutdown listeners instead of leaking an unhandled rejection', async () => {
   let eventListener: ((event: { payload: unknown }) => void) | undefined
   const failure = new Error('close coordinator failed')
-  const capability = createTauriDesktopAppLifecycleCapability(vi.fn(), async (_event, handler) => {
+  const invoke = vi.fn(() => Promise.resolve())
+  const capability = createTauriDesktopAppLifecycleCapability(invoke, async (_event, handler) => {
     eventListener = handler
     return () => undefined
   })
@@ -94,6 +99,10 @@ it('reports rejected shutdown listeners instead of leaking an unhandled rejectio
       failure
     )
   })
+  expect(invoke.mock.calls).toEqual([
+    ['app_acknowledge_shutdown', { requestId: '10' }],
+    ['app_cancel_shutdown', { requestId: '10' }]
+  ])
 
   consoleError.mockRestore()
 })

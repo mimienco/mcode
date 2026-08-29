@@ -35,9 +35,20 @@ export function createTauriDesktopAppLifecycleCapability(
           console.error('[desktop] Ignored invalid native shutdown request')
           return
         }
-        void Promise.resolve(listener(event.payload)).catch((error) => {
-          console.error('[desktop] Native shutdown request listener failed', error)
-        })
+        const request = event.payload
+        void invoke('app_acknowledge_shutdown', { requestId: request.requestId })
+          .then(() => listener(request))
+          .catch(async (error) => {
+            try {
+              await invoke('app_cancel_shutdown', { requestId: request.requestId })
+            } catch (cancelError) {
+              console.error(
+                '[desktop] Failed to cancel rejected native shutdown request',
+                cancelError
+              )
+            }
+            console.error('[desktop] Native shutdown request listener failed', error)
+          })
       })
     },
     async confirmShutdown(requestId: string): Promise<ShutdownRequest> {

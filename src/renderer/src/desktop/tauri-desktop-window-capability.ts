@@ -1,4 +1,8 @@
-import type { DesktopWindowCapability, ShutdownRequest } from './desktop-client'
+import type {
+  DesktopAppLifecycleCapability,
+  DesktopWindowCapability,
+  ShutdownRequest
+} from './desktop-client'
 
 type TauriCloseRequestedEvent = {
   preventDefault: () => void
@@ -15,15 +19,7 @@ type TauriWindowCapabilitySource = {
   ) => Promise<() => void>
 }
 
-type TauriAppLifecycleCapabilitySource = {
-  requestShutdown: (intent: 'quit' | 'restart') => Promise<ShutdownRequest>
-  onShutdownRequested: (
-    listener: (request: ShutdownRequest) => void | Promise<void>
-  ) => Promise<() => void>
-  cancelShutdown: (requestId: string) => Promise<void>
-  confirmShutdown: (requestId: string) => Promise<ShutdownRequest>
-  executeShutdown: (requestId: string) => Promise<void>
-}
+type TauriAppLifecycleCapabilitySource = DesktopAppLifecycleCapability
 
 export function createTauriDesktopWindowCapability(
   currentWindow: TauriWindowCapabilitySource,
@@ -44,6 +40,11 @@ export function createTauriDesktopWindowCapability(
     await appLifecycle.cancelShutdown(request.requestId)
     clearPendingShutdown(request.requestId)
     return request
+  }
+  const confirmAndExecuteShutdown = async (request: ShutdownRequest): Promise<void> => {
+    await appLifecycle.confirmShutdown(request.requestId)
+    await appLifecycle.executeShutdown(request.requestId)
+    clearPendingShutdown(request.requestId)
   }
 
   return {
@@ -94,17 +95,13 @@ export function createTauriDesktopWindowCapability(
     async confirmClose() {
       if (pendingShutdown) {
         const request = pendingShutdown
-        await appLifecycle.confirmShutdown(request.requestId)
-        await appLifecycle.executeShutdown(request.requestId)
-        clearPendingShutdown(request.requestId)
+        await confirmAndExecuteShutdown(request)
         return
       }
       manualQuitInFlight = true
       try {
         const request = await appLifecycle.requestShutdown('quit')
-        await appLifecycle.confirmShutdown(request.requestId)
-        await appLifecycle.executeShutdown(request.requestId)
-        clearPendingShutdown(request.requestId)
+        await confirmAndExecuteShutdown(request)
       } finally {
         manualQuitInFlight = false
       }

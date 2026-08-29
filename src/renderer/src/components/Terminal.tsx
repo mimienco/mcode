@@ -140,6 +140,7 @@ import {
 import { isMainTerminalSideEffectAuthorityForPty } from './terminal-pane/terminal-side-effect-facts-handler'
 import { appendUniqueOpenFileIds } from './terminal/unsaved-close-queue'
 import {
+  cancelPendingWindowClose,
   finalizeAndConfirmWindowClose,
   setWindowCloseRequestHandler
 } from './window-close-request-coordinator'
@@ -768,9 +769,13 @@ function Terminal(): React.JSX.Element | null {
       return
     }
     isClosingRef.current = true
+    const hadPendingWindowClose = windowCloseAfterDirtyRef.current !== null
     pendingEditorCloseQueueRef.current = []
     windowCloseAfterDirtyRef.current = null
     setSaveDialogFileId(null)
+    if (hadPendingWindowClose) {
+      void cancelPendingWindowClose()
+    }
     releaseCloseDialogGuardAfterDebounce()
   }, [releaseCloseDialogGuardAfterDebounce])
 

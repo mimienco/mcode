@@ -63,14 +63,22 @@ fn native_exit_is_authorized_only_after_the_confirmed_request_is_committed() {
 
     assert!(!service.is_shutdown_executing(ShutdownIntent::Quit).unwrap());
     assert_eq!(
-        service.commit_shutdown(&request.request_id),
+        service.claim_shutdown_execution(&request.request_id),
         Err(LifecycleServiceError::ShutdownNotConfirmed)
     );
 
     service.confirm_shutdown(&request.request_id).unwrap();
     assert_eq!(
-        service.commit_shutdown(&request.request_id).unwrap(),
-        request
+        service
+            .claim_shutdown_execution(&request.request_id)
+            .unwrap(),
+        Some(request.clone())
+    );
+    assert_eq!(
+        service
+            .claim_shutdown_execution(&request.request_id)
+            .unwrap(),
+        None
     );
     assert!(service.is_shutdown_executing(ShutdownIntent::Quit).unwrap());
     assert!(
@@ -85,7 +93,9 @@ fn a_committed_shutdown_cannot_be_replaced_before_native_exit() {
     let service = LifecycleService::new("1.4.178", BuildLane::Development);
     let request = service.request_shutdown(ShutdownIntent::Restart).unwrap();
     service.confirm_shutdown(&request.request_id).unwrap();
-    service.commit_shutdown(&request.request_id).unwrap();
+    service
+        .claim_shutdown_execution(&request.request_id)
+        .unwrap();
 
     assert_eq!(
         service.request_shutdown(ShutdownIntent::Quit),
@@ -126,10 +136,70 @@ fn a_failed_native_execute_can_cancel_a_confirmed_request_but_not_an_executing_o
 
     let executing = service.request_shutdown(ShutdownIntent::Quit).unwrap();
     service.confirm_shutdown(&executing.request_id).unwrap();
-    service.commit_shutdown(&executing.request_id).unwrap();
+    service
+        .claim_shutdown_execution(&executing.request_id)
+        .unwrap();
     assert_eq!(
         service.cancel_shutdown(&executing.request_id),
         Err(LifecycleServiceError::ShutdownAlreadyExecuting)
+    );
+}
+
+#[test]
+fn a_renderer_timeout_claims_pending_shutdown_execution_only_once() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = service.request_shutdown(ShutdownIntent::Quit).unwrap();
+
+    assert_eq!(
+        service
+            .force_claim_shutdown_execution(&request.request_id)
+            .unwrap(),
+        Some(request.clone())
+    );
+    assert_eq!(
+        service
+            .force_claim_shutdown_execution(&request.request_id)
+            .unwrap(),
+        None
+    );
+    assert!(service.is_shutdown_executing(ShutdownIntent::Quit).unwrap());
+}
+
+#[test]
+fn renderer_receipt_disarms_the_timeout_while_the_user_decides() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = service.request_shutdown(ShutdownIntent::Quit).unwrap();
+
+    assert_eq!(
+        service.acknowledge_shutdown(&request.request_id).unwrap(),
+        request
+    );
+    assert_eq!(
+        service
+            .force_claim_shutdown_execution(&request.request_id)
+            .unwrap(),
+        None
+    );
+    assert!(!service.is_shutdown_executing(ShutdownIntent::Quit).unwrap());
+
+    service.cancel_shutdown(&request.request_id).unwrap();
+    assert_eq!(service.pending_shutdown().unwrap(), None);
+}
+
+#[test]
+fn a_canceled_shutdown_cannot_be_reclaimed_by_its_timeout() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = service.request_shutdown(ShutdownIntent::Restart).unwrap();
+    service.cancel_shutdown(&request.request_id).unwrap();
+
+    assert_eq!(
+        service.force_claim_shutdown_execution(&request.request_id),
+        Err(LifecycleServiceError::NoPendingShutdown)
+    );
+    assert!(
+        !service
+            .is_shutdown_executing(ShutdownIntent::Restart)
+            .unwrap()
     );
 }
 

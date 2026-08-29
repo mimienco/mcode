@@ -66,8 +66,8 @@ async function runWindowCloseGuards(): Promise<boolean> {
 
 type WindowCloseDecisionCapability = Pick<DesktopWindowCapability, 'cancelClose' | 'confirmClose'>
 
-async function cancelPendingWindowClose(
-  desktopWindow: Pick<DesktopWindowCapability, 'cancelClose'>
+export async function cancelPendingWindowClose(
+  desktopWindow: Pick<DesktopWindowCapability, 'cancelClose'> = desktopWindowClient
 ): Promise<void> {
   try {
     const request = await desktopWindow.cancelClose()

@@ -61,15 +61,29 @@ impl LifecycleService {
         self.shutdown.confirm(request_id)
     }
 
+    pub fn acknowledge_shutdown(
+        &self,
+        request_id: &str,
+    ) -> Result<ShutdownRequest, LifecycleServiceError> {
+        self.shutdown.acknowledge(request_id)
+    }
+
     pub fn cancel_shutdown(&self, request_id: &str) -> Result<(), LifecycleServiceError> {
         self.shutdown.cancel(request_id)
     }
 
-    pub fn commit_shutdown(
+    pub fn claim_shutdown_execution(
         &self,
         request_id: &str,
-    ) -> Result<ShutdownRequest, LifecycleServiceError> {
-        self.shutdown.commit(request_id)
+    ) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
+        self.shutdown.claim_execution(request_id)
+    }
+
+    pub fn force_claim_shutdown_execution(
+        &self,
+        request_id: &str,
+    ) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
+        self.shutdown.force_claim_execution(request_id)
     }
 
     pub fn is_shutdown_executing(
