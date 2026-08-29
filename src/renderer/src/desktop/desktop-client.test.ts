@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { it as test } from 'vitest'
+import type { ShutdownCheckpoint } from '../../../shared/shutdown-checkpoint-types'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { createDesktopClient, type DesktopWindowCapability } from './desktop-client'
 
 function createWindowCapability(
@@ -11,6 +13,8 @@ function createWindowCapability(
     isMaximized: () => Promise.resolve(false),
     onMaximizedChanged: () => Promise.resolve(() => undefined),
     requestClose: () => Promise.resolve(),
+    onCloseRequested: () => Promise.resolve(() => undefined),
+    confirmClose: () => Promise.resolve(),
     ...overrides
   }
 }
@@ -32,6 +36,23 @@ test('launch context uses the narrow Tauri command and preserves its typed resul
 
   assert.deepEqual(calls, [{ command: 'app_get_launch_context', args: undefined }])
   assert.deepEqual(context, expected)
+})
+
+test('shutdown checkpoint uses the versioned narrow Tauri command', async () => {
+  const calls: { command: string; args?: Record<string, unknown> }[] = []
+  const checkpoint: ShutdownCheckpoint = {
+    version: 1 as const,
+    sessions: [{ state: { activeWorktreeId: 'worktree-1' } as WorkspaceSessionState }],
+    ui: { activeView: 'terminal' }
+  }
+  const client = createDesktopClient(async (command, args) => {
+    calls.push({ command, args })
+    return undefined
+  }, createWindowCapability())
+
+  await client.app.stageShutdownCheckpoint(checkpoint)
+
+  assert.deepEqual(calls, [{ command: 'app_stage_shutdown_checkpoint', args: { checkpoint } }])
 })
 
 test('window minimize delegates through the desktop window capability', async () => {

@@ -487,13 +487,13 @@ describe('renderer startup runtime routing', () => {
     expect(appSource).toContain('<Toaster closeButton')
   })
 
-  it('checkpoints activeView and all session snapshots through one beforeunload handler (#9002)', () => {
+  it('checkpoints activeView and all session snapshots through one runtime-owned capture (#9002)', () => {
     const source = readSource(SESSION_PERSISTENCE_PATH)
     const checkpointStart = source.indexOf(
-      'const shutdownCheckpoint = createShutdownCheckpointGuard('
+      'const captureShutdownCheckpoint = (): ShutdownCheckpointPayload => {'
     )
     const checkpointEnd = source.indexOf(
-      'const persistBeforeUnload = createShutdownCheckpointBeforeUnloadHandler(shutdownCheckpoint)',
+      "if (desktopShutdownCheckpointClient.strategy === 'async-close-guard')",
       checkpointStart
     )
     expect(checkpointStart).toBeGreaterThanOrEqual(0)
@@ -506,14 +506,17 @@ describe('renderer startup runtime routing', () => {
     expect(checkpointBlock).toContain(
       'buildWorkspaceSessionHostSnapshots(buildWorkspaceSessionPayload(freshState), freshState)'
     )
-    expect(checkpointBlock).toContain('window.api.app.stageBeforeUnloadSync({')
     expect(checkpointBlock).toContain('sessions: sessionSnapshots')
     expect(checkpointBlock).toContain('ui: buildActiveViewUnloadPatch(freshState)')
     expect(checkpointBlock).toContain('!isIntentionalAppRestartInProgress()')
     expect(checkpointBlock).toContain('freshState.openFiles.some((file) => file.isDirty)')
     expect(checkpointBlock).toContain('sessions: []')
-    expect(checkpointBlock).toContain(
-      'return\n      }\n      window.api.app.stageBeforeUnloadSync({\n        sessions: sessionSnapshots'
+    expect(source).toContain('registerWindowCloseFinalizer(async () => {')
+    expect(source).toContain(
+      'await desktopShutdownCheckpointClient.stageAndWait(captureShutdownCheckpoint())'
+    )
+    expect(source).toContain(
+      'desktopShutdownCheckpointClient.stageSync(captureShutdownCheckpoint())'
     )
     expect(source).toContain(
       'window.addEventListener(MCODE_APP_RESTART_ABORTED_EVENT, shutdownCheckpoint.reset)'

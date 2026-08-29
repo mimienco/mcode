@@ -1,6 +1,24 @@
 use mcode_app::{BuildLane, LaunchContext, LifecycleService};
+use mcode_settings::{SettingsService, SettingsServiceError, ShutdownCheckpoint};
+use serde::Serialize;
 use std::time::Duration;
-use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopCommandError {
+    code: &'static str,
+    message: String,
+}
+
+impl From<SettingsServiceError> for DesktopCommandError {
+    fn from(error: SettingsServiceError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
 
 pub fn app_get_launch_context_for(service: &LifecycleService) -> LaunchContext {
     service.launch_context()
@@ -9,6 +27,21 @@ pub fn app_get_launch_context_for(service: &LifecycleService) -> LaunchContext {
 #[tauri::command]
 fn app_get_launch_context(service: tauri::State<'_, LifecycleService>) -> LaunchContext {
     app_get_launch_context_for(&service)
+}
+
+pub fn app_stage_shutdown_checkpoint_for(
+    service: &SettingsService,
+    checkpoint: ShutdownCheckpoint,
+) -> Result<(), SettingsServiceError> {
+    service.stage_shutdown_checkpoint(checkpoint)
+}
+
+#[tauri::command]
+async fn app_stage_shutdown_checkpoint(
+    service: tauri::State<'_, SettingsService>,
+    checkpoint: ShutdownCheckpoint,
+) -> Result<(), DesktopCommandError> {
+    app_stage_shutdown_checkpoint_for(&service, checkpoint).map_err(DesktopCommandError::from)
 }
 
 #[cfg(debug_assertions)]
@@ -49,6 +82,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(lifecycle)
         .setup(|app| {
+            let settings_path = app.path().app_data_dir()?.join("mcode-data.json");
+            app.manage(SettingsService::new(settings_path));
             build_main_window(app)?;
             if is_smoke_test() {
                 let app_handle = app.handle().clone();
@@ -59,7 +94,10 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_get_launch_context])
+        .invoke_handler(tauri::generate_handler![
+            app_get_launch_context,
+            app_stage_shutdown_checkpoint
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run MCode Tauri application");
 }

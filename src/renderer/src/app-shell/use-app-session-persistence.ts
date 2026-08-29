@@ -21,13 +21,20 @@ import {
   createShutdownCheckpointGuard
 } from '../lib/shutdown-checkpoint-guard'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
-import { dispatchWindowCloseRequest } from '../components/window-close-request-coordinator'
+import {
+  dispatchWindowCloseRequest,
+  registerWindowCloseFinalizer
+} from '../components/window-close-request-coordinator'
+import { desktopWindowClient } from '../desktop/runtime-desktop-window-client'
+import { desktopShutdownCheckpointClient } from '../desktop/runtime-desktop-shutdown-checkpoint-client'
+import { subscribeToDesktopWindowCloseRequests } from '../desktop/desktop-window-close-subscription'
 import {
   MCODE_APP_RESTART_ABORTED_EVENT,
   MCODE_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT
 } from '../../../shared/updater-renderer-events'
 import { MCODE_RENDERER_UNLOAD_PREVENTED_EVENT } from '../../../shared/renderer-shutdown-events'
 import type { RemoteWorkspacePatchResult } from '../../../shared/remote-workspace-types'
+import type { ShutdownCheckpointPayload } from '../../../shared/shutdown-checkpoint-types'
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
 const SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS = 60_000
@@ -108,16 +115,9 @@ export function useAppSessionPersistence(): void {
   }, [])
 
   // On shutdown, capture terminal scrollback buffers and flush all durable
-  // renderer state through one synchronous main-process checkpoint.
+  // renderer state through the runtime-owned checkpoint boundary.
   useEffect(() => {
-    // Why: beforeunload fires twice during a manual quit — once from the
-    // synthetic dispatch in the onWindowCloseRequested handler (captures
-    // good data while TerminalPanes are still mounted), and again from the
-    // native window close triggered by confirmWindowClose(). Between these
-    // two firings, PTY exit events can arrive and unmount TerminalPanes,
-    // emptying shutdownBufferCaptures. The guard prevents the second call
-    // from overwriting the good session data with an empty snapshot.
-    const shutdownCheckpoint = createShutdownCheckpointGuard(() => {
+    const captureShutdownCheckpoint = (): ShutdownCheckpointPayload => {
       const shouldCaptureSession = shouldPersistWorkspaceSession(useAppStore.getState())
       if (shouldCaptureSession) {
         for (const capture of shutdownBufferCaptures.values()) {
@@ -151,16 +151,31 @@ export function useAppSessionPersistence(): void {
           throw error
         }
         console.error('[app] Full renderer session snapshot failed; using durable session', error)
-        window.api.app.stageBeforeUnloadSync({
+        return {
           sessions: [],
           ui: buildActiveViewUnloadPatch(freshState)
-        })
-        return
+        }
       }
-      window.api.app.stageBeforeUnloadSync({
+      return {
         sessions: sessionSnapshots,
         ui: buildActiveViewUnloadPatch(freshState)
+      }
+    }
+
+    if (desktopShutdownCheckpointClient.strategy === 'async-close-guard') {
+      // Why: Tauri can await the Rust atomic commit. Register this as the final
+      // close step so Save/Discard and child-process decisions are reflected in
+      // the snapshot, and a disk failure leaves the native window open.
+      return registerWindowCloseFinalizer(async () => {
+        await desktopShutdownCheckpointClient.stageAndWait(captureShutdownCheckpoint())
       })
+    }
+
+    // Why: Electron beforeunload fires twice during a manual quit — once from
+    // Terminal's synthetic dispatch and again from native close. Prevent the
+    // second call from overwriting the good mounted-pane snapshot.
+    const shutdownCheckpoint = createShutdownCheckpointGuard(() => {
+      desktopShutdownCheckpointClient.stageSync(captureShutdownCheckpoint())
     })
     const persistBeforeUnload = createShutdownCheckpointBeforeUnloadHandler(shutdownCheckpoint)
     window.addEventListener('beforeunload', persistBeforeUnload)
@@ -191,7 +206,7 @@ export function useAppSessionPersistence(): void {
 
   // Why: subscribe at the always-mounted App root — Terminal owns the confirm flow but isn't mounted on the landing page, so subscribing there left File→Exit / Ctrl+Q with no listener (#5144).
   useEffect(() => {
-    return window.api.ui.onWindowCloseRequested(dispatchWindowCloseRequest)
+    return subscribeToDesktopWindowCloseRequests(desktopWindowClient, dispatchWindowCloseRequest)
   }, [])
 
   // Why no periodic scrollback save: the old 3-min re-serialize (#461) stalled the main thread for seconds; the out-of-process daemon (#729) is the durable replacement, non-daemon users lose in-session scrollback on unexpected exit.

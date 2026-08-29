@@ -28,7 +28,9 @@ export function createRuntimeDesktopWindowClient({
     toggleMaximize: async () => (await resolveClient()).toggleMaximize(),
     isMaximized: async () => (await resolveClient()).isMaximized(),
     onMaximizedChanged: async (listener) => (await resolveClient()).onMaximizedChanged(listener),
-    requestClose: async () => (await resolveClient()).requestClose()
+    requestClose: async () => (await resolveClient()).requestClose(),
+    onCloseRequested: async (listener) => (await resolveClient()).onCloseRequested(listener),
+    confirmClose: async () => (await resolveClient()).confirmClose()
   }
 }
 
@@ -45,6 +47,11 @@ const electronWindowClient: DesktopWindowClient = {
   onMaximizedChanged: (listener) => Promise.resolve(window.api.ui.onMaximizeChanged(listener)),
   requestClose: () => {
     window.api.ui.requestClose()
+    return Promise.resolve()
+  },
+  onCloseRequested: (listener) => Promise.resolve(window.api.ui.onWindowCloseRequested(listener)),
+  confirmClose: () => {
+    window.api.ui.confirmWindowClose()
     return Promise.resolve()
   }
 }

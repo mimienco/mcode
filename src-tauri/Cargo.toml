@@ -19,6 +19,8 @@ tauri-build.workspace = true
 
 [dependencies]
 mcode-app = { path = "../crates/mcode-app" }
+mcode-settings = { path = "../crates/mcode-settings" }
+serde.workspace = true
 tauri.workspace = true
 
 [dev-dependencies]

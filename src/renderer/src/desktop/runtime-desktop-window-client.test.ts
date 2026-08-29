@@ -11,7 +11,9 @@ function createWindowClient(minimize: () => Promise<void>): DesktopWindowClient 
     toggleMaximize: () => Promise.resolve(),
     isMaximized: () => Promise.resolve(false),
     onMaximizedChanged: () => Promise.resolve(() => undefined),
-    requestClose: () => Promise.resolve()
+    requestClose: () => Promise.resolve(),
+    onCloseRequested: () => Promise.resolve(() => undefined),
+    confirmClose: () => Promise.resolve()
   }
 }
 

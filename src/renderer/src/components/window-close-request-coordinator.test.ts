@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   dispatchWindowCloseRequest,
   getWindowCloseRequestHandler,
+  registerWindowCloseFinalizer,
   registerWindowCloseGuard,
   setWindowCloseRequestHandler
 } from './window-close-request-coordinator'
@@ -53,6 +54,15 @@ describe('window-close-request-coordinator', () => {
     expect(confirmWindowClose).toHaveBeenCalledTimes(1)
   })
 
+  it('confirms the landing-page close through the typed desktop capability', async () => {
+    const confirmClose = vi.fn(() => Promise.resolve())
+
+    await dispatchWindowCloseRequest({ isQuitting: false }, { confirmClose } as never)
+
+    expect(confirmClose).toHaveBeenCalledOnce()
+    expect(confirmWindowClose).not.toHaveBeenCalled()
+  })
+
   it('delegates to the rich handler and does NOT confirm directly when one is registered', async () => {
     const handler = vi.fn()
     setWindowCloseRequestHandler(handler)
@@ -84,6 +94,32 @@ describe('window-close-request-coordinator', () => {
     await dispatchWindowCloseRequest({ isQuitting: true })
 
     expect(confirmWindowClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('awaits final durability work immediately before confirming a landing-page close', async () => {
+    const calls: string[] = []
+    unregisterFns.push(
+      registerWindowCloseFinalizer(async () => {
+        calls.push('durable')
+      })
+    )
+
+    await dispatchWindowCloseRequest({ isQuitting: false }, {
+      async confirmClose() {
+        calls.push('confirm')
+      }
+    } as never)
+
+    expect(calls).toEqual(['durable', 'confirm'])
+  })
+
+  it('keeps the window open when final durability work rejects', async () => {
+    const confirmClose = vi.fn(() => Promise.resolve())
+    unregisterFns.push(registerWindowCloseFinalizer(() => Promise.reject(new Error('disk full'))))
+
+    await dispatchWindowCloseRequest({ isQuitting: false }, { confirmClose } as never)
+
+    expect(confirmClose).not.toHaveBeenCalled()
   })
 
   it('short-circuits on the first vetoing guard', async () => {

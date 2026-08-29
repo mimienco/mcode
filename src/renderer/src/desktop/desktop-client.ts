@@ -1,3 +1,5 @@
+import type { ShutdownCheckpoint } from '../../../shared/shutdown-checkpoint-types'
+
 export type BuildLane = 'development' | 'production'
 
 export type LaunchContext = {
@@ -9,12 +11,20 @@ export type LaunchContext = {
 
 export type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
 
+export type DesktopWindowCloseRequest = {
+  isQuitting: boolean
+}
+
 export type DesktopWindowCapability = {
   minimize: () => Promise<void>
   toggleMaximize: () => Promise<void>
   isMaximized: () => Promise<boolean>
   onMaximizedChanged: (listener: (maximized: boolean) => void) => Promise<() => void>
   requestClose: () => Promise<void>
+  onCloseRequested: (
+    listener: (request: DesktopWindowCloseRequest) => void | Promise<void>
+  ) => Promise<() => void>
+  confirmClose: () => Promise<void>
 }
 
 function isLaunchContext(value: unknown): value is LaunchContext {
@@ -42,6 +52,9 @@ export function createDesktopClient(
           throw new Error('Invalid app_get_launch_context response')
         }
         return response
+      },
+      async stageShutdownCheckpoint(checkpoint: ShutdownCheckpoint): Promise<void> {
+        await invoke('app_stage_shutdown_checkpoint', { checkpoint })
       }
     },
     window: windowCapability

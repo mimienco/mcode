@@ -1,3 +1,7 @@
+import { MCODE_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT } from '../../../shared/renderer-shutdown-events'
+import type { DesktopWindowCapability } from '../desktop/desktop-client'
+import { desktopWindowClient } from '../desktop/runtime-desktop-window-client'
+
 // Coordinates the single main->renderer window-close-request subscription (owned
 // by the always-mounted App root) with the rich close-confirmation handler in
 // Terminal, which only mounts once a workspace exists. Without this, quitting on
@@ -14,9 +18,11 @@ export type WindowCloseRequestHandler = (data: { isQuitting: boolean }) => void
 /** Returns true to allow the close to proceed, false to cancel it (e.g. the user
  *  picked "Cancel" in an unsaved-changes prompt). */
 export type WindowCloseGuard = () => boolean | Promise<boolean>
+export type WindowCloseFinalizer = () => void | Promise<void>
 
 let activeHandler: WindowCloseRequestHandler | null = null
 const closeGuards = new Set<WindowCloseGuard>()
+const closeFinalizers = new Set<WindowCloseFinalizer>()
 // Why: a guard can await a dialog; ignore re-entrant close requests (main resends
 // 'window:close-requested' on each attempt) so we don't stack duplicate prompts.
 let closeInFlight = false
@@ -39,6 +45,14 @@ export function registerWindowCloseGuard(guard: WindowCloseGuard): () => void {
   }
 }
 
+/** Register work that must finish after every user decision but before native close. */
+export function registerWindowCloseFinalizer(finalizer: WindowCloseFinalizer): () => void {
+  closeFinalizers.add(finalizer)
+  return () => {
+    closeFinalizers.delete(finalizer)
+  }
+}
+
 async function runWindowCloseGuards(): Promise<boolean> {
   for (const guard of closeGuards) {
     if (!(await guard())) {
@@ -48,12 +62,33 @@ async function runWindowCloseGuards(): Promise<boolean> {
   return true
 }
 
+export async function finalizeAndConfirmWindowClose(
+  desktopWindow: Pick<DesktopWindowCapability, 'confirmClose'> = desktopWindowClient
+): Promise<boolean> {
+  try {
+    for (const finalizer of closeFinalizers) {
+      await finalizer()
+    }
+  } catch (error) {
+    console.error('[app] Final window-close durability work failed', error)
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event(MCODE_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT))
+    }
+    return false
+  }
+  await desktopWindow.confirmClose()
+  return true
+}
+
 /** Route a main-process close request: run pre-close guards first (cancel if any
  *  vetoes), then delegate to Terminal's rich handler when mounted, else confirm
  *  directly. Why confirm directly: with no workbench mounted there are no
  *  terminals or editor tabs to protect, so blocking would just deadlock the
  *  window (#5144). */
-export async function dispatchWindowCloseRequest(data: { isQuitting: boolean }): Promise<void> {
+export async function dispatchWindowCloseRequest(
+  data: { isQuitting: boolean },
+  desktopWindow: Pick<DesktopWindowCapability, 'confirmClose'> = desktopWindowClient
+): Promise<void> {
   if (closeInFlight) {
     return
   }
@@ -69,5 +104,5 @@ export async function dispatchWindowCloseRequest(data: { isQuitting: boolean }):
     activeHandler(data)
     return
   }
-  window.api.ui.confirmWindowClose()
+  await finalizeAndConfirmWindowClose(desktopWindow)
 }

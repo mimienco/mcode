@@ -139,7 +139,10 @@ import {
 } from './terminal-pane/terminal-parked-tab-watchers'
 import { isMainTerminalSideEffectAuthorityForPty } from './terminal-pane/terminal-side-effect-facts-handler'
 import { appendUniqueOpenFileIds } from './terminal/unsaved-close-queue'
-import { setWindowCloseRequestHandler } from './window-close-request-coordinator'
+import {
+  finalizeAndConfirmWindowClose,
+  setWindowCloseRequestHandler
+} from './window-close-request-coordinator'
 import {
   findActivityTerminalPortal,
   useActivityTerminalPortals,
@@ -516,7 +519,7 @@ function Terminal(): React.JSX.Element | null {
     if (!accepted) {
       return
     }
-    window.api.ui.confirmWindowClose()
+    void finalizeAndConfirmWindowClose()
   }, [])
 
   const proceedToNativeWindowClose = useCallback(
@@ -2363,7 +2366,7 @@ function Terminal(): React.JSX.Element | null {
   useEffect(() => {
     setWindowCloseRequestHandler(({ isQuitting }) => {
       if (isIntentionalAppRestartInProgress()) {
-        window.api.ui.confirmWindowClose()
+        void finalizeAndConfirmWindowClose()
         return
       }
 

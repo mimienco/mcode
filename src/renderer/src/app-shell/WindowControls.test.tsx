@@ -16,6 +16,8 @@ function createDesktopWindow(
     isMaximized: () => Promise.resolve(false),
     onMaximizedChanged: () => Promise.resolve(() => undefined),
     requestClose: () => Promise.resolve(),
+    onCloseRequested: () => Promise.resolve(() => undefined),
+    confirmClose: () => Promise.resolve(),
     ...overrides
   }
 }
