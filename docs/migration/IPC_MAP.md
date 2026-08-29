@@ -2,6 +2,15 @@
 
 The preload API is the compatibility surface, not the target architecture. Each namespace is mapped to a Rust service and a typed TypeScript client; literal channel inventory is supplemented with manual registration/call-site tracing.
 
+## Machine-readable source of truth
+
+- `electron-ipc-inventory.json`: 1,935 located operations and a 978-channel correlation index from the immutable original.
+- `electron-ipc-dynamic-resolutions.json`: evidence for all 20 parameterized registration/caller/emitter factories.
+- `config/scripts/generate-electron-ipc-inventory.mjs`: deterministic AST generator and stale-artifact check.
+- `config/scripts/generate-electron-ipc-inventory.node-test.mjs`: imported/template channel resolution, alias/optional-call detection, exclusion, ordering, reconciliation, and correlation contracts.
+
+All 762 registrations correlate to at least one of 787 callers, and every caller correlates to a registration. All 208 emitters correlate to a subscription. Of 178 subscriptions, only `export:requestPdf` and `ui:closeSessionTab` lack any production emitter in the captured original and are retained as explicit subscription-only compatibility findings.
+
 | Current namespace | Target service | Transport shape | State |
 | --- | --- | --- | --- |
 | app, platform, ui, shell | lifecycle/platform | commands plus lifecycle events | inventoried |
@@ -27,5 +36,12 @@ First migrated renderer surface:
 | `window:isMaximized` | typed client → Tauri core window `isMaximized` | client and component tests | persisted initial bounds/restore |
 | `window:maximize-changed` | typed client → Tauri resize event plus ordered maximize query | subscription/cleanup tests | platform event E2E |
 | `window:request-close` | typed client → interceptable Tauri core window `close` | client/component test, capability contract, and native build | terminal confirmation, tray, quit/session handshake |
+| app-wide Quit/Restart | typed lifecycle client → versioned request/receipt/cancel/atomic-execute commands | Rust contracts, renderer contracts, real WebView2 Quit/Restart smoke | updater/full-renderer integration and non-Windows evidence |
 
 For every command, the final map will record the old registration and caller, request/response schema, Rust handler, capability, error codes, cancellation behavior, tests, and parity evidence. Generic `invoke(command, unknown)` wrappers are prohibited in product code.
+
+Regenerate and verify from the rewrite repository:
+
+```powershell
+node --max-old-space-size=4096 config/scripts/generate-electron-ipc-inventory.mjs --source D:\ADE\orca --resolutions docs\migration\electron-ipc-dynamic-resolutions.json --output docs\migration\electron-ipc-inventory.json --check
+```

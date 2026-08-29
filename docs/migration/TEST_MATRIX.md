@@ -14,6 +14,7 @@
 | glibc floor | n/a | n/a | Ubuntu 20.04 floor | not started |
 | terminal/startup/RAM/package benchmarks | same machine | same machine | same machine | Electron terminal baseline partial/red; startup/RAM/package pending |
 | localization/chunk/max-lines/dead-code/reliability gates | required | required | required | migration wiring pending |
+| Electron/Node surface inventory | source-authoritative | source-authoritative | source-authoritative | AST generator tests and deterministic full-original `--check` green: 7,763 production files, 1,935 operations, 978 channels, 20 reconciled factories, 0 unresolved dynamic entries, 0 parse failures |
 
 Core automated journey: install/start, open workspace, detect repository, create worktree, launch agent, stream/input terminal, observe file/watch/diff, stop cleanly, restart/restore, connect SSH, pair mobile, stream remotely, and apply a controlled update.
 

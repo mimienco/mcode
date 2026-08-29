@@ -49,6 +49,9 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 - Routed dirty-file Cancel back through the native request cancellation path and moved the native lifecycle subscription ahead of later renderer bootstrap work.
 - Ran isolated real Windows WebView2 Quit and Restart flows: both wrote the shutdown checkpoint; Restart relaunched a child that wrote `relaunched`; no native process or dev port remained.
 - Re-ran the two-axis review at `7284f6377f`: Standards PASS and Spec PASS with no remaining shutdown-slice findings.
+- Replaced the preliminary IPC regex counts with a deterministic Babel-TypeScript AST inventory of the immutable original.
+- Correlated 1,935 operations and 978 channels; reconciled all 20 dynamic factories against explicit call sites with zero unresolved entries or parse failures.
+- Proved complete command pairing (no registrations without callers and no callers without registrations) and recorded the two subscription-only legacy event channels.
 
 ## Tests executed
 
@@ -89,6 +92,8 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 - Isolated WebView2 Quit smoke: PASS; receipt ACK, durability confirmation, exit 0, and checkpoint verified.
 - Isolated WebView2 Restart smoke: PASS; receipt ACK, durability confirmation, child relaunch marker `relaunched`, checkpoint, exit 0, and no remaining process verified.
 - Final original-integrity guard: PASS (`unchanged: true`; 16,748 checked, 3 expected missing, 0 unexpected or mismatched).
+- `node --test config/scripts/generate-electron-ipc-inventory.node-test.mjs`: PASS (3 tests).
+- Full original IPC generation plus `--check`: PASS (7,763 production files, 1,935 operations, 978 channels, 20 reconciled factories, 0 dynamic, 0 parse failures).
 
 ## Current blockers
 
@@ -106,7 +111,7 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 
 ## Exact next actions
 
-1. Finish the machine-readable Electron/Node surface inventory and map dynamic IPC registrations.
+1. Finish the separate production renderer Node-built-in/import inventory using an exact allowlist.
 2. Connect updater-triggered restart and the full production renderer to the proven acknowledgement/durability protocol.
 3. Port Windows minimize-to-tray and startup restore, then expand the real WebView2 harness beyond the targeted lifecycle page.
-4. Route renderer startup services through typed lifecycle clients, then design scoped filesystem/process contracts.
+4. Use the correlated IPC ledger to prioritize and specify scoped filesystem/process contracts.

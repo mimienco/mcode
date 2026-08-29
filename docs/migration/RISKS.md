@@ -5,7 +5,7 @@
 | Existing source is heavily dirty | Accidental loss or false attribution | Immutable original, two verified copies, manifest guard after every phase, explicit staging only |
 | PTY/process behavior differs by OS | Lost output, orphaned agents, shutdown failures | Behavioral inventory, golden streams, resize/load/kill-tree tests, same-machine benchmarks |
 | System WebViews differ | Monaco/xterm/IME/clipboard regressions | Real WebView2, WKWebView, and WebKitGTK E2E matrix |
-| IPC inventory misses dynamic channels | Silent feature loss | Static inventory plus registration-factory and call-site tracing; parity row cannot turn green from regex alone |
+| IPC inventory misses dynamic channels | Silent feature loss | Deterministic AST inventory plus an explicit call-site resolution ledger; generation fails on stale/unknown resolutions, and parity cannot turn green from regex alone |
 | Wire protocol drifts | Existing mobile clients break | Golden vectors, explicit versions/capabilities, old-client/new-host and inverse compatibility tests |
 | Updater identity changes | Crossgrade or rollback failure | Signed channel matrix and a bridge release if direct replacement is unreliable |
 | Git/WSL/path semantics drift | Worktree corruption or inaccessible files | Git 2.25 capability tests, Windows/WSL path corpus, interruption recovery tests |

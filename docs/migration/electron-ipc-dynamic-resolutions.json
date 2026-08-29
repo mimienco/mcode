@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "resolutions": [
+    {
+      "id": "src/main/ipc/skill-ipc-main-window.ts:8:3",
+      "channels": [
+        "skills:acknowledgeUpdateRun",
+        "skills:cancelInstall",
+        "skills:cancelShare",
+        "skills:cancelUpdateRun",
+        "skills:deletePackage",
+        "skills:deletePackageVersion",
+        "skills:discover",
+        "skills:freshnessInventory",
+        "skills:getPackage",
+        "skills:getUpdateRun",
+        "skills:installBundlePackageVersion",
+        "skills:installBundleShare",
+        "skills:installPackageVersion",
+        "skills:installShare",
+        "skills:listManagedInstalls",
+        "skills:listOwnedShares",
+        "skills:listWslDistros",
+        "skills:prepareShare",
+        "skills:previewBundleInstall",
+        "skills:previewInstall",
+        "skills:publishShare",
+        "skills:releaseShare",
+        "skills:removeInstall",
+        "skills:resolveShare",
+        "skills:revokeShare",
+        "skills:startUpdateRun"
+      ],
+      "rationale": "All production callers of handleMainWindowSkillIpc pass a literal channel as their first argument.",
+      "evidence": [
+        "src/main/ipc/skills.ts:67-98",
+        "src/main/ipc/skill-install-management-ipc-handlers.ts:104-194",
+        "src/main/ipc/skill-cloud-ipc-handlers.ts:58-287"
+      ]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:34:3",
+      "channels": [
+        "claudeUsage:getScanState",
+        "codexUsage:getScanState",
+        "openCodeUsage:getScanState"
+      ],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:35:3",
+      "channels": ["claudeUsage:setEnabled", "codexUsage:setEnabled", "openCodeUsage:setEnabled"],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:38:3",
+      "channels": ["claudeUsage:refresh", "codexUsage:refresh", "openCodeUsage:refresh"],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:41:3",
+      "channels": [
+        "claudeUsage:getSnapshot",
+        "codexUsage:getSnapshot",
+        "openCodeUsage:getSnapshot"
+      ],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:46:3",
+      "channels": ["claudeUsage:getSummary", "codexUsage:getSummary", "openCodeUsage:getSummary"],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:49:3",
+      "channels": ["claudeUsage:getDaily", "codexUsage:getDaily", "openCodeUsage:getDaily"],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:52:3",
+      "channels": [
+        "claudeUsage:getBreakdown",
+        "codexUsage:getBreakdown",
+        "openCodeUsage:getBreakdown"
+      ],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/usage-provider-handlers.ts:57:3",
+      "channels": [
+        "claudeUsage:getRecentSessions",
+        "codexUsage:getRecentSessions",
+        "openCodeUsage:getRecentSessions"
+      ],
+      "rationale": "registerProviderHandlers is invoked once for each closed UsageProviderChannelPrefix value.",
+      "evidence": ["src/main/ipc/usage-provider-handlers.ts:64-68"]
+    },
+    {
+      "id": "src/main/ipc/ui.ts:24:3",
+      "channels": [
+        "dashboard:popoutOpenChanged",
+        "dashboard:snapshotRequested",
+        "gh:prRefreshEvent",
+        "gh:workItemMutated",
+        "ui:ackDashboardAgent",
+        "ui:sleepDashboardWorkspace",
+        "ui:spawnDashboardAgent"
+      ],
+      "rationale": "All production callers of sendToTrustedUIRenderer pass a literal event channel.",
+      "evidence": [
+        "src/main/github/pr-refresh-coordinator.ts:228",
+        "src/main/ipc/dashboard-popout.ts:106-171",
+        "src/main/ipc/github.ts:130",
+        "src/main/window/dashboard-popout-window.ts:96"
+      ]
+    },
+    {
+      "id": "src/main/runtime/mcode-runtime-emulator.ts:327:7",
+      "channels": ["emulator:pane-focus", "ui:emulatorAutoAttach"],
+      "rationale": "The private sendToRenderer method has exactly two production callers, both with literal channels.",
+      "evidence": ["src/main/runtime/mcode-runtime-emulator.ts:334-339"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:17:25",
+      "channels": [
+        "claudeUsage:getScanState",
+        "codexUsage:getScanState",
+        "openCodeUsage:getScanState"
+      ],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:18:49",
+      "channels": ["claudeUsage:setEnabled", "codexUsage:setEnabled", "openCodeUsage:setEnabled"],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:19:46",
+      "channels": ["claudeUsage:refresh", "codexUsage:refresh", "openCodeUsage:refresh"],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:21:7",
+      "channels": [
+        "claudeUsage:getSnapshot",
+        "codexUsage:getSnapshot",
+        "openCodeUsage:getSnapshot"
+      ],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:22:43",
+      "channels": ["claudeUsage:getSummary", "codexUsage:getSummary", "openCodeUsage:getSummary"],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:23:41",
+      "channels": ["claudeUsage:getDaily", "codexUsage:getDaily", "openCodeUsage:getDaily"],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:25:7",
+      "channels": [
+        "claudeUsage:getBreakdown",
+        "codexUsage:getBreakdown",
+        "openCodeUsage:getBreakdown"
+      ],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/preload/usage-provider-api.ts:27:7",
+      "channels": [
+        "claudeUsage:getRecentSessions",
+        "codexUsage:getRecentSessions",
+        "openCodeUsage:getRecentSessions"
+      ],
+      "rationale": "createUsageProviderApi is invoked once for each closed UsageProviderApiKey value.",
+      "evidence": ["src/preload/index.ts:4472-4474"]
+    },
+    {
+      "id": "src/main/window/runtime-renderer-notification-sender.ts:43:9",
+      "channels": [
+        "agentStatus:legacyWorkerTerminalRecovery",
+        "repos:changed",
+        "runtime:browserDriverChanged",
+        "runtime:nativeChatLaunchDraftResolved",
+        "runtime:terminalDriverChanged",
+        "runtime:terminalFitOverrideChanged",
+        "ui:activateWorktree",
+        "ui:closeTerminal",
+        "ui:createTerminal",
+        "ui:focusEditorTab",
+        "ui:focusTerminal",
+        "ui:moveSessionTab",
+        "ui:openDiffFromMobile",
+        "ui:openFileFromMobile",
+        "ui:renameTerminal",
+        "ui:resumeSleepingAgents",
+        "ui:sleepWorktree",
+        "ui:splitTerminal",
+        "worktree:baseStatus",
+        "worktree:remoteBranchConflict",
+        "worktrees:changed"
+      ],
+      "rationale": "attachMainWindowServices aliases rendererNotifications.send and all production calls pass literal channels.",
+      "evidence": ["src/main/window/attach-main-window-services.ts:335-507"]
+    }
+  ]
+}

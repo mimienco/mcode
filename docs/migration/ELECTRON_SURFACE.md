@@ -19,11 +19,24 @@
 - SSH and remote workspaces, relay/RPC, mobile pairing, automations, voice/speech, native chat, AI vault, computer use.
 - CLI, headless serve, runtime environments, rate limits, hosted review providers and issue integrations.
 
-## Preliminary static scan
+## Authoritative IPC surface scan
 
-A broad literal scan found 731 distinct main-process channel registration strings and 915 distinct preload channel strings. These numbers are intentionally preliminary: factories, computed names, event-only channels, and tests make simple regex both under- and over-inclusive. The IPC map must be reconciled against registration helpers and renderer call sites before it is considered complete.
+`electron-ipc-inventory.json` is generated from the immutable original with `generate-electron-ipc-inventory.mjs`. The Babel TypeScript AST scan covers production files under `src/main`, `src/preload`, `src/renderer/src`, and `src/shared`; tests, fixtures, mocks, harnesses, build output, and dependencies are excluded by a locked rule.
 
-Production renderer imports will be rescanned using an exact Node-built-in allowlist and with tests/fixtures excluded. Earlier broad substring results are not accepted as evidence.
+Current result:
+
+- 7,763 production source files parsed; zero parse failures.
+- 1,935 IPC operations across 135 files.
+- 762 Main registrations, 787 Preload callers, 208 Main emitters, and 178 Preload subscriptions.
+- 978 distinct channels.
+- 20 parameterized factory sites reconciled against explicit production call-site evidence in `electron-ipc-dynamic-resolutions.json`.
+- Zero unresolved dynamic entries.
+- Zero command registrations without callers and zero callers without registrations.
+- Zero emitters without subscriptions. Two subscription-only legacy channels remain: `export:requestPdf` and `ui:closeSessionTab`; neither has a production emitter anywhere in the captured original.
+
+The checked artifact records every operation with process area, direction, transport, receiver, expression, channel set, relative file, line, and column. `--check` regenerates the entire ledger and fails on any byte difference.
+
+Production renderer imports still require a separate exact Node-built-in allowlist scan. Broad substring results are not accepted as evidence.
 
 ## Removal gate
 
