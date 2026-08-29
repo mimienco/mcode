@@ -1807,6 +1807,7 @@ name = "mcode-app"
 version = "1.4.178"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]

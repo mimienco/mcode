@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+mod shutdown;
+
+pub use shutdown::{LifecycleServiceError, ShutdownIntent, ShutdownRequest};
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BuildLane {
@@ -16,9 +20,10 @@ pub struct LaunchContext {
     pub safe_mode: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct LifecycleService {
     context: LaunchContext,
+    shutdown: shutdown::ShutdownCoordinator,
 }
 
 impl LifecycleService {
@@ -30,10 +35,47 @@ impl LifecycleService {
                 headless: false,
                 safe_mode: false,
             },
+            shutdown: shutdown::ShutdownCoordinator::new(),
         }
     }
 
     pub fn launch_context(&self) -> LaunchContext {
         self.context.clone()
+    }
+
+    pub fn request_shutdown(
+        &self,
+        intent: ShutdownIntent,
+    ) -> Result<ShutdownRequest, LifecycleServiceError> {
+        self.shutdown.request(intent)
+    }
+
+    pub fn pending_shutdown(&self) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
+        self.shutdown.pending()
+    }
+
+    pub fn confirm_shutdown(
+        &self,
+        request_id: &str,
+    ) -> Result<ShutdownRequest, LifecycleServiceError> {
+        self.shutdown.confirm(request_id)
+    }
+
+    pub fn cancel_shutdown(&self, request_id: &str) -> Result<(), LifecycleServiceError> {
+        self.shutdown.cancel(request_id)
+    }
+
+    pub fn commit_shutdown(
+        &self,
+        request_id: &str,
+    ) -> Result<ShutdownRequest, LifecycleServiceError> {
+        self.shutdown.commit(request_id)
+    }
+
+    pub fn is_shutdown_executing(
+        &self,
+        intent: ShutdownIntent,
+    ) -> Result<bool, LifecycleServiceError> {
+        self.shutdown.is_executing(intent)
     }
 }
