@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { it as test } from 'vitest'
 import type { ShutdownCheckpoint } from '../../../shared/shutdown-checkpoint-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import { createDesktopClient, type DesktopWindowCapability } from './desktop-client'
+import {
+  createDesktopClient,
+  isShutdownRequest,
+  type DesktopAppLifecycleCapability,
+  type DesktopWindowCapability
+} from './desktop-client'
 
 function createWindowCapability(
   overrides: Partial<DesktopWindowCapability> = {}
@@ -14,8 +21,27 @@ function createWindowCapability(
     onMaximizedChanged: () => Promise.resolve(() => undefined),
     requestClose: () => Promise.resolve(),
     onCloseRequested: () => Promise.resolve(() => undefined),
+    cancelClose: () => Promise.resolve(undefined),
     confirmClose: () => Promise.resolve(),
     ...overrides
+  }
+}
+
+test('shutdown request fixture matches the TypeScript contract', () => {
+  const fixture = JSON.parse(
+    readFileSync(resolve('crates/mcode-app/tests/fixtures/shutdown-request-v1.json'), 'utf8')
+  ) as unknown
+
+  assert.equal(isShutdownRequest(fixture), true)
+})
+
+function createAppLifecycleCapability(): DesktopAppLifecycleCapability {
+  return {
+    requestShutdown: (intent) => Promise.resolve({ version: 1, requestId: '1', intent }),
+    onShutdownRequested: () => Promise.resolve(() => undefined),
+    cancelShutdown: () => Promise.resolve(),
+    confirmShutdown: (requestId) => Promise.resolve({ version: 1, requestId, intent: 'quit' }),
+    executeShutdown: () => Promise.resolve()
   }
 }
 
@@ -27,10 +53,14 @@ test('launch context uses the narrow Tauri command and preserves its typed resul
     headless: false,
     safeMode: false
   }
-  const client = createDesktopClient(async (command, args) => {
-    calls.push({ command, args })
-    return expected
-  }, createWindowCapability())
+  const client = createDesktopClient(
+    async (command, args) => {
+      calls.push({ command, args })
+      return expected
+    },
+    createWindowCapability(),
+    createAppLifecycleCapability()
+  )
 
   const context = await client.app.getLaunchContext()
 
@@ -45,10 +75,14 @@ test('shutdown checkpoint uses the versioned narrow Tauri command', async () => 
     sessions: [{ state: { activeWorktreeId: 'worktree-1' } as WorkspaceSessionState }],
     ui: { activeView: 'terminal' }
   }
-  const client = createDesktopClient(async (command, args) => {
-    calls.push({ command, args })
-    return undefined
-  }, createWindowCapability())
+  const client = createDesktopClient(
+    async (command, args) => {
+      calls.push({ command, args })
+      return undefined
+    },
+    createWindowCapability(),
+    createAppLifecycleCapability()
+  )
 
   await client.app.stageShutdownCheckpoint(checkpoint)
 
@@ -63,7 +97,8 @@ test('window minimize delegates through the desktop window capability', async ()
       async minimize() {
         minimizeCalls += 1
       }
-    })
+    }),
+    createAppLifecycleCapability()
   )
 
   await client.window.minimize()
@@ -79,7 +114,8 @@ test('window maximize toggle delegates through the desktop window capability', a
       async toggleMaximize() {
         toggleCalls += 1
       }
-    })
+    }),
+    createAppLifecycleCapability()
   )
 
   await client.window.toggleMaximize()
@@ -92,7 +128,8 @@ test('window maximized state comes from the desktop window capability', async ()
     async () => undefined,
     createWindowCapability({
       isMaximized: () => Promise.resolve(true)
-    })
+    }),
+    createAppLifecycleCapability()
   )
 
   assert.equal(await client.window.isMaximized(), true)
@@ -110,7 +147,8 @@ test('window maximized subscription delegates listener ownership and cleanup', a
           cleanedUp = true
         }
       }
-    })
+    }),
+    createAppLifecycleCapability()
   )
 
   const unsubscribe = await client.window.onMaximizedChanged((value) => observed.push(value))
@@ -128,7 +166,8 @@ test('window close request delegates through the desktop window capability', asy
       async requestClose() {
         closeRequests += 1
       }
-    })
+    }),
+    createAppLifecycleCapability()
   )
 
   await client.window.requestClose()

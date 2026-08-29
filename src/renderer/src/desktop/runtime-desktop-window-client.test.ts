@@ -13,6 +13,7 @@ function createWindowClient(minimize: () => Promise<void>): DesktopWindowClient 
     onMaximizedChanged: () => Promise.resolve(() => undefined),
     requestClose: () => Promise.resolve(),
     onCloseRequested: () => Promise.resolve(() => undefined),
+    cancelClose: () => Promise.resolve(undefined),
     confirmClose: () => Promise.resolve()
   }
 }

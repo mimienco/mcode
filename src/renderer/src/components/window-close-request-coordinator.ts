@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { MCODE_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT } from '../../../shared/renderer-shutdown-events'
+import { MCODE_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
 import type { DesktopWindowCapability, DesktopWindowCloseRequest } from '../desktop/desktop-client'
 import { desktopWindowClient } from '../desktop/runtime-desktop-window-client'
 
@@ -63,14 +64,30 @@ async function runWindowCloseGuards(): Promise<boolean> {
   return true
 }
 
+type WindowCloseDecisionCapability = Pick<DesktopWindowCapability, 'cancelClose' | 'confirmClose'>
+
+async function cancelPendingWindowClose(
+  desktopWindow: Pick<DesktopWindowCapability, 'cancelClose'>
+): Promise<void> {
+  try {
+    const request = await desktopWindow.cancelClose()
+    if (request?.intent === 'restart' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event(MCODE_APP_RESTART_ABORTED_EVENT))
+    }
+  } catch (error) {
+    console.error('[app] Failed to cancel native shutdown request', error)
+  }
+}
+
 export async function finalizeAndConfirmWindowClose(
-  desktopWindow: Pick<DesktopWindowCapability, 'confirmClose'> = desktopWindowClient
+  desktopWindow: WindowCloseDecisionCapability = desktopWindowClient
 ): Promise<boolean> {
   try {
     for (const finalizer of closeFinalizers) {
       await finalizer()
     }
   } catch (error) {
+    await cancelPendingWindowClose(desktopWindow)
     console.error('[app] Final window-close durability work failed', error)
     toast.error(
       translate('auto.App.shutdownCheckpointFailed', 'MCode could not save your session'),
@@ -89,6 +106,7 @@ export async function finalizeAndConfirmWindowClose(
   try {
     await desktopWindow.confirmClose()
   } catch (error) {
+    await cancelPendingWindowClose(desktopWindow)
     console.error('[app] Native window close confirmation failed', error)
     toast.error(translate('auto.App.windowCloseFailed', 'MCode could not close this window'), {
       description: translate(
@@ -108,7 +126,7 @@ export async function finalizeAndConfirmWindowClose(
  *  window (#5144). */
 export async function dispatchWindowCloseRequest(
   data: DesktopWindowCloseRequest,
-  desktopWindow: Pick<DesktopWindowCapability, 'confirmClose'> = desktopWindowClient
+  desktopWindow: WindowCloseDecisionCapability = desktopWindowClient
 ): Promise<void> {
   if (closeInFlight) {
     return
@@ -116,6 +134,7 @@ export async function dispatchWindowCloseRequest(
   closeInFlight = true
   try {
     if (!(await runWindowCloseGuards())) {
+      await cancelPendingWindowClose(desktopWindow)
       return
     }
   } finally {

@@ -6,6 +6,7 @@ import {
   registerWindowCloseGuard,
   setWindowCloseRequestHandler
 } from './window-close-request-coordinator'
+import { MCODE_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
 
 const toastError = vi.hoisted(() => vi.fn())
 
@@ -139,6 +140,22 @@ describe('window-close-request-coordinator', () => {
       })
     )
     expect(dispatchEvent).toHaveBeenCalledOnce()
+  })
+
+  it('cancels a pending native restart when final durability work rejects', async () => {
+    const confirmClose = vi.fn(() => Promise.resolve())
+    const cancelClose = vi.fn(() =>
+      Promise.resolve({ version: 1 as const, requestId: '15', intent: 'restart' as const })
+    )
+    unregisterFns.push(registerWindowCloseFinalizer(() => Promise.reject(new Error('disk full'))))
+
+    await dispatchWindowCloseRequest({ isQuitting: true }, { confirmClose, cancelClose })
+
+    expect(cancelClose).toHaveBeenCalledOnce()
+    expect(confirmClose).not.toHaveBeenCalled()
+    expect(dispatchEvent.mock.calls.map(([event]) => event.type)).toContain(
+      MCODE_APP_RESTART_ABORTED_EVENT
+    )
   })
 
   it('keeps the window open and reports a native close failure', async () => {

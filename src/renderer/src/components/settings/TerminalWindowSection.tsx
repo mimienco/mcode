@@ -9,6 +9,7 @@ import { SearchableSetting } from './SearchableSetting'
 import { clampNumber } from '@/lib/terminal-theme'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
+import { desktopAppLifecycleClient } from '@/desktop/runtime-desktop-app-lifecycle-client'
 
 type TerminalWindowSectionProps = {
   settings: GlobalSettings
@@ -38,7 +39,7 @@ export function TerminalWindowSection({
     }
     setRelaunchingBlur(true)
     try {
-      await window.api.app.relaunch()
+      await desktopAppLifecycleClient.relaunch()
     } catch {
       if (mountedRef.current) {
         setRelaunchingBlur(false)

@@ -11,6 +11,37 @@ export type LaunchContext = {
 
 export type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
 
+export type ShutdownIntent = 'quit' | 'restart'
+
+export type ShutdownRequest = {
+  version: 1
+  requestId: string
+  intent: ShutdownIntent
+}
+
+export type DesktopAppLifecycleCapability = {
+  requestShutdown: (intent: ShutdownIntent) => Promise<ShutdownRequest>
+  onShutdownRequested: (
+    listener: (request: ShutdownRequest) => void | Promise<void>
+  ) => Promise<() => void>
+  cancelShutdown: (requestId: string) => Promise<void>
+  confirmShutdown: (requestId: string) => Promise<ShutdownRequest>
+  executeShutdown: (requestId: string) => Promise<void>
+}
+
+export function isShutdownRequest(value: unknown): value is ShutdownRequest {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const request = value as Record<string, unknown>
+  return (
+    request.version === 1 &&
+    typeof request.requestId === 'string' &&
+    /^[1-9]\d*$/.test(request.requestId) &&
+    (request.intent === 'quit' || request.intent === 'restart')
+  )
+}
+
 export type DesktopWindowCloseRequest = {
   isQuitting: boolean
 }
@@ -24,6 +55,7 @@ export type DesktopWindowCapability = {
   onCloseRequested: (
     listener: (request: DesktopWindowCloseRequest) => void | Promise<void>
   ) => Promise<() => void>
+  cancelClose: () => Promise<ShutdownRequest | undefined>
   confirmClose: () => Promise<void>
 }
 
@@ -42,7 +74,8 @@ function isLaunchContext(value: unknown): value is LaunchContext {
 
 export function createDesktopClient(
   invoke: DesktopInvoke,
-  windowCapability: DesktopWindowCapability
+  windowCapability: DesktopWindowCapability,
+  appLifecycleCapability: DesktopAppLifecycleCapability
 ) {
   return {
     app: {
@@ -55,7 +88,12 @@ export function createDesktopClient(
       },
       async stageShutdownCheckpoint(checkpoint: ShutdownCheckpoint): Promise<void> {
         await invoke('app_stage_shutdown_checkpoint', { checkpoint })
-      }
+      },
+      requestShutdown: appLifecycleCapability.requestShutdown,
+      onShutdownRequested: appLifecycleCapability.onShutdownRequested,
+      cancelShutdown: appLifecycleCapability.cancelShutdown,
+      confirmShutdown: appLifecycleCapability.confirmShutdown,
+      executeShutdown: appLifecycleCapability.executeShutdown
     },
     window: windowCapability
   }
