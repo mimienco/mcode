@@ -56,7 +56,7 @@ Phase 3 – confirmed manual-close flow with a typed, durable Tauri shutdown che
 - `corepack pnpm run build:electron-vite` in backup: PASS (3,151 main and 10,642 renderer modules).
 - `corepack pnpm test:e2e:terminal-perf` in backup: FAIL (9 passed, 4 failed, 1 skipped, 7 not run; 9.1m).
 - Post-baseline original integrity: PASS (16,751 manifest entries).
-- Focused lifecycle/window/client/session-contract Vitest: PASS (12 files, 75 tests).
+- Focused lifecycle/window/client/session-contract Vitest: PASS (12 files, 80 tests).
 - `cargo fmt --all -- --check`: PASS.
 - `cargo test --workspace`: PASS after checkpoint reconciliation (22 settings, 3 Tauri command/capability, and 1 lifecycle contract test).
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`: PASS.

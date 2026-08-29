@@ -32,7 +32,7 @@ The toolchain is selected by `rust-toolchain.toml`. This host requires `%USERPRO
 
 | Command or check | Result |
 | --- | --- |
-| renderer lifecycle/window/session contracts and WindowControls | PASS, 12 Vitest files / 75 tests |
+| renderer lifecycle/window/session contracts and WindowControls | PASS, 12 Vitest files / 80 tests |
 | `cargo fmt --all -- --check` | PASS |
 | `cargo test --workspace` | PASS, including 22 settings contracts, 3 Tauri command/capability contracts, and 1 lifecycle contract |
 | Cargo clippy with all targets/features and warnings denied | PASS |
