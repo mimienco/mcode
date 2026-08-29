@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 mod workspace_session_bindings;
 mod workspace_session_contract;
 mod workspace_session_reconciliation;
+mod workspace_session_retirement_layouts;
+mod workspace_session_retirements;
 mod workspace_session_topology;
 
 pub const SHUTDOWN_CHECKPOINT_VERSION: u32 = 1;
@@ -310,13 +312,24 @@ pub fn apply_shutdown_checkpoint(
 
     for session in checkpoint.sessions {
         if let Some(host_id) = session.host_id {
+            let host_id = host_id.into_string();
+            let prior = root
+                .get("workspaceSessionsByHostId")
+                .and_then(Value::as_object)
+                .and_then(|partitions| partitions.get(&host_id))
+                .cloned();
+            let mut state = session.state.into_value();
+            workspace_session_reconciliation::reconcile_host_workspace_session(
+                &mut state,
+                prior.as_ref(),
+            );
             let partitions = root
                 .entry("workspaceSessionsByHostId")
                 .or_insert_with(|| Value::Object(Map::new()));
             let partitions = partitions
                 .as_object_mut()
                 .ok_or(CheckpointError::PersistedHostSessionsMustBeObject)?;
-            partitions.insert(host_id.into_string(), session.state.into_value());
+            partitions.insert(host_id, state);
         } else {
             let prior = root.get("workspaceSession").cloned();
             let mut state = session.state.into_value();
