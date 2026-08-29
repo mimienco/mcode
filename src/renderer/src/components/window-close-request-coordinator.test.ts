@@ -7,6 +7,10 @@ import {
   setWindowCloseRequestHandler
 } from './window-close-request-coordinator'
 
+const toastError = vi.hoisted(() => vi.fn())
+
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+
 describe('window-close-request-coordinator', () => {
   const confirmWindowClose = vi.fn()
   const unregisterFns: (() => void)[] = []
@@ -17,6 +21,7 @@ describe('window-close-request-coordinator', () => {
 
   beforeEach(() => {
     confirmWindowClose.mockClear()
+    toastError.mockClear()
     // Why: dispatch falls back to the preload bridge when no rich handler is
     // registered; stub just the surface it touches.
     ;(
@@ -120,6 +125,12 @@ describe('window-close-request-coordinator', () => {
     await dispatchWindowCloseRequest({ isQuitting: false }, { confirmClose } as never)
 
     expect(confirmClose).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith(
+      'MCode could not save your session',
+      expect.objectContaining({
+        description: 'The window stayed open. Try closing it again.'
+      })
+    )
   })
 
   it('short-circuits on the first vetoing guard', async () => {

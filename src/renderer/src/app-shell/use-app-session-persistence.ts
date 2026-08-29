@@ -114,8 +114,6 @@ export function useAppSessionPersistence(): void {
     })
   }, [])
 
-  // On shutdown, capture terminal scrollback buffers and flush all durable
-  // renderer state through the runtime-owned checkpoint boundary.
   useEffect(() => {
     const captureShutdownCheckpoint = (): ShutdownCheckpointPayload => {
       const shouldCaptureSession = shouldPersistWorkspaceSession(useAppStore.getState())

@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
 import { translate } from '@/i18n/i18n'
-import type { DesktopClient } from '@/desktop/desktop-client'
+import type { DesktopWindowCapability } from '@/desktop/desktop-client'
 import { desktopWindowClient } from '@/desktop/runtime-desktop-window-client'
 
+type WindowControlsCapability = Pick<
+  DesktopWindowCapability,
+  'minimize' | 'toggleMaximize' | 'isMaximized' | 'onMaximizedChanged' | 'requestClose'
+>
+
 type WindowControlsProps = {
-  desktopWindow?: DesktopClient['window']
+  desktopWindow?: WindowControlsCapability
 }
 
 // Why: Windows and Linux both remove the native title bar, so we render our own min/max/close buttons (Fluent/Win11-style SVGs).

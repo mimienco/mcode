@@ -1,5 +1,7 @@
+import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
 import { MCODE_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT } from '../../../shared/renderer-shutdown-events'
-import type { DesktopWindowCapability } from '../desktop/desktop-client'
+import type { DesktopWindowCapability, DesktopWindowCloseRequest } from '../desktop/desktop-client'
 import { desktopWindowClient } from '../desktop/runtime-desktop-window-client'
 
 // Coordinates the single main->renderer window-close-request subscription (owned
@@ -13,7 +15,7 @@ import { desktopWindowClient } from '../desktop/runtime-desktop-window-client'
 // Git AI Author prompt editors) register a guard so quitting prompts the user to
 // save/discard instead of being silently vetoed by a beforeunload handler.
 
-export type WindowCloseRequestHandler = (data: { isQuitting: boolean }) => void
+export type WindowCloseRequestHandler = (data: DesktopWindowCloseRequest) => void
 
 /** Returns true to allow the close to proceed, false to cancel it (e.g. the user
  *  picked "Cancel" in an unsaved-changes prompt). */
@@ -45,7 +47,6 @@ export function registerWindowCloseGuard(guard: WindowCloseGuard): () => void {
   }
 }
 
-/** Register work that must finish after every user decision but before native close. */
 export function registerWindowCloseFinalizer(finalizer: WindowCloseFinalizer): () => void {
   closeFinalizers.add(finalizer)
   return () => {
@@ -71,6 +72,15 @@ export async function finalizeAndConfirmWindowClose(
     }
   } catch (error) {
     console.error('[app] Final window-close durability work failed', error)
+    toast.error(
+      translate('auto.App.shutdownCheckpointFailed', 'MCode could not save your session'),
+      {
+        description: translate(
+          'auto.App.shutdownCheckpointFailedDescription',
+          'The window stayed open. Try closing it again.'
+        )
+      }
+    )
     if (typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new Event(MCODE_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT))
     }
@@ -86,7 +96,7 @@ export async function finalizeAndConfirmWindowClose(
  *  terminals or editor tabs to protect, so blocking would just deadlock the
  *  window (#5144). */
 export async function dispatchWindowCloseRequest(
-  data: { isQuitting: boolean },
+  data: DesktopWindowCloseRequest,
   desktopWindow: Pick<DesktopWindowCapability, 'confirmClose'> = desktopWindowClient
 ): Promise<void> {
   if (closeInFlight) {

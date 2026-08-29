@@ -2,22 +2,22 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { DesktopClient } from '@/desktop/desktop-client'
+import type { ComponentProps } from 'react'
 import { WindowControls } from './WindowControls'
 
 afterEach(cleanup)
 
+type WindowControlsCapability = NonNullable<ComponentProps<typeof WindowControls>['desktopWindow']>
+
 function createDesktopWindow(
-  overrides: Partial<DesktopClient['window']> = {}
-): DesktopClient['window'] {
+  overrides: Partial<WindowControlsCapability> = {}
+): WindowControlsCapability {
   return {
     minimize: () => Promise.resolve(),
     toggleMaximize: () => Promise.resolve(),
     isMaximized: () => Promise.resolve(false),
     onMaximizedChanged: () => Promise.resolve(() => undefined),
     requestClose: () => Promise.resolve(),
-    onCloseRequested: () => Promise.resolve(() => undefined),
-    confirmClose: () => Promise.resolve(),
     ...overrides
   }
 }

@@ -1,9 +1,10 @@
 use mcode_settings::{
-    CheckpointError, SettingsService, ShutdownCheckpoint, ShutdownSession,
+    CheckpointError, SettingsService, ShutdownCheckpoint, ShutdownSession, WorkspaceSessionState,
     apply_shutdown_checkpoint,
 };
 use serde_json::json;
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -42,6 +43,17 @@ impl Drop for TestDirectory {
     }
 }
 
+fn workspace_session(active_worktree_id: Option<&str>) -> WorkspaceSessionState {
+    serde_json::from_value(json!({
+        "activeRepoId": null,
+        "activeWorktreeId": active_worktree_id,
+        "activeTabId": null,
+        "tabsByWorktree": {},
+        "terminalLayoutsByTabId": {}
+    }))
+    .unwrap()
+}
+
 #[test]
 fn local_session_and_ui_patch_preserve_unrelated_persisted_state() {
     let existing = json!({
@@ -53,7 +65,7 @@ fn local_session_and_ui_patch_preserve_unrelated_persisted_state() {
         version: 1,
         sessions: vec![ShutdownSession {
             host_id: None,
-            state: json!({ "activeWorktreeId": "new" }),
+            state: workspace_session(Some("new")),
         }],
         ui: serde_json::from_value(json!({ "activeView": "settings" })).unwrap(),
     };
@@ -65,10 +77,7 @@ fn local_session_and_ui_patch_preserve_unrelated_persisted_state() {
         merged["ui"],
         json!({ "activeView": "settings", "sidebarWidth": 320 })
     );
-    assert_eq!(
-        merged["workspaceSession"],
-        json!({ "activeWorktreeId": "new" })
-    );
+    assert_eq!(merged["workspaceSession"]["activeWorktreeId"], json!("new"));
 }
 
 #[test]
@@ -84,7 +93,7 @@ fn host_session_updates_its_partition_without_replacing_the_local_session() {
         version: 1,
         sessions: vec![ShutdownSession {
             host_id: Some("runtime:host-1".into()),
-            state: json!({ "activeWorktreeId": "remote" }),
+            state: workspace_session(Some("remote")),
         }],
         ui: serde_json::from_value(json!({})).unwrap(),
     };
@@ -96,8 +105,8 @@ fn host_session_updates_its_partition_without_replacing_the_local_session() {
         json!({ "activeWorktreeId": "local" })
     );
     assert_eq!(
-        merged["workspaceSessionsByHostId"]["runtime:host-1"],
-        json!({ "activeWorktreeId": "remote" })
+        merged["workspaceSessionsByHostId"]["runtime:host-1"]["activeWorktreeId"],
+        json!("remote")
     );
     assert_eq!(
         merged["workspaceSessionsByHostId"]["runtime:other"],
@@ -119,6 +128,47 @@ fn rejects_an_unknown_checkpoint_contract_version() {
 }
 
 #[test]
+fn rejects_untyped_workspace_session_payloads_at_deserialization() {
+    let checkpoint = serde_json::from_value::<ShutdownCheckpoint>(json!({
+        "version": 1,
+        "sessions": [{ "state": "not-a-session" }],
+        "ui": {}
+    }));
+
+    assert!(checkpoint.is_err());
+}
+
+#[test]
+fn rejects_structurally_invalid_workspace_sessions_at_deserialization() {
+    let checkpoint = serde_json::from_value::<ShutdownCheckpoint>(json!({
+        "version": 1,
+        "sessions": [{
+            "state": {
+                "activeRepoId": null,
+                "activeWorktreeId": null,
+                "activeTabId": null,
+                "tabsByWorktree": "not-a-record",
+                "terminalLayoutsByTabId": {}
+            }
+        }],
+        "ui": {}
+    }));
+
+    assert!(checkpoint.is_err());
+}
+
+#[test]
+fn rejects_ui_fields_outside_the_versioned_checkpoint_contract() {
+    let checkpoint = serde_json::from_value::<ShutdownCheckpoint>(json!({
+        "version": 1,
+        "sessions": [],
+        "ui": { "sidebarWidth": 320 }
+    }));
+
+    assert!(checkpoint.is_err());
+}
+
+#[test]
 fn settings_service_atomically_merges_a_shutdown_checkpoint() {
     let directory = TestDirectory::new();
     let settings_path = directory.join("nested/mcode-data.json");
@@ -135,7 +185,7 @@ fn settings_service_atomically_merges_a_shutdown_checkpoint() {
             version: 1,
             sessions: vec![ShutdownSession {
                 host_id: None,
-                state: json!({ "activeWorktreeId": "worktree-1" }),
+                state: workspace_session(Some("worktree-1")),
             }],
             ui: serde_json::from_value(json!({ "activeView": "terminal" })).unwrap(),
         })
@@ -149,8 +199,8 @@ fn settings_service_atomically_merges_a_shutdown_checkpoint() {
         json!({ "activeView": "terminal", "sidebarWidth": 320 })
     );
     assert_eq!(
-        persisted["workspaceSession"],
-        json!({ "activeWorktreeId": "worktree-1" })
+        persisted["workspaceSession"]["activeWorktreeId"],
+        json!("worktree-1")
     );
 }
 
@@ -188,4 +238,26 @@ fn settings_service_keeps_malformed_existing_settings_untouched() {
 
     assert!(result.is_err());
     assert_eq!(fs::read(settings_path).unwrap(), original);
+}
+
+#[test]
+fn settings_service_rejects_oversized_state_before_reading_it() {
+    let directory = TestDirectory::new();
+    let settings_path = directory.join("mcode-data.json");
+    File::create(&settings_path)
+        .unwrap()
+        .set_len(64 * 1024 * 1024 + 1)
+        .unwrap();
+    let service = SettingsService::new(settings_path);
+
+    let result = service.stage_shutdown_checkpoint(ShutdownCheckpoint {
+        version: 1,
+        sessions: vec![],
+        ui: serde_json::from_value(json!({})).unwrap(),
+    });
+
+    assert!(matches!(
+        result,
+        Err(mcode_settings::SettingsServiceError::SettingsTooLarge(_))
+    ));
 }

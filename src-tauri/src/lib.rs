@@ -41,7 +41,16 @@ async fn app_stage_shutdown_checkpoint(
     service: tauri::State<'_, SettingsService>,
     checkpoint: ShutdownCheckpoint,
 ) -> Result<(), DesktopCommandError> {
-    app_stage_shutdown_checkpoint_for(&service, checkpoint).map_err(DesktopCommandError::from)
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        app_stage_shutdown_checkpoint_for(&service, checkpoint)
+    })
+    .await
+    .map_err(|error| DesktopCommandError {
+        code: "settings_blocking_task_failed",
+        message: format!("settings persistence task failed: {error}"),
+    })?
+    .map_err(DesktopCommandError::from)
 }
 
 #[cfg(debug_assertions)]

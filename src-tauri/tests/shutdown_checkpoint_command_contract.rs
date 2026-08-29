@@ -42,7 +42,13 @@ fn renderer_json_contract_reaches_the_atomic_settings_boundary() {
     let checkpoint: ShutdownCheckpoint = serde_json::from_value(json!({
         "version": 1,
         "sessions": [{
-            "state": { "activeWorktreeId": "worktree-1" },
+            "state": {
+                "activeRepoId": null,
+                "activeWorktreeId": "worktree-1",
+                "activeTabId": null,
+                "tabsByWorktree": {},
+                "terminalLayoutsByTabId": {}
+            },
             "hostId": "runtime:host-1"
         }],
         "ui": { "activeView": "terminal" }
@@ -59,7 +65,7 @@ fn renderer_json_contract_reaches_the_atomic_settings_boundary() {
         json!({ "activeView": "terminal", "sidebarWidth": 320 })
     );
     assert_eq!(
-        persisted["workspaceSessionsByHostId"]["runtime:host-1"],
-        json!({ "activeWorktreeId": "worktree-1" })
+        persisted["workspaceSessionsByHostId"]["runtime:host-1"]["activeWorktreeId"],
+        json!("worktree-1")
     );
 }
