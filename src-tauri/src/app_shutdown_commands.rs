@@ -49,6 +49,23 @@ pub fn app_force_claim_shutdown_execution_for(
     service.force_claim_shutdown_execution(request_id)
 }
 
+pub fn app_force_shutdown_after_delivery_failure_for(
+    service: &LifecycleService,
+    intent: ShutdownIntent,
+) -> Result<ShutdownRequest, LifecycleServiceError> {
+    let request = app_request_shutdown_for(service, intent)?;
+    app_force_claim_shutdown_execution_for(service, &request.request_id)?
+        .ok_or(LifecycleServiceError::ShutdownAlreadyExecuting)
+}
+
+pub fn app_confirm_and_claim_shutdown_execution_for(
+    service: &LifecycleService,
+    request_id: &str,
+) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
+    app_confirm_shutdown_for(service, request_id)?;
+    app_claim_shutdown_execution_for(service, request_id)
+}
+
 pub fn app_should_allow_exit_for(
     service: &LifecycleService,
     exit_code: Option<i32>,
@@ -141,16 +158,14 @@ pub(crate) fn app_acknowledge_shutdown(
     service: tauri::State<'_, LifecycleService>,
     request_id: String,
 ) -> Result<(), DesktopCommandError> {
-    app_acknowledge_shutdown_for(&service, &request_id)
-        .map(|_| ())
-        .map_err(|error| {
-            DesktopCommandError::lifecycle(
-                error,
-                "app_acknowledge_shutdown",
-                Some(&request_id),
-                None,
-            )
-        })
+    let request = app_acknowledge_shutdown_for(&service, &request_id).map_err(|error| {
+        DesktopCommandError::lifecycle(error, "app_acknowledge_shutdown", Some(&request_id), None)
+    })?;
+    eprintln!(
+        "[lifecycle] renderer received shutdown request {} ({:?})",
+        request.request_id, request.intent
+    );
+    Ok(())
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -164,30 +179,25 @@ pub(crate) fn app_cancel_shutdown(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub(crate) fn app_confirm_shutdown(
-    service: tauri::State<'_, LifecycleService>,
-    request_id: String,
-) -> Result<ShutdownRequest, DesktopCommandError> {
-    let request = app_confirm_shutdown_for(&service, &request_id).map_err(|error| {
-        DesktopCommandError::lifecycle(error, "app_confirm_shutdown", Some(&request_id), None)
-    })?;
-    eprintln!(
-        "[lifecycle] renderer acknowledged shutdown request {} ({:?})",
-        request.request_id, request.intent
-    );
-    Ok(request)
-}
-
-#[tauri::command(rename_all = "camelCase")]
-pub(crate) fn app_execute_shutdown(
+pub(crate) fn app_confirm_and_execute_shutdown(
     app: AppHandle,
     service: tauri::State<'_, LifecycleService>,
     request_id: String,
 ) -> Result<(), DesktopCommandError> {
-    let request = app_claim_shutdown_execution_for(&service, &request_id).map_err(|error| {
-        DesktopCommandError::lifecycle(error, "app_execute_shutdown", Some(&request_id), None)
-    })?;
+    let request =
+        app_confirm_and_claim_shutdown_execution_for(&service, &request_id).map_err(|error| {
+            DesktopCommandError::lifecycle(
+                error,
+                "app_confirm_and_execute_shutdown",
+                Some(&request_id),
+                None,
+            )
+        })?;
     if let Some(request) = request {
+        eprintln!(
+            "[lifecycle] renderer acknowledged shutdown request {} ({:?})",
+            request.request_id, request.intent
+        );
         execute_shutdown_request(&app, &request);
     }
     Ok(())
@@ -211,5 +221,19 @@ pub(crate) fn handle_exit_requested(app: &AppHandle, exit_code: Option<i32>) {
     }
     if let Err(error) = emit_shutdown_request(app, &service, ShutdownIntent::Quit) {
         eprintln!("[lifecycle] failed to request renderer shutdown acknowledgement: {error:?}");
+        match app_force_shutdown_after_delivery_failure_for(&service, ShutdownIntent::Quit) {
+            Ok(request) => {
+                eprintln!(
+                    "[lifecycle] renderer delivery failed for shutdown request {}; forcing {:?}",
+                    request.request_id, request.intent
+                );
+                execute_shutdown_request(app, &request);
+            }
+            Err(force_error) => {
+                eprintln!(
+                    "[lifecycle] failed to recover from renderer shutdown delivery failure: {force_error}"
+                );
+            }
+        }
     }
 }

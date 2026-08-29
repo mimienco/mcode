@@ -19,14 +19,101 @@ export type ShutdownRequest = {
   intent: ShutdownIntent
 }
 
+export type DesktopCommandErrorContext = {
+  operation: string
+  requestId?: string
+  intent?: ShutdownIntent
+}
+
+export type DesktopCommandErrorPayload = {
+  code: string
+  context: DesktopCommandErrorContext
+  message: string
+  userMessage: string
+}
+
+export class DesktopCommandError extends Error {
+  readonly name = 'DesktopCommandError'
+
+  constructor(
+    readonly code: string,
+    readonly context: DesktopCommandErrorContext,
+    message: string,
+    readonly userMessage: string,
+    readonly cause?: unknown
+  ) {
+    super(message)
+  }
+}
+
+function isDesktopCommandErrorContext(value: unknown): value is DesktopCommandErrorContext {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const context = value as Record<string, unknown>
+  return (
+    typeof context.operation === 'string' &&
+    (context.requestId === undefined || typeof context.requestId === 'string') &&
+    (context.intent === undefined || context.intent === 'quit' || context.intent === 'restart')
+  )
+}
+
+export function isDesktopCommandErrorPayload(value: unknown): value is DesktopCommandErrorPayload {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const error = value as Record<string, unknown>
+  return (
+    typeof error.code === 'string' &&
+    isDesktopCommandErrorContext(error.context) &&
+    typeof error.message === 'string' &&
+    typeof error.userMessage === 'string'
+  )
+}
+
+export function normalizeDesktopCommandError(
+  value: unknown,
+  operation: string
+): DesktopCommandError {
+  if (value instanceof DesktopCommandError) {
+    return value
+  }
+  if (isDesktopCommandErrorPayload(value)) {
+    return new DesktopCommandError(
+      value.code,
+      value.context,
+      value.message,
+      value.userMessage,
+      value
+    )
+  }
+  const message = value instanceof Error ? value.message : String(value)
+  return new DesktopCommandError(
+    'desktop_command_failed',
+    { operation },
+    message,
+    'MCode could not complete the desktop request. Try again.',
+    value
+  )
+}
+
+export function createDesktopInvoke(invoke: DesktopInvoke): DesktopInvoke {
+  return async (command, args) => {
+    try {
+      return await invoke(command, args)
+    } catch (error) {
+      throw normalizeDesktopCommandError(error, command)
+    }
+  }
+}
+
 export type DesktopAppLifecycleCapability = {
   requestShutdown: (intent: ShutdownIntent) => Promise<ShutdownRequest>
   onShutdownRequested: (
     listener: (request: ShutdownRequest) => void | Promise<void>
   ) => Promise<() => void>
   cancelShutdown: (requestId: string) => Promise<void>
-  confirmShutdown: (requestId: string) => Promise<ShutdownRequest>
-  executeShutdown: (requestId: string) => Promise<void>
+  confirmAndExecuteShutdown: (requestId: string) => Promise<void>
 }
 
 export function isShutdownRequest(value: unknown): value is ShutdownRequest {
@@ -92,8 +179,7 @@ export function createDesktopClient(
       requestShutdown: appLifecycleCapability.requestShutdown,
       onShutdownRequested: appLifecycleCapability.onShutdownRequested,
       cancelShutdown: appLifecycleCapability.cancelShutdown,
-      confirmShutdown: appLifecycleCapability.confirmShutdown,
-      executeShutdown: appLifecycleCapability.executeShutdown
+      confirmAndExecuteShutdown: appLifecycleCapability.confirmAndExecuteShutdown
     },
     window: windowCapability
   }

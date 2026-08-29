@@ -1,8 +1,10 @@
 use mcode_app::{BuildLane, LifecycleService, ShutdownIntent};
 use mcode_desktop::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, app_acknowledge_shutdown_for, app_cancel_shutdown_for,
-    app_claim_shutdown_execution_for, app_confirm_shutdown_for,
-    app_force_claim_shutdown_execution_for, app_request_shutdown_for, app_should_allow_exit_for,
+    app_claim_shutdown_execution_for, app_confirm_and_claim_shutdown_execution_for,
+    app_confirm_shutdown_for, app_force_claim_shutdown_execution_for,
+    app_force_shutdown_after_delivery_failure_for, app_request_shutdown_for,
+    app_should_allow_exit_for,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -88,4 +90,31 @@ fn renderer_receipt_ack_disarms_the_force_timeout_without_confirming_exit() {
         None
     );
     assert!(!app_should_allow_exit_for(&service, Some(0)).unwrap());
+}
+
+#[test]
+fn confirm_and_claim_is_one_backend_transition_before_native_execution() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = app_request_shutdown_for(&service, ShutdownIntent::Restart).unwrap();
+    app_acknowledge_shutdown_for(&service, &request.request_id).unwrap();
+
+    assert_eq!(
+        app_confirm_and_claim_shutdown_execution_for(&service, &request.request_id).unwrap(),
+        Some(request.clone())
+    );
+    assert!(app_should_allow_exit_for(&service, Some(tauri::RESTART_EXIT_CODE)).unwrap());
+}
+
+#[test]
+fn native_delivery_failure_forces_a_fresh_executing_quit() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let abandoned = app_request_shutdown_for(&service, ShutdownIntent::Restart).unwrap();
+    app_acknowledge_shutdown_for(&service, &abandoned.request_id).unwrap();
+
+    let forced =
+        app_force_shutdown_after_delivery_failure_for(&service, ShutdownIntent::Quit).unwrap();
+
+    assert_ne!(forced.request_id, abandoned.request_id);
+    assert_eq!(forced.intent, ShutdownIntent::Quit);
+    assert!(app_should_allow_exit_for(&service, Some(0)).unwrap());
 }

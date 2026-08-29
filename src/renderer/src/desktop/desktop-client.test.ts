@@ -6,6 +6,8 @@ import type { ShutdownCheckpoint } from '../../../shared/shutdown-checkpoint-typ
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import {
   createDesktopClient,
+  createDesktopInvoke,
+  DesktopCommandError,
   isShutdownRequest,
   type DesktopAppLifecycleCapability,
   type DesktopWindowCapability
@@ -40,10 +42,49 @@ function createAppLifecycleCapability(): DesktopAppLifecycleCapability {
     requestShutdown: (intent) => Promise.resolve({ version: 1, requestId: '1', intent }),
     onShutdownRequested: () => Promise.resolve(() => undefined),
     cancelShutdown: () => Promise.resolve(),
-    confirmShutdown: (requestId) => Promise.resolve({ version: 1, requestId, intent: 'quit' }),
-    executeShutdown: () => Promise.resolve()
+    confirmAndExecuteShutdown: () => Promise.resolve()
   }
 }
+
+test('desktop invoke normalizes structured backend rejections into a typed error', async () => {
+  const payload = {
+    code: 'stale_shutdown_request',
+    context: {
+      operation: 'app_confirm_and_execute_shutdown',
+      requestId: '42',
+      intent: 'restart' as const
+    },
+    message: 'shutdown request does not match the pending request',
+    userMessage: 'MCode could not complete the shutdown request. Try again.'
+  }
+  const invoke = createDesktopInvoke(async () => {
+    throw payload
+  })
+
+  const error = await invoke('app_confirm_and_execute_shutdown', {
+    requestId: '42'
+  }).catch((caught: unknown) => caught)
+
+  assert.ok(error instanceof DesktopCommandError)
+  assert.equal(error.code, payload.code)
+  assert.deepEqual(error.context, payload.context)
+  assert.equal(error.message, payload.message)
+  assert.equal(error.userMessage, payload.userMessage)
+})
+
+test('desktop invoke gives unknown native rejections a safe typed fallback', async () => {
+  const invoke = createDesktopInvoke(async () => {
+    throw new Error('transport failed')
+  })
+
+  const error = await invoke('app_get_launch_context').catch((caught: unknown) => caught)
+
+  assert.ok(error instanceof DesktopCommandError)
+  assert.equal(error.code, 'desktop_command_failed')
+  assert.deepEqual(error.context, { operation: 'app_get_launch_context' })
+  assert.equal(error.message, 'transport failed')
+  assert.equal(error.userMessage, 'MCode could not complete the desktop request. Try again.')
+})
 
 test('launch context uses the narrow Tauri command and preserves its typed result', async () => {
   const calls: { command: string; args?: Record<string, unknown> }[] = []

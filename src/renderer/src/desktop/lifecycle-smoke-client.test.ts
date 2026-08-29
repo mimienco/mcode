@@ -18,12 +18,8 @@ function createLifecycle() {
       }
     ),
     cancelShutdown: vi.fn(() => Promise.resolve()),
-    confirmShutdown: vi.fn(async (requestId: string) => {
-      calls.push(`confirm:${requestId}`)
-      return { version: 1 as const, requestId, intent: 'quit' as const }
-    }),
-    executeShutdown: vi.fn(async (requestId: string) => {
-      calls.push(`execute:${requestId}`)
+    confirmAndExecuteShutdown: vi.fn(async (requestId: string) => {
+      calls.push(`confirm-and-execute:${requestId}`)
     })
   }
   return {
@@ -45,7 +41,7 @@ it('stages the durable checkpoint before acknowledging and executing native quit
   })
   await emit('quit')
 
-  expect(calls).toEqual(['checkpoint', 'confirm:21', 'execute:21'])
+  expect(calls).toEqual(['checkpoint', 'confirm-and-execute:21'])
   expect(lifecycle.requestShutdown).not.toHaveBeenCalled()
 })
 

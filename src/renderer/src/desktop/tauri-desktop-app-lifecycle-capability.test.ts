@@ -35,20 +35,15 @@ it('subscribes to versioned native shutdown requests through one named event', a
   expect(invoke).toHaveBeenCalledWith('app_acknowledge_shutdown', { requestId: '8' })
 })
 
-it('acknowledges, executes, and cancels only the named shutdown request', async () => {
-  const request = { version: 1 as const, requestId: '9', intent: 'restart' as const }
-  const invoke = vi.fn(async (command: string) =>
-    command === 'app_confirm_shutdown' ? request : undefined
-  )
+it('atomically confirms and executes, then cancels only the named shutdown request', async () => {
+  const invoke = vi.fn(() => Promise.resolve())
   const capability = createTauriDesktopAppLifecycleCapability(invoke, vi.fn())
 
-  await expect(capability.confirmShutdown('9')).resolves.toEqual(request)
-  await capability.executeShutdown('9')
+  await capability.confirmAndExecuteShutdown('9')
   await capability.cancelShutdown('9')
 
   expect(invoke.mock.calls).toEqual([
-    ['app_confirm_shutdown', { requestId: '9' }],
-    ['app_execute_shutdown', { requestId: '9' }],
+    ['app_confirm_and_execute_shutdown', { requestId: '9' }],
     ['app_cancel_shutdown', { requestId: '9' }]
   ])
 })

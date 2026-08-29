@@ -187,6 +187,26 @@ fn renderer_receipt_disarms_the_timeout_while_the_user_decides() {
 }
 
 #[test]
+fn a_confirmed_request_can_be_force_claimed_if_execution_is_interrupted() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = service.request_shutdown(ShutdownIntent::Restart).unwrap();
+    service.acknowledge_shutdown(&request.request_id).unwrap();
+    service.confirm_shutdown(&request.request_id).unwrap();
+
+    assert_eq!(
+        service
+            .force_claim_shutdown_execution(&request.request_id)
+            .unwrap(),
+        Some(request.clone())
+    );
+    assert!(
+        service
+            .is_shutdown_executing(ShutdownIntent::Restart)
+            .unwrap()
+    );
+}
+
+#[test]
 fn a_canceled_shutdown_cannot_be_reclaimed_by_its_timeout() {
     let service = LifecycleService::new("1.4.178", BuildLane::Development);
     let request = service.request_shutdown(ShutdownIntent::Restart).unwrap();

@@ -42,8 +42,7 @@ export function createTauriDesktopWindowCapability(
     return request
   }
   const confirmAndExecuteShutdown = async (request: ShutdownRequest): Promise<void> => {
-    await appLifecycle.confirmShutdown(request.requestId)
-    await appLifecycle.executeShutdown(request.requestId)
+    await appLifecycle.confirmAndExecuteShutdown(request.requestId)
     clearPendingShutdown(request.requestId)
   }
 

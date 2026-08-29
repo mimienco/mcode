@@ -19,8 +19,7 @@ export async function runLifecycleSmoke({
 }: LifecycleSmokeDependencies): Promise<void> {
   await lifecycle.onShutdownRequested(async (request) => {
     await stageCheckpoint({ version: 1, sessions: [], ui: {} })
-    await lifecycle.confirmShutdown(request.requestId)
-    await lifecycle.executeShutdown(request.requestId)
+    await lifecycle.confirmAndExecuteShutdown(request.requestId)
   })
 
   if (intent === 'restart') {

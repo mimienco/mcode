@@ -51,15 +51,8 @@ export function createTauriDesktopAppLifecycleCapability(
           })
       })
     },
-    async confirmShutdown(requestId: string): Promise<ShutdownRequest> {
-      const response = await invoke('app_confirm_shutdown', { requestId })
-      if (!isShutdownRequest(response)) {
-        throw new Error('Invalid app_confirm_shutdown response')
-      }
-      return response
-    },
-    async executeShutdown(requestId: string): Promise<void> {
-      await invoke('app_execute_shutdown', { requestId })
+    async confirmAndExecuteShutdown(requestId: string): Promise<void> {
+      await invoke('app_confirm_and_execute_shutdown', { requestId })
     },
     async cancelShutdown(requestId: string): Promise<void> {
       await invoke('app_cancel_shutdown', { requestId })

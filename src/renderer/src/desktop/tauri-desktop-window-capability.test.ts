@@ -7,9 +7,7 @@ function createLifecycleCapability() {
       Promise.resolve({ version: 1 as const, requestId: '1', intent }),
     onShutdownRequested: () => Promise.resolve(() => undefined),
     cancelShutdown: () => Promise.resolve(),
-    confirmShutdown: (requestId: string) =>
-      Promise.resolve({ version: 1 as const, requestId, intent: 'quit' as const }),
-    executeShutdown: () => Promise.resolve()
+    confirmAndExecuteShutdown: () => Promise.resolve()
   }
 }
 
@@ -63,8 +61,7 @@ it('turns a confirmed manual close into an authorized app quit without re-enteri
       return () => undefined
     }),
     cancelShutdown: vi.fn(() => Promise.resolve()),
-    confirmShutdown: vi.fn(() => Promise.resolve(request)),
-    executeShutdown: vi.fn(() => Promise.resolve())
+    confirmAndExecuteShutdown: vi.fn(() => Promise.resolve())
   }
   const source = {
     minimize: () => Promise.resolve(),
@@ -85,8 +82,7 @@ it('turns a confirmed manual close into an authorized app quit without re-enteri
   await capability.confirmClose()
 
   expect(lifecycle.requestShutdown).toHaveBeenCalledWith('quit')
-  expect(lifecycle.confirmShutdown).toHaveBeenCalledWith('10')
-  expect(lifecycle.executeShutdown).toHaveBeenCalledWith('10')
+  expect(lifecycle.confirmAndExecuteShutdown).toHaveBeenCalledWith('10')
   expect(source.close).not.toHaveBeenCalled()
   expect(preventDefault).not.toHaveBeenCalled()
   expect(listener).not.toHaveBeenCalled()
@@ -111,12 +107,7 @@ it('routes an app-wide restart through the same close coordinator before native 
       shutdownListener = listener
       return () => undefined
     }),
-    confirmShutdown: vi.fn(async (requestId: string) => ({
-      version: 1 as const,
-      requestId,
-      intent: 'restart' as const
-    })),
-    executeShutdown: vi.fn(() => Promise.resolve()),
+    confirmAndExecuteShutdown: vi.fn(() => Promise.resolve()),
     cancelShutdown: vi.fn(() => Promise.resolve())
   }
   const capability = createTauriDesktopWindowCapability(currentWindow, lifecycle)
@@ -126,8 +117,7 @@ it('routes an app-wide restart through the same close coordinator before native 
   await capability.confirmClose()
 
   expect(closeListener).toHaveBeenCalledWith({ isQuitting: true })
-  expect(lifecycle.confirmShutdown).toHaveBeenCalledWith('11')
-  expect(lifecycle.executeShutdown).toHaveBeenCalledWith('11')
+  expect(lifecycle.confirmAndExecuteShutdown).toHaveBeenCalledWith('11')
   expect(currentWindow.close).not.toHaveBeenCalled()
 })
 
@@ -146,8 +136,7 @@ it('cancels a vetoed app request before routing a later native window close', as
       return () => undefined
     }),
     cancelShutdown: vi.fn(() => Promise.resolve()),
-    confirmShutdown: vi.fn(),
-    executeShutdown: vi.fn()
+    confirmAndExecuteShutdown: vi.fn()
   }
   const capability = createTauriDesktopWindowCapability(
     {
@@ -183,8 +172,7 @@ it('returns the canceled restart request so the coordinator can clear renderer r
       return () => undefined
     }),
     cancelShutdown: vi.fn(() => Promise.resolve()),
-    confirmShutdown: vi.fn(),
-    executeShutdown: vi.fn()
+    confirmAndExecuteShutdown: vi.fn()
   }
   const capability = createTauriDesktopWindowCapability(
     {

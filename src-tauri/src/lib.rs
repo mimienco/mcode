@@ -10,11 +10,13 @@ mod app_shutdown_commands;
 
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, app_acknowledge_shutdown_for, app_cancel_shutdown_for,
-    app_claim_shutdown_execution_for, app_confirm_shutdown_for,
-    app_force_claim_shutdown_execution_for, app_request_shutdown_for, app_should_allow_exit_for,
+    app_claim_shutdown_execution_for, app_confirm_and_claim_shutdown_execution_for,
+    app_confirm_shutdown_for, app_force_claim_shutdown_execution_for,
+    app_force_shutdown_after_delivery_failure_for, app_request_shutdown_for,
+    app_should_allow_exit_for,
 };
 use app_shutdown_commands::{
-    app_acknowledge_shutdown, app_cancel_shutdown, app_confirm_shutdown, app_execute_shutdown,
+    app_acknowledge_shutdown, app_cancel_shutdown, app_confirm_and_execute_shutdown,
     app_request_shutdown, handle_exit_requested,
 };
 
@@ -238,8 +240,7 @@ pub fn run() {
             app_request_shutdown,
             app_acknowledge_shutdown,
             app_cancel_shutdown,
-            app_confirm_shutdown,
-            app_execute_shutdown
+            app_confirm_and_execute_shutdown
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");
@@ -269,7 +270,7 @@ mod tests {
     fn desktop_command_errors_include_code_context_and_safe_user_message() {
         let error = DesktopCommandError::lifecycle(
             LifecycleServiceError::StaleShutdownRequest,
-            "app_confirm_shutdown",
+            "app_confirm_and_execute_shutdown",
             Some("42"),
             Some(ShutdownIntent::Restart),
         );
@@ -279,7 +280,7 @@ mod tests {
             json!({
                 "code": "stale_shutdown_request",
                 "context": {
-                    "operation": "app_confirm_shutdown",
+                    "operation": "app_confirm_and_execute_shutdown",
                     "requestId": "42",
                     "intent": "restart"
                 },

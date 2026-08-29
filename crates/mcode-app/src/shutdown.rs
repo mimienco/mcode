@@ -238,10 +238,12 @@ impl ShutdownCoordinator {
     ) -> Result<Option<ShutdownRequest>, LifecycleServiceError> {
         let mut state = self.lock()?;
         let request = match &state.phase {
-            ShutdownPhase::Pending(request) if request.request_id == request_id => request.clone(),
-            ShutdownPhase::Acknowledged(request)
-            | ShutdownPhase::Confirmed(request)
-            | ShutdownPhase::Executing(request)
+            ShutdownPhase::Pending(request) | ShutdownPhase::Confirmed(request)
+                if request.request_id == request_id =>
+            {
+                request.clone()
+            }
+            ShutdownPhase::Acknowledged(request) | ShutdownPhase::Executing(request)
                 if request.request_id == request_id =>
             {
                 return Ok(None);
