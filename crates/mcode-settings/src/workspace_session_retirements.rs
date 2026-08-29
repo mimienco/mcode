@@ -324,7 +324,11 @@ fn record_retirement(session: &mut Map<String, Value>, worktree_id: &str, pane_k
     );
     let repo_id = repo_id_from_worktree_id(worktree_id);
     let mut revisions = record_field(session, "terminalTopologyRevisionByRepoId");
-    let revision = revisions.get(repo_id).and_then(Value::as_u64).unwrap_or(0) + 1;
+    let revision = revisions
+        .get(repo_id)
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .saturating_add(1);
     revisions.insert(repo_id.into(), Value::from(revision));
     session.insert(
         "terminalTopologyRevisionByRepoId".into(),

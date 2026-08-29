@@ -55,6 +55,7 @@ fn workspace_session(active_worktree_id: Option<&str>) -> WorkspaceSessionState 
 }
 
 const RECONCILIATION_LEAF_ID: &str = "11111111-1111-4111-8111-111111111111";
+const RECONCILIATION_SIBLING_LEAF_ID: &str = "22222222-2222-4222-8222-222222222222";
 
 fn terminal_binding_session(pty_id: Option<&str>) -> WorkspaceSessionState {
     let bindings = pty_id
@@ -94,6 +95,106 @@ fn terminal_binding_session(pty_id: Option<&str>) -> WorkspaceSessionState {
                 "buffersByLeafId": buffers,
                 "scrollbackRefsByLeafId": scrollback_refs,
                 "titlesByLeafId": titles
+            }
+        }
+    }))
+    .unwrap()
+}
+
+fn split_retirement_session() -> WorkspaceSessionState {
+    serde_json::from_value(json!({
+        "activeRepoId": "repo-1",
+        "activeWorktreeId": "repo-1::D:/workspace",
+        "activeTabId": "tab-1",
+        "tabsByWorktree": {
+            "repo-1::D:/workspace": [{
+                "id": "tab-1",
+                "ptyId": "pty-retired",
+                "worktreeId": "repo-1::D:/workspace",
+                "title": "Terminal",
+                "customTitle": null,
+                "color": null,
+                "sortOrder": 0,
+                "createdAt": 1
+            }]
+        },
+        "terminalLayoutsByTabId": {
+            "tab-1": {
+                "root": {
+                    "type": "split",
+                    "direction": "horizontal",
+                    "first": { "type": "leaf", "leafId": RECONCILIATION_LEAF_ID },
+                    "second": { "type": "leaf", "leafId": RECONCILIATION_SIBLING_LEAF_ID }
+                },
+                "activeLeafId": RECONCILIATION_LEAF_ID,
+                "expandedLeafId": RECONCILIATION_LEAF_ID,
+                "ptyIdsByLeafId": {
+                    (RECONCILIATION_LEAF_ID): "pty-retired",
+                    (RECONCILIATION_SIBLING_LEAF_ID): "pty-sibling"
+                },
+                "buffersByLeafId": {
+                    (RECONCILIATION_LEAF_ID): "retired buffer",
+                    (RECONCILIATION_SIBLING_LEAF_ID): "sibling buffer"
+                },
+                "scrollbackRefsByLeafId": {
+                    (RECONCILIATION_LEAF_ID): "scrollback-retired",
+                    (RECONCILIATION_SIBLING_LEAF_ID): "scrollback-sibling"
+                },
+                "titlesByLeafId": {
+                    (RECONCILIATION_LEAF_ID): "Retired",
+                    (RECONCILIATION_SIBLING_LEAF_ID): "Sibling"
+                }
+            }
+        },
+        "activeTabIdByWorktree": { "repo-1::D:/workspace": "unified-tab-1" },
+        "activeTabTypeByWorktree": { "repo-1::D:/workspace": "terminal" },
+        "unifiedTabs": {
+            "repo-1::D:/workspace": [{
+                "id": "unified-tab-1",
+                "entityId": "tab-1",
+                "groupId": "group-1",
+                "worktreeId": "repo-1::D:/workspace",
+                "contentType": "terminal",
+                "label": "Terminal",
+                "generatedLabel": null,
+                "aiVaultTitle": null,
+                "quickCommandLabel": null,
+                "customLabel": null,
+                "color": null,
+                "sortOrder": 0,
+                "createdAt": 1,
+                "isPreview": false,
+                "isPinned": false,
+                "viewMode": "terminal"
+            }]
+        },
+        "tabGroups": {
+            "repo-1::D:/workspace": [{
+                "id": "group-1",
+                "worktreeId": "repo-1::D:/workspace",
+                "activeTabId": "unified-tab-1",
+                "tabOrder": ["unified-tab-1"],
+                "recentTabIds": ["unified-tab-1"]
+            }]
+        },
+        "tabGroupLayouts": {
+            "repo-1::D:/workspace": { "type": "leaf", "groupId": "group-1" }
+        },
+        "activeGroupIdByWorktree": { "repo-1::D:/workspace": "group-1" },
+        "remoteSessionIdsByTabId": { "tab-1": "pty-retired" },
+        "terminalPtyIncarnationsByPaneKey": {
+            (format!("tab-1:{RECONCILIATION_LEAF_ID}")): "incarnation-retired",
+            (format!("tab-1:{RECONCILIATION_SIBLING_LEAF_ID}")): "incarnation-sibling"
+        },
+        "terminalTopologyRevisionByRepoId": { "repo-1": 7 },
+        "terminalSurfaceTombstonesByPaneKey": {
+            (format!("tab-1:{RECONCILIATION_LEAF_ID}")): {
+                "worktreeId": "repo-1::D:/workspace",
+                "parentTabId": "tab-1",
+                "leafId": RECONCILIATION_LEAF_ID,
+                "ptyId": "pty-retired",
+                "incarnationId": "incarnation-retired",
+                "retiredAt": 1
             }
         }
     }))
@@ -621,6 +722,183 @@ fn first_host_checkpoint_applies_an_incoming_terminal_tombstone() {
     assert_eq!(
         session["terminalTopologyRevisionByRepoId"]["repo-1"],
         json!(1)
+    );
+}
+
+#[test]
+fn retirement_identity_guards_preserve_a_replacement_surface() {
+    let cases = [
+        (
+            "incarnation mismatch",
+            "pty-live",
+            "incarnation-live",
+            "pty-live",
+            "incarnation-retired",
+        ),
+        (
+            "PTY mismatch",
+            "pty-live",
+            "incarnation-live",
+            "pty-retired",
+            "incarnation-live",
+        ),
+    ];
+
+    for (name, bound_pty, bound_incarnation, retired_pty, retired_incarnation) in cases {
+        let pane_key = format!("tab-1:{RECONCILIATION_LEAF_ID}");
+        let mut incoming = serde_json::to_value(terminal_binding_session(Some(bound_pty))).unwrap();
+        incoming["terminalPtyIncarnationsByPaneKey"] = json!({ (&pane_key): bound_incarnation });
+        incoming["terminalSurfaceTombstonesByPaneKey"] = json!({
+            (&pane_key): {
+                "worktreeId": "repo-1::D:/workspace",
+                "parentTabId": "tab-1",
+                "leafId": RECONCILIATION_LEAF_ID,
+                "ptyId": retired_pty,
+                "incarnationId": retired_incarnation,
+                "retiredAt": 1
+            }
+        });
+        let checkpoint = ShutdownCheckpoint {
+            version: 1,
+            sessions: vec![ShutdownSession {
+                host_id: Some(ExecutionHostId::parse("runtime:host-1").unwrap()),
+                state: serde_json::from_value(incoming).unwrap(),
+            }],
+            ui: serde_json::from_value(json!({})).unwrap(),
+        };
+
+        let merged = apply_shutdown_checkpoint(json!({ "ui": {} }), checkpoint).unwrap();
+        let session = &merged["workspaceSessionsByHostId"]["runtime:host-1"];
+
+        assert_eq!(
+            session["tabsByWorktree"]["repo-1::D:/workspace"][0]["ptyId"],
+            json!(bound_pty),
+            "{name}"
+        );
+        assert_eq!(
+            session["terminalLayoutsByTabId"]["tab-1"]["ptyIdsByLeafId"][RECONCILIATION_LEAF_ID],
+            json!(bound_pty),
+            "{name}"
+        );
+        assert_eq!(
+            session["terminalPtyIncarnationsByPaneKey"][&pane_key],
+            json!(bound_incarnation),
+            "{name}"
+        );
+        assert_eq!(
+            session["terminalSurfaceTombstonesByPaneKey"],
+            json!({}),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn split_leaf_retirement_preserves_the_sibling_and_repairs_metadata() {
+    let checkpoint = ShutdownCheckpoint {
+        version: 1,
+        sessions: vec![ShutdownSession {
+            host_id: Some(ExecutionHostId::parse("runtime:host-1").unwrap()),
+            state: split_retirement_session(),
+        }],
+        ui: serde_json::from_value(json!({})).unwrap(),
+    };
+
+    let merged = apply_shutdown_checkpoint(json!({ "ui": {} }), checkpoint).unwrap();
+    let session = &merged["workspaceSessionsByHostId"]["runtime:host-1"];
+    let layout = &session["terminalLayoutsByTabId"]["tab-1"];
+    let sibling_pane_key = format!("tab-1:{RECONCILIATION_SIBLING_LEAF_ID}");
+    let retired_pane_key = format!("tab-1:{RECONCILIATION_LEAF_ID}");
+
+    assert_eq!(
+        session["tabsByWorktree"]["repo-1::D:/workspace"][0]["ptyId"],
+        json!("pty-sibling")
+    );
+    assert_eq!(
+        layout["root"],
+        json!({ "type": "leaf", "leafId": RECONCILIATION_SIBLING_LEAF_ID })
+    );
+    assert_eq!(
+        layout["activeLeafId"],
+        json!(RECONCILIATION_SIBLING_LEAF_ID)
+    );
+    assert!(layout["expandedLeafId"].is_null());
+    assert_eq!(
+        layout["ptyIdsByLeafId"],
+        json!({ (RECONCILIATION_SIBLING_LEAF_ID): "pty-sibling" })
+    );
+    assert_eq!(
+        layout["buffersByLeafId"],
+        json!({ (RECONCILIATION_SIBLING_LEAF_ID): "sibling buffer" })
+    );
+    assert_eq!(
+        layout["scrollbackRefsByLeafId"],
+        json!({ (RECONCILIATION_SIBLING_LEAF_ID): "scrollback-sibling" })
+    );
+    assert_eq!(
+        layout["titlesByLeafId"],
+        json!({ (RECONCILIATION_SIBLING_LEAF_ID): "Sibling" })
+    );
+    assert!(session["terminalPtyIncarnationsByPaneKey"][retired_pane_key].is_null());
+    assert_eq!(
+        session["terminalPtyIncarnationsByPaneKey"][sibling_pane_key],
+        json!("incarnation-sibling")
+    );
+    assert_eq!(
+        session["tabGroups"]["repo-1::D:/workspace"][0]["tabOrder"],
+        json!(["unified-tab-1"])
+    );
+    assert_eq!(
+        session["tabGroupLayouts"]["repo-1::D:/workspace"],
+        json!({ "type": "leaf", "groupId": "group-1" })
+    );
+    assert_eq!(
+        session["activeGroupIdByWorktree"]["repo-1::D:/workspace"],
+        json!("group-1")
+    );
+    assert_eq!(
+        session["activeTabIdByWorktree"]["repo-1::D:/workspace"],
+        json!("unified-tab-1")
+    );
+    assert_eq!(
+        session["remoteSessionIdsByTabId"]["tab-1"],
+        json!("pty-sibling")
+    );
+    assert_eq!(
+        session["terminalTopologyRevisionByRepoId"]["repo-1"],
+        json!(8)
+    );
+    assert_eq!(session["terminalSurfaceTombstonesByPaneKey"], json!({}));
+}
+
+#[test]
+fn retirement_revision_saturates_at_the_contract_maximum() {
+    let mut incoming = serde_json::to_value(workspace_session(None)).unwrap();
+    incoming["terminalTopologyRevisionByRepoId"] = json!({ "repo-1": u64::MAX });
+    incoming["terminalSurfaceTombstonesByPaneKey"] = json!({
+        "retired-tab:retired-leaf": {
+            "worktreeId": "repo-1::D:/workspace",
+            "parentTabId": "retired-tab",
+            "leafId": "retired-leaf",
+            "ptyId": "pty-retired",
+            "incarnationId": "incarnation-retired",
+            "retiredAt": 1
+        }
+    });
+    let checkpoint = ShutdownCheckpoint {
+        version: 1,
+        sessions: vec![ShutdownSession {
+            host_id: Some(ExecutionHostId::parse("runtime:host-1").unwrap()),
+            state: serde_json::from_value(incoming).unwrap(),
+        }],
+        ui: serde_json::from_value(json!({})).unwrap(),
+    };
+
+    let merged = apply_shutdown_checkpoint(json!({ "ui": {} }), checkpoint).unwrap();
+
+    assert_eq!(
+        merged["workspaceSessionsByHostId"]["runtime:host-1"]["terminalTopologyRevisionByRepoId"]["repo-1"],
+        json!(u64::MAX)
     );
 }
 
