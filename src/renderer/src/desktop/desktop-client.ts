@@ -9,6 +9,14 @@ export type LaunchContext = {
 
 export type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
 
+export type DesktopWindowCapability = {
+  minimize: () => Promise<void>
+  toggleMaximize: () => Promise<void>
+  isMaximized: () => Promise<boolean>
+  onMaximizedChanged: (listener: (maximized: boolean) => void) => Promise<() => void>
+  requestClose: () => Promise<void>
+}
+
 function isLaunchContext(value: unknown): value is LaunchContext {
   if (!value || typeof value !== 'object') {
     return false
@@ -22,7 +30,10 @@ function isLaunchContext(value: unknown): value is LaunchContext {
   )
 }
 
-export function createDesktopClient(invoke: DesktopInvoke) {
+export function createDesktopClient(
+  invoke: DesktopInvoke,
+  windowCapability: DesktopWindowCapability
+) {
   return {
     app: {
       async getLaunchContext(): Promise<LaunchContext> {
@@ -32,6 +43,14 @@ export function createDesktopClient(invoke: DesktopInvoke) {
         }
         return response
       }
+    },
+    window: {
+      minimize: (): Promise<void> => windowCapability.minimize(),
+      toggleMaximize: (): Promise<void> => windowCapability.toggleMaximize(),
+      isMaximized: (): Promise<boolean> => windowCapability.isMaximized(),
+      onMaximizedChanged: (listener: (maximized: boolean) => void): Promise<() => void> =>
+        windowCapability.onMaximizedChanged(listener),
+      requestClose: (): Promise<void> => windowCapability.requestClose()
     }
   }
 }

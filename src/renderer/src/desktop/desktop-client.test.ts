@@ -1,0 +1,117 @@
+import assert from 'node:assert/strict'
+import { it as test } from 'vitest'
+import { createDesktopClient } from './desktop-client'
+
+test('launch context uses the narrow Tauri command and preserves its typed result', async () => {
+  const calls: { command: string; args?: Record<string, unknown> }[] = []
+  const expected = {
+    version: '1.4.178',
+    buildLane: 'development' as const,
+    headless: false,
+    safeMode: false
+  }
+  const client = createDesktopClient(
+    async (command, args) => {
+      calls.push({ command, args })
+      return expected
+    },
+    {
+      minimize: () => Promise.resolve(),
+      toggleMaximize: () => Promise.resolve(),
+      isMaximized: () => Promise.resolve(false),
+      onMaximizedChanged: () => Promise.resolve(() => undefined),
+      requestClose: () => Promise.resolve()
+    }
+  )
+
+  const context = await client.app.getLaunchContext()
+
+  assert.deepEqual(calls, [{ command: 'app_get_launch_context', args: undefined }])
+  assert.deepEqual(context, expected)
+})
+
+test('window minimize delegates through the desktop window capability', async () => {
+  let minimizeCalls = 0
+  const client = createDesktopClient(async () => undefined, {
+    async minimize() {
+      minimizeCalls += 1
+    },
+    toggleMaximize: () => Promise.resolve(),
+    isMaximized: () => Promise.resolve(false),
+    onMaximizedChanged: () => Promise.resolve(() => undefined),
+    requestClose: () => Promise.resolve()
+  })
+
+  await client.window.minimize()
+
+  assert.equal(minimizeCalls, 1)
+})
+
+test('window maximize toggle delegates through the desktop window capability', async () => {
+  let toggleCalls = 0
+  const client = createDesktopClient(async () => undefined, {
+    minimize: () => Promise.resolve(),
+    isMaximized: () => Promise.resolve(false),
+    onMaximizedChanged: () => Promise.resolve(() => undefined),
+    requestClose: () => Promise.resolve(),
+    async toggleMaximize() {
+      toggleCalls += 1
+    }
+  })
+
+  await client.window.toggleMaximize()
+
+  assert.equal(toggleCalls, 1)
+})
+
+test('window maximized state comes from the desktop window capability', async () => {
+  const client = createDesktopClient(async () => undefined, {
+    minimize: () => Promise.resolve(),
+    toggleMaximize: () => Promise.resolve(),
+    isMaximized: () => Promise.resolve(true),
+    onMaximizedChanged: () => Promise.resolve(() => undefined),
+    requestClose: () => Promise.resolve()
+  })
+
+  assert.equal(await client.window.isMaximized(), true)
+})
+
+test('window maximized subscription delegates listener ownership and cleanup', async () => {
+  const observed: boolean[] = []
+  let cleanedUp = false
+  const client = createDesktopClient(async () => undefined, {
+    minimize: () => Promise.resolve(),
+    toggleMaximize: () => Promise.resolve(),
+    isMaximized: () => Promise.resolve(false),
+    requestClose: () => Promise.resolve(),
+    async onMaximizedChanged(listener) {
+      listener(true)
+      return () => {
+        cleanedUp = true
+      }
+    }
+  })
+
+  const unsubscribe = await client.window.onMaximizedChanged((value) => observed.push(value))
+  unsubscribe()
+
+  assert.deepEqual(observed, [true])
+  assert.equal(cleanedUp, true)
+})
+
+test('window close request delegates through the desktop window capability', async () => {
+  let closeRequests = 0
+  const client = createDesktopClient(async () => undefined, {
+    minimize: () => Promise.resolve(),
+    toggleMaximize: () => Promise.resolve(),
+    isMaximized: () => Promise.resolve(false),
+    onMaximizedChanged: () => Promise.resolve(() => undefined),
+    async requestClose() {
+      closeRequests += 1
+    }
+  })
+
+  await client.window.requestClose()
+
+  assert.equal(closeRequests, 1)
+})

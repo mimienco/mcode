@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Windows.
+Phase 3 – typed custom-window controls routed through Electron/Tauri runtime clients on Windows.
 
 ## Last green commit
 
@@ -26,7 +26,11 @@ Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Window
 - Built the real 10,642-module React renderer through the Tauri-specific Vite configuration.
 - Compiled, linted, contract-tested, smoke-launched, and CLI-built the initial Windows Tauri shell.
 - Marked all 16,748 present manifest files read-only in the Electron backup after baseline capture.
-- Created two local, hook-validated checkpoint commits on `rewrite/tauri-full`; nothing was pushed.
+- Created local, hook-validated checkpoint commits on `rewrite/tauri-full`; nothing was pushed.
+- Replaced every direct preload call in `WindowControls` with the typed desktop window client.
+- Added lazy Electron/Tauri runtime selection so Electron does not load Tauri window code and Tauri does not call the preload facade.
+- Implemented Tauri minimize, maximize/restore, maximize-state query/subscription, and interceptable close-request behavior.
+- Moved migration-owned renderer tests into the repository's normal Vitest/typecheck lane.
 
 ## Tests executed
 
@@ -41,7 +45,7 @@ Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Window
 - `corepack pnpm run build:electron-vite` in backup: PASS (3,151 main and 10,642 renderer modules).
 - `corepack pnpm test:e2e:terminal-perf` in backup: FAIL (9 passed, 4 failed, 1 skipped, 7 not run; 9.1m).
 - Post-baseline original integrity: PASS (16,751 manifest entries).
-- `node --test --experimental-strip-types src/renderer/src/desktop/desktop-client.node-test.ts`: PASS.
+- Focused typed window/client Vitest: PASS (3 files, 13 tests).
 - `cargo fmt --all -- --check`: PASS.
 - `cargo test --workspace`: PASS (2 contract tests).
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`: PASS.
@@ -50,11 +54,17 @@ Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Window
 - Debug WebView2 smoke launch: PASS, exit 0 in 6.4s with isolated data and no forced stop.
 - `corepack pnpm exec tauri build --debug --no-bundle --ci`: PASS; native executable produced after a 2m28s native build.
 - Post-Tauri-bootstrap original integrity: PASS (16,748 present hashes, 3 expected deletions, 0 mismatches).
+- Unbounded `corepack pnpm run typecheck:web`: infrastructure FAIL; TypeScript-Go exhausted memory after spawning roughly 180 workers.
+- `GOMAXPROCS=4 corepack pnpm run typecheck:web`: expected baseline FAIL only (`mission` view, nullable AddRepo test nodes, unused terminal handler, optional Jira signal); no migration-owned diagnostic.
+- Custom-window renderer build: PASS (10,651 modules, 2m10s inside the Tauri CLI build).
+- Custom-window `tauri build --debug --no-bundle --ci`: PASS; native build completed in 3m11s after the frontend hook.
+- Custom-window isolated WebView2 smoke: PASS, exit 0 in 12.8s, no forced stop.
 
 ## Current blockers
 
 - The copied Electron baseline is not fully green: production build is blocked by existing type errors and four terminal-performance E2E scenarios fail.
-- The Tauri shell currently exposes only the lifecycle context command. The existing renderer still depends broadly on `window.api`, so the shell is not feature-complete or parity-ready.
+- The Tauri shell exposes the lifecycle context command and typed custom-window controls. The rest of the renderer still depends broadly on `window.api`, so the shell is not feature-complete or parity-ready.
+- Tauri close currently uses the interceptable native close event, but Electron-equivalent running-terminal confirmation, minimize-to-tray, quit acknowledgement, and session checkpoint semantics are not yet connected.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
 
 ## Parity summary
@@ -67,6 +77,6 @@ Phase 3 – initial Rust/Tauri lifecycle and window bootstrap verified on Window
 ## Exact next actions
 
 1. Finish the machine-readable Electron/Node surface inventory and map dynamic IPC registrations.
-2. Route renderer startup through the typed desktop client and port one complete user-visible workflow.
-3. Design and test scoped filesystem and process supervision contracts before adding commands.
-4. Add Windows lifecycle E2E assertions without using the debug-only self-exit harness as parity evidence.
+2. Port close-request confirmation, minimize-to-tray, and session checkpoint behavior onto the typed window client.
+3. Route renderer startup services through typed lifecycle clients, then design scoped filesystem/process contracts.
+4. Add real Windows WebView2 window-behavior E2E assertions; the debug-only self-exit remains smoke evidence only.
