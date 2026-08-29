@@ -6,7 +6,7 @@ Phase 3 – typed custom-window controls routed through Electron/Tauri runtime c
 
 ## Last green commit
 
-`46e1837066` (`feat(tauri): bootstrap typed desktop lifecycle shell`), following preservation checkpoint `3b21fb44b7`.
+`6f639384e7` (`fix(tauri): authorize typed window mutations`), following implementation checkpoint `604cac0684` and preservation checkpoint `3b21fb44b7`.
 
 ## Completed in this session
 

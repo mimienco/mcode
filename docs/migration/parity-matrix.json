@@ -13,7 +13,7 @@
       "tests": [
         "crates/mcode-app/tests/lifecycle_contract.rs",
         "src-tauri/tests/command_contract.rs",
-        "src/renderer/src/desktop/desktop-client.node-test.ts"
+        "src/renderer/src/desktop/desktop-client.test.ts"
       ],
       "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
       "status": "in_progress",
