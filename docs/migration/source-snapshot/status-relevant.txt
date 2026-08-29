@@ -1,0 +1,358 @@
+ M config/scripts/generate-skill-bundle-manifest.mjs
+ M docs/quick-command-drag-insertion-plan.md
+ M docs/research/prompt-command-palette.md
+ M mobile/packages/expo-two-way-audio/android/src/main/java/expo/modules/twowayaudio/AudioEngine.kt
+ M mobile/packages/expo-two-way-audio/android/src/main/java/expo/modules/twowayaudio/ExpoTwoWayAudioModule.kt
+ M mobile/src/transport/pairing.test.ts
+ M mobile/src/transport/pairing.ts
+ D prof/attribute-lib-edge.cjs
+ M resources/notification-sounds/beep.mp3
+ M resources/notification-sounds/blip.mp3
+ M resources/notification-sounds/blop.mp3
+ M resources/notification-sounds/bong.mp3
+ M resources/notification-sounds/clack.mp3
+ M resources/notification-sounds/ding.mp3
+ M resources/notification-sounds/sonar.mp3
+ M resources/notification-sounds/thump.mp3
+ M resources/notification-sounds/two-tone.mp3
+ M src/cli/args.ts
+ M src/cli/runtime/client.ts
+ M src/cli/runtime/remote-runtime-compat-gate.ts
+ M src/cli/runtime/status.ts
+ M src/main/agent-hooks/installer-utils.ts
+ M src/main/agent-hooks/posix-hook-command.ts
+ M src/main/ai-vault/cached-session-list.ts
+ M src/main/ai-vault/session-first-user-prompt-handler.ts
+ M src/main/ai-vault/session-scanner-codex-parser.ts
+ M src/main/ai-vault/session-title-resolver.ts
+ M src/main/automations/hermes-cron-output.ts
+ M src/main/automations/service.ts
+ M src/main/browser/browser-cookie-import-write.ts
+ M src/main/claude-accounts/oauth-refresh.test.ts
+ M src/main/claude-accounts/oauth-refresh.ts
+ M src/main/claude-accounts/runtime-auth-service-launch-refresh.test.ts
+ M src/main/claude-accounts/runtime-auth-service.ts
+ M src/main/claude-accounts/windows-command-invocation.ts
+ M src/main/claude/hook-settings.ts
+ M src/main/cli/appimage-cli-wrapper.ts
+ M src/main/cli/cli-installer.ts
+ M src/main/cli/linux-bare-mcode-dispatcher.ts
+ M src/main/cli/wsl-cli-installer.ts
+ M src/main/cli/wsl-cli-scripts.ts
+ M src/main/codex-accounts/wsl-codex-command.ts
+ M src/main/codex/codex-live-session-catalog.test.ts
+ M src/main/codex/codex-live-session-catalog.ts
+ M src/main/codex/codex-live-session-connection.test.ts
+ M src/main/codex/codex-live-session-connection.ts
+ M src/main/codex/codex-session-bridge.ts
+ M src/main/codex/codex-session-file-listing.ts
+ M src/main/codex/wsl-codex-session-bridge.test.ts
+ M src/main/codex/wsl-codex-session-bridge.ts
+ M src/main/computer/macos-native-provider-transport.ts
+ M src/main/daemon/daemon-pty-size.ts
+ M src/main/daemon/pty-subprocess.ts
+ M src/main/daemon/terminal-host-session-create.ts
+ M src/main/daemon/wsl-session-context.ts
+ M src/main/emulator/android/android-avd-boot.ts
+ M src/main/emulator/android/android-input-commands.ts
+ M src/main/emulator/android/android-stream-controller.ts
+ M src/main/emulator/android/scrcpy-stream-session.ts
+ M src/main/emulator/backends/android-emulator-backend.test.ts
+ M src/main/emulator/backends/android-emulator-backend.ts
+ M src/main/emulator/serve-sim-execution.ts
+ M src/main/emulator/simctl-simulator-devices.ts
+ M src/main/ghostty/mapper.ts
+ M src/main/git/git-username.ts
+ M src/main/git/repo-detection.test.ts
+ M src/main/git/repo-username.test.ts
+ M src/main/git/repo.ts
+ M src/main/git/runner-wsl-direct-read.test.ts
+ M src/main/git/runner.ts
+ M src/main/ipc/browser.ts
+ M src/main/ipc/filesystem-auth.test.ts
+ M src/main/ipc/filesystem-auth.ts
+ M src/main/ipc/filesystem-list-files.ts
+ M src/main/ipc/filesystem-search-file-paths.ts
+ M src/main/ipc/filesystem-search-replace.test.ts
+ M src/main/ipc/filesystem-search-replace.ts
+ M src/main/ipc/filesystem-watcher.ts
+ M src/main/ipc/filesystem.ts
+ M src/main/ipc/native-notification-delivery.ts
+ M src/main/ipc/notification-sound-ipc.ts
+ M src/main/ipc/notification-sound-selection.ts
+ M src/main/ipc/notifications-custom-sound.test.ts
+ M src/main/ipc/notifications-test-harness.ts
+ M src/main/ipc/pty.ts
+ M src/main/ipc/repos-add-linked-worktree.test.ts
+ M src/main/ipc/repos-remote-test-harness.ts
+ M src/main/ipc/repos.ts
+ M src/main/ipc/skill-cloud-ipc-handlers.ts
+ M src/main/ipc/terminal-preview-output-stream.ts
+ M src/main/ipc/worktree-remote.ts
+ M src/main/ipc/worktrees-issue-command-overrides.test.ts
+ M src/main/ipc/worktrees-windows.test.ts
+ M src/main/ipc/worktrees.ts
+ M src/main/linux-package-install-command.test.ts
+ M src/main/linux-package-install-command.ts
+ M src/main/local-worktree-filesystem.ts
+ M src/main/mcode-profiles/profile-cloud-org-selection.ts
+ M src/main/mcode-profiles/profile-cloud-session-refresh.ts
+ M src/main/persistence/applying-settings/settings-update.ts
+ M src/main/persistence/loading-store/store.ts
+ M src/main/persistence/loading-store/user-data-path.ts
+ M src/main/ports/local-workspace-port-scanner.ts
+ M src/main/providers/local-pty-provider.ts
+ M src/main/providers/ssh-filesystem-provider-watch.ts
+ M src/main/providers/windows-shell-args.ts
+ M src/main/pty/posix-pty-process-groups.ts
+ M src/main/pty/windows-environment-path.ts
+ M src/main/rate-limits/claude-fetcher.ts
+ M src/main/rate-limits/gemini-oauth-sources.ts
+ M src/main/rate-limits/gemini-usage-fetcher.fallback.test.ts
+ M src/main/rate-limits/gemini-usage-fetcher.test.ts
+ M src/main/rate-limits/gemini-usage-fetcher.ts
+ M src/main/rate-limits/grok-fetcher.test.ts
+ M src/main/rate-limits/grok-fetcher.ts
+ M src/main/runtime/agent-session-claim-identity.ts
+ M src/main/runtime/device-registry.ts
+ M src/main/runtime/mcode-runtime-files.ts
+ M src/main/runtime/orchestration/__snapshots__/preamble.test.ts.snap
+ M src/main/runtime/orchestration/setup-completion-signal.ts
+ M src/main/runtime/windows-mobile-firewall.ts
+ M src/main/skills/skill-package-identity.ts
+ M src/main/skills/skill-wsl-install-filesystem.ts
+ M src/main/speech/openai-api-key-store.ts
+ M src/main/speech/stt-worker.ts
+ M src/main/ssh/ssh-remote-powershell.ts
+ M src/main/startup/configure-process.ts
+ M src/main/startup/ensure-virtual-display.ts
+ M src/main/window/attach-main-window-services.ts
+ M src/main/worktree-runner-script.ts
+ M src/preload/api-types.ts
+ M src/preload/api/os-permission-api.ts
+ M src/preload/app-restart-checkpoint-routing.test.ts
+ M src/preload/index.ts
+ M src/preload/pty-snapshot-capability-ipc.test.ts
+ M src/preload/ssh-authority-forwarding.test.ts
+ M src/preload/updater-package-recovery.test.ts
+ M src/relay/agent-exec-handler.ts
+ M src/relay/agent-hook-server.ts
+ M src/relay/dispatcher-capacity-degradation.test.ts
+ M src/relay/dispatcher-writer-admission.ts
+ M src/relay/external-automations-handler.ts
+ M src/relay/fs-handler-file-read.ts
+ M src/relay/fs-handler-install-rg.ts
+ M src/relay/pty-handler.ts
+ M src/relay/relay-handshake.ts
+ M src/relay/relay.ts
+ M src/renderer/src/App.tsx
+ M src/renderer/src/app-shell/AppWorkspaceShell.tsx
+ M src/renderer/src/app-shell/app-workspace-shell.loading-surface.test.ts
+ M src/renderer/src/app-shell/use-stable-active-view.ts
+ M src/renderer/src/assets/main.css
+ M src/renderer/src/assets/terminal.css
+ M src/renderer/src/components/TaskPage.tsx
+ M src/renderer/src/components/Terminal.tsx
+ M src/renderer/src/components/automations/AutomationListToolbar.tsx
+ M src/renderer/src/components/automations/AutomationsListPanel.tsx
+ M src/renderer/src/components/automations/AutomationsPage.tsx
+ M src/renderer/src/components/browser-pane/host-guest/browser-page-viewport.ts
+ M src/renderer/src/components/dashboard-popout/AgentTerminalPreview.tsx
+ M src/renderer/src/components/dashboard-popout/preview-terminal-key-handler.ts
+ M src/renderer/src/components/editor/editor-save-queue.ts
+ M src/renderer/src/components/editor/prefetch-editor-chunks.ts
+ M src/renderer/src/components/emulator-pane/use-emulator-frame-stream.ts
+ M src/renderer/src/components/native-chat/NativeChatApprovalCard.tsx
+ M src/renderer/src/components/native-chat/NativeChatComposerActions.test.tsx
+ M src/renderer/src/components/native-chat/NativeChatComposerActions.tsx
+ M src/renderer/src/components/native-chat/NativeChatComposerField.tsx
+ M src/renderer/src/components/native-chat/NativeChatEffortSlider.test.tsx
+ M src/renderer/src/components/native-chat/NativeChatEffortSlider.tsx
+ M src/renderer/src/components/native-chat/NativeChatEmptyState.tsx
+ M src/renderer/src/components/native-chat/NativeChatMessageList.test.tsx
+ M src/renderer/src/components/native-chat/NativeChatMessageList.tsx
+ M src/renderer/src/components/native-chat/NativeChatQuestionCard.tsx
+ M src/renderer/src/components/native-chat/NativeChatRunProfilePickers.tsx
+ M src/renderer/src/components/native-chat/NativeChatSessionOptionPickers.test.tsx
+ M src/renderer/src/components/native-chat/NativeChatSessionOptionPickers.tsx
+ M src/renderer/src/components/native-chat/NativeChatTerminalAttention.test.tsx
+ M src/renderer/src/components/native-chat/NativeChatTerminalAttention.tsx
+ M src/renderer/src/components/native-chat/NativeChatToolRun.tsx
+ M src/renderer/src/components/native-chat/NativeChatView.tsx
+ D src/renderer/src/components/native-chat/native-chat-display-pipeline.oracle.test.ts
+ D src/renderer/src/components/native-chat/native-chat-display-pipeline.ts
+ M src/renderer/src/components/native-chat/native-chat-terminal-attention.test.tsx
+ M src/renderer/src/components/native-chat/native-chat-terminal-attention.ts
+ M src/renderer/src/components/native-chat/native-chat-tool-fold.test.ts
+ M src/renderer/src/components/native-chat/native-chat-tool-fold.ts
+ M src/renderer/src/components/native-chat/native-chat-view-state.test.ts
+ M src/renderer/src/components/native-chat/native-chat-view-state.ts
+ M src/renderer/src/components/native-chat/use-native-chat-live-session.ts
+ M src/renderer/src/components/right-sidebar/activity-bar-buttons.tsx
+ M src/renderer/src/components/right-sidebar/index.tsx
+ M src/renderer/src/components/right-sidebar/right-sidebar-panel-content.tsx
+ M src/renderer/src/components/settings/AgentsPane.test.tsx
+ M src/renderer/src/components/settings/AgentsPane.tsx
+ M src/renderer/src/components/settings/CliSkillRuntimeSetup.tsx
+ M src/renderer/src/components/settings/NotificationsPane.test.tsx
+ M src/renderer/src/components/settings/__snapshots__/terminal-preview-content.test.ts.snap
+ M src/renderer/src/components/settings/codex-session-source-home-control.test.tsx
+ M src/renderer/src/components/settings/codex-session-source-home-control.tsx
+ M src/renderer/src/components/settings/notification-settings-copy.ts
+ M src/renderer/src/components/sidebar/SidebarNav.tsx
+ M src/renderer/src/components/sidebar/SidebarSettingsHelpMenu.tsx
+ M src/renderer/src/components/sidebar/SidebarTaskNavButton.tsx
+ M src/renderer/src/components/tab-bar/TabBarQuickCommandAddActions.tsx
+ M src/renderer/src/components/tab-bar/TabBarQuickCommandHostLoadStatus.tsx
+ M src/renderer/src/components/tab-bar/TabBarQuickCommandItem.tsx
+ M src/renderer/src/components/tab-bar/TabBarQuickCommandsMenu.tsx
+ M src/renderer/src/components/tab-bar/tab-bar-quick-commands-shortcut.ts
+ M src/renderer/src/components/tab-bar/tab-title-tooltip.test.tsx
+ M src/renderer/src/components/tab-group/TabGroupEmptyState.test.tsx
+ M src/renderer/src/components/tab-group/TabGroupEmptyState.tsx
+ M src/renderer/src/components/tab-group/TabGroupPanel.tsx
+ M src/renderer/src/components/tab-group/TabGroupSplitLayout.test.ts
+ M src/renderer/src/components/tab-group/TabGroupSplitLayout.tsx
+ M src/renderer/src/components/tab-group/tab-group-workspace-template.test.ts
+ M src/renderer/src/components/tab-group/tab-group-workspace-template.ts
+ M src/renderer/src/components/terminal-pane/TerminalPane.tsx
+ M src/renderer/src/components/terminal-pane/TerminalPaneHeaderOverlay.test.tsx
+ M src/renderer/src/components/terminal-pane/TerminalPaneHeaderOverlay.tsx
+ M src/renderer/src/components/terminal-pane/terminal-visibility-resume.ts
+ M src/renderer/src/components/terminal-pane/terminal-webgl-atlas-recovery.test.ts
+ M src/renderer/src/components/terminal-pane/terminal-webgl-atlas-recovery.ts
+ M src/renderer/src/components/terminal-pane/use-terminal-pane-global-effects-visibility-resume.test.ts
+ M src/renderer/src/components/terminal-quick-commands/TerminalQuickCommandDialog.test.tsx
+ M src/renderer/src/components/terminal-quick-commands/TerminalQuickCommandDialog.tsx
+ M src/renderer/src/hooks/useSkillFreshness.ts
+ M src/renderer/src/i18n/locales/en.json
+ M src/renderer/src/lib/codex-pane-selection-lane.ts
+ M src/renderer/src/lib/file-type-icons.ts
+ M src/renderer/src/lib/pane-manager/pane-manager.ts
+ M src/renderer/src/lib/pane-manager/pane-rendering-control.ts
+ M src/renderer/src/lib/pane-manager/terminal-webgl-hidden-retention.test.ts
+ M src/renderer/src/lib/pane-manager/terminal-webgl-hidden-retention.ts
+ M src/renderer/src/lib/windows-terminal-capabilities.ts
+ M src/renderer/src/runtime/close-mirrored-editor-tab.ts
+ M src/renderer/src/runtime/runtime-jira-summary-client.ts
+ M src/renderer/src/store/slices/editor/actions/markdown-link-action.ts
+ M src/renderer/src/store/slices/settings.ts
+ M src/renderer/src/store/slices/tabs-pane-layout-operations.test.ts
+ M src/renderer/src/store/slices/tabs.ts
+ M src/renderer/src/web/web-preload-api.ts
+ M src/renderer/src/web/web-runtime-client.ts
+ M src/shared/agent-row-conversation-name.test.ts
+ M src/shared/agent-row-conversation-name.ts
+ M src/shared/ai-vault-resume-command.ts
+ M src/shared/constants.ts
+ M src/shared/cross-platform-path.ts
+ M src/shared/global-settings-types.ts
+ M src/shared/local-windows-terminal-runtime.ts
+ M src/shared/native-chat-empty-state.ts
+ M src/shared/native-chat-tool-fold.ts
+ M src/shared/notification-settings-types.ts
+ M src/shared/plugins/plugin-command-actions.ts
+ M src/shared/powershell-native-argument.test.ts
+ M src/shared/powershell-native-argument.ts
+ M src/shared/project-execution-runtime.ts
+ M src/shared/quick-open-install-rg.ts
+ M src/shared/setup-agent-sequencing.ts
+ M src/shared/setup-runner-command.test.ts
+ M src/shared/setup-runner-command.ts
+ M src/shared/windows-batch-spawn.ts
+ M src/shared/windows-cmd-runner-delayed-launch.ts
+ M src/shared/wsl-login-shell-command.test.ts
+ M src/shared/wsl-login-shell-command.ts
+ M src/shared/wsl-paths.ts
+ M tests/e2e/golden-core-flows.spec.ts
+ M tests/e2e/notification-settings.spec.ts
+?? _tmp_51932_79c9cd290a7969c23f9c76875bd13ee2
+?? _tmp_74272_399b6560d090c3ba183f800dbc933504
+?? prof/current-state.png
+?? prof/perf-review-brief.md
+?? src/main/ai-vault/session-first-user-prompt-handler.test.ts
+?? src/main/ai-vault/session-title-resolver.test.ts
+?? src/main/ai-vault/session-transcript-path-gate.test.ts
+?? src/main/ai-vault/session-transcript-path-gate.ts
+?? src/main/claude-accounts/oauth-refresh-lock.ts
+?? src/main/rate-limits/grok-auth-refresh.test.ts
+?? src/main/rate-limits/grok-auth-refresh.ts
+?? src/renderer/src/app-shell/app-page-chunks.test.ts
+?? src/renderer/src/app-shell/app-page-chunks.ts
+?? src/renderer/src/app-shell/prefetch-shell-chunks.test.ts
+?? src/renderer/src/app-shell/prefetch-shell-chunks.ts
+?? src/renderer/src/components/automations/automation-editor-dialog-chunk.test.ts
+?? src/renderer/src/components/automations/automation-editor-dialog-chunk.ts
+?? src/renderer/src/components/native-chat/NativeChatTerminalNotice.test.tsx
+?? src/renderer/src/components/native-chat/NativeChatTerminalNotice.tsx
+?? src/renderer/src/components/native-chat/native-chat-claude-update.test.ts
+?? src/renderer/src/components/native-chat/native-chat-claude-update.ts
+?? src/renderer/src/components/native-chat/native-chat-picker-trigger.tsx
+?? src/renderer/src/components/right-sidebar/prefetch-right-sidebar-panel.ts
+?? src/renderer/src/components/saved-snippets/SavedSnippetCard.test.tsx
+?? src/renderer/src/components/saved-snippets/SavedSnippetCard.tsx
+?? src/renderer/src/components/saved-snippets/SavedSnippetDialog.test.tsx
+?? src/renderer/src/components/saved-snippets/SavedSnippetDialog.tsx
+?? src/renderer/src/components/saved-snippets/TabBarSnippetsButton.test.tsx
+?? src/renderer/src/components/saved-snippets/TabBarSnippetsButton.tsx
+?? src/renderer/src/components/settings/global-settings-nested-write-queue.test.ts
+?? src/renderer/src/components/settings/global-settings-nested-write-queue.ts
+?? src/renderer/src/components/tab-group/tab-group-maximize-state.test.ts
+?? src/renderer/src/components/tab-group/tab-group-maximize-state.ts
+?? src/renderer/src/components/task-page-detail-chunks.test.ts
+?? src/renderer/src/components/task-page-detail-chunks.ts
+?? src/shared/quick-open-install-rg-node.ts
+?? src/shared/saved-snippet-types.ts
+?? src/shared/saved-snippets.test.ts
+?? src/shared/saved-snippets.ts
+?? src/shared/shell-quoting.browser.test.ts
+?? src/shared/shell-quoting.ts
+?? src/shared/windows-batch-syntax.ts
+?? test-results-core-flow-baseline-check/.last-run.json
+?? test-results-core-flow-baseline-corrected/.last-run.json
+?? test-results-core-flow-baseline/.last-run.json
+?? test-results-core-flow-baseline/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless-repeat2/error-context.md
+?? test-results-core-flow-baseline/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless-repeat2/trace.zip
+?? test-results-core-flow-debug/.last-run.json
+?? test-results-core-flow-debug/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless/error-context.md
+?? test-results-core-flow-debug/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless/page@bbe069d9ab09d3224c4ba387df835b1c.webm
+?? test-results-core-flow-debug/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless/test-failed-1.png
+?? test-results-core-flow-debug/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless/trace.zip
+?? test-results-core-flow-git-probe-async/.last-run.json
+?? test-results-core-flow-git-probe-diagnostic/.last-run.json
+?? test-results-core-flow-main-diagnostics/.last-run.json
+?? test-results-core-flow-profile-persist/.last-run.json
+?? test-results-core-flow-profile/.last-run.json
+?? test-results-core-flow-username-short-circuit-accepted-1/.last-run.json
+?? test-results-core-flow-username-short-circuit-accepted-2/.last-run.json
+?? test-results-core-flow-username-short-circuit-accepted-3/.last-run.json
+?? test-results-core-flow-username-short-circuit-clean/.last-run.json
+?? test-results-core-flow-username-short-circuit-diagnostic-2/.last-run.json
+?? test-results-core-flow-username-short-circuit-diagnostic/.last-run.json
+?? test-results-core-flow-username-short-circuit-diagnostic/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless/error-context.md
+?? test-results-core-flow-username-short-circuit-diagnostic/golden-core-flows-Existing-849a7-minal-tab-and-splits-a-pane-electron-headless/trace.zip
+?? test-results-core-flow-workspace-substeps/.last-run.json
+?? test-results-core-flow-worktree-timing-2/.last-run.json
+?? test-results-core-flow-worktree-timing-3/.last-run.json
+?? test-results-core-flow-worktree-timing/.last-run.json
+?? tests/e2e/app-navigation-latency.spec.ts
+?? tests/e2e/helpers/core-flow-performance.ts
+?? tests/e2e/pane-actions-right-alignment.spec.ts
+?? tests/e2e/right-sidebar-open-latency.spec.ts
+?? tests/tools/benchmarks/results/core-flow-baseline-corrected/core-flow-0-1787676315503.json
+?? tests/tools/benchmarks/results/core-flow-baseline-corrected/core-flow-1-1787676337501.json
+?? tests/tools/benchmarks/results/core-flow-baseline-corrected/core-flow-2-1787676359384.json
+?? tests/tools/benchmarks/results/core-flow-git-probe-async/core-flow-0-1787677014954.json
+?? tests/tools/benchmarks/results/core-flow-git-probe-async/core-flow-1-1787677036397.json
+?? tests/tools/benchmarks/results/core-flow-git-probe-async/core-flow-2-1787677057905.json
+?? tests/tools/benchmarks/results/core-flow-git-probe-diagnostic/core-flow-0-1787677105850.json
+?? tests/tools/benchmarks/results/core-flow-profile-baseline/core-flow-0-1787676180173.cpuprofile
+?? tests/tools/benchmarks/results/core-flow-profile-baseline/core-flow-0-1787676180173.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit-accepted/core-flow-0-1787680400848.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit-accepted/core-flow-0-1787680454999.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit-accepted/core-flow-0-1787680524758.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit-clean/core-flow-0-1787680060498.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit-clean/core-flow-1-1787680095258.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit-clean/core-flow-2-1787680155556.json
+?? tests/tools/benchmarks/results/core-flow-username-short-circuit/core-flow-0-1787679789341.json
+?? tests/tools/benchmarks/results/core-flow-workspace-substeps/core-flow-0-1787677169924.json
