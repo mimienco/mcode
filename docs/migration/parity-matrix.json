@@ -9,11 +9,18 @@
       "currentFiles": ["src/main/index.ts"],
       "currentBehavior": "App startup, single-instance arbitration, crash handling, orderly shutdown, and headless mode selection.",
       "targetRustModule": "crates/mcode-app/src/lib.rs",
-      "targetCommand": ["app_get_launch_context", "app_request_quit"],
+      "targetCommand": [
+        "app_get_launch_context",
+        "app_stage_shutdown_checkpoint",
+        "app_request_quit"
+      ],
       "tests": [
         "crates/mcode-app/tests/lifecycle_contract.rs",
         "src-tauri/tests/command_contract.rs",
-        "src/renderer/src/desktop/desktop-client.test.ts"
+        "src/renderer/src/desktop/desktop-client.test.ts",
+        "src/renderer/src/desktop/runtime-desktop-shutdown-checkpoint-client.test.ts",
+        "src/shared/shutdown-checkpoint-contract.test.ts",
+        "src-tauri/tests/shutdown_checkpoint_command_contract.rs"
       ],
       "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
       "status": "in_progress",
@@ -21,7 +28,10 @@
         "cargo test --workspace",
         "cargo clippy --workspace --all-targets --all-features -- -D warnings",
         "corepack pnpm exec tauri build --debug --no-bundle --ci",
-        "debug smoke launch exited 0 using isolated WebView2 data"
+        "debug smoke launch exited 0 using isolated WebView2 data",
+        "manual close awaits the validated atomic Rust checkpoint before confirmation",
+        "shared v1 fixture guards every workspace-session field and mirrored enum set",
+        "local and runtime-host checkpoints retain host-owned topology, apply retirement tombstones, and do not revive terminated SSH leases"
       ]
     },
     {
@@ -38,6 +48,8 @@
       "tests": [
         "src/renderer/src/desktop/desktop-client.test.ts",
         "src/renderer/src/desktop/runtime-desktop-window-client.test.ts",
+        "src/renderer/src/desktop/tauri-desktop-window-capability.test.ts",
+        "src/renderer/src/components/window-close-request-coordinator.test.ts",
         "src/renderer/src/app-shell/WindowControls.test.tsx",
         "src-tauri/tests/window_capability_contract.rs"
       ],
@@ -50,7 +62,8 @@
         "Rust capability contract locks core default plus only close, minimize, and toggle-maximize mutations",
         "Tauri renderer build passed with 10,651 modules",
         "tauri build --debug --no-bundle --ci passed",
-        "debug smoke launch exited 0 using isolated WebView2 data"
+        "debug smoke launch exited 0 using isolated WebView2 data",
+        "manual close routes through existing renderer decisions and a single confirmed Tauri close"
       ]
     },
     {
@@ -449,12 +462,25 @@
         "tests/e2e/golden-quit-relaunch-session.spec.ts"
       ],
       "currentBehavior": "Persist and restore workspaces, tabs, terminals, agents, subscriptions, navigation, and crash/reload state.",
-      "targetRustModule": "crates/mcode-session/src/recovery",
-      "targetCommand": ["session_snapshot", "session_restore", "session_reconcile"],
-      "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
-      "evidence": []
+      "targetRustModule": "crates/mcode-settings/src/workspace_session_reconciliation.rs",
+      "targetCommand": ["app_stage_shutdown_checkpoint", "session_restore", "session_reconcile"],
+      "tests": [
+        "crates/mcode-settings/tests/shutdown_checkpoint_contract.rs",
+        "src-tauri/tests/shutdown_checkpoint_command_contract.rs",
+        "src/renderer/src/desktop/runtime-desktop-shutdown-checkpoint-client.test.ts",
+        "src/shared/shutdown-checkpoint-contract.test.ts"
+      ],
+      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "status": "in_progress",
+      "evidence": [
+        "versioned shutdown checkpoint validates the workspace-session envelope and active-view patch",
+        "nested session records and execution-host identifiers are validated before blocking I/O begins",
+        "shared v1 fixture guards Rust/TypeScript session-field and enum parity",
+        "atomic merge preserves unrelated settings and local/remote host partitions",
+        "local and runtime-host checkpoints retain newer host topology and live PTY bindings without reviving terminated SSH leases",
+        "prior and incoming terminal retirement tombstones are applied before local binding preservation",
+        "durability or native-confirmation failure keeps the native window open"
+      ]
     }
   ]
 }

@@ -19,6 +19,11 @@ The toolchain is selected by `rust-toolchain.toml`. This host requires `%USERPRO
 - `app_get_launch_context` is a narrow Tauri command backed by managed application state.
 - The renderer has a runtime-validating `DesktopClient` abstraction plus a Tauri invoke adapter.
 - Renderer-drawn window controls use a typed runtime-selected window client. Electron retains its existing preload behavior; Tauri lazily binds its core window capability for minimize, maximize/restore, state query/subscription, and close request.
+- Native manual-close requests are intercepted once, run the existing dirty-editor and running-child decisions, then await a versioned Rust shutdown checkpoint before the single confirmed native close.
+- `mcode-settings::SettingsService` validates the checkpoint envelope, merges local/host session partitions and the active-view patch, reconciles stale local and runtime-host snapshots with host-owned terminal topology, bounds the profile file to 64 MiB before reading, and commits with an atomic same-directory replacement plus `sync_all`.
+- Blocking profile work runs on Tauri's blocking worker lane. Validation or durability failure leaves the window open and produces a safe renderer toast.
+- Prior and incoming terminal-retirement tombstones are applied before local binding preservation. Terminated matching SSH leases are not restored while live local/app-scoped bindings, missing buffers, scrollback references, titles, and newer host topology survive a stale renderer checkpoint.
+- The Rust boundary validates nested session records and uses a typed execution-host identifier; a shared v1 fixture guards Rust/TypeScript field and mirrored nested-enum parity.
 - The native shell creates one constrained main WebView window and embeds the real React build.
 - A debug-only smoke mode uses isolated WebView data, hides the test window, and exits normally after startup. Release builds ignore both smoke environment variables.
 - The capability file grants Tauri's core default plus only `close`, `minimize`, and renderer-callable `toggle_maximize` mutations to the main window; a Rust contract locks that exact set. No shell or broad filesystem plugin is enabled.
@@ -27,9 +32,9 @@ The toolchain is selected by `rust-toolchain.toml`. This host requires `%USERPRO
 
 | Command or check | Result |
 | --- | --- |
-| renderer desktop/window clients and WindowControls | PASS, 3 Vitest files / 13 tests |
+| renderer lifecycle/window/session contracts and WindowControls | PASS, 12 Vitest files / 75 tests |
 | `cargo fmt --all -- --check` | PASS |
-| `cargo test --workspace` | PASS, 3 contract tests including exact main-window capability grants |
+| `cargo test --workspace` | PASS, including 22 settings contracts, 3 Tauri command/capability contracts, and 1 lifecycle contract |
 | Cargo clippy with all targets/features and warnings denied | PASS |
 | direct Rust debug build | PASS |
 | isolated hidden WebView2 smoke launch | PASS, exit 0 in 6.4s |
@@ -42,6 +47,8 @@ The toolchain is selected by `rust-toolchain.toml`. This host requires `%USERPRO
 
 Known non-fatal build warnings are the inherited CSS minifier warning for the CSS Custom Highlight API, chunks over 500 kB, and Node 22 running below the repository's declared Node 24 engine. The migration will not relax production gates to hide those warnings.
 
+The current lifecycle checkpoint could not reproduce the full renderer/package smoke on this host: three builds exhausted memory while unrelated applications were consuming it, with the narrowest attempt failing on a 196 KiB allocation. Earlier green package/smoke evidence remains historical only and is not treated as verification of the new checkpoint.
+
 ## Next acceptance boundary
 
-The custom titlebar is the first renderer-used `window.api` path moved end to end. It remains `in_progress`: close confirmation, tray behavior, quit/session handshakes, bounds restore, focus/navigation, popouts, real WebView2 interaction assertions, and macOS/Linux evidence are still required. The next slice ports that close lifecycle rather than treating a successful raw close as parity.
+The custom titlebar and confirmed manual-close checkpoint are the first renderer-used `window.api` paths moved end to end. They remain `in_progress`: app-wide quit/restart acknowledgement, tray behavior, startup restore, bounds restore, focus/navigation, popouts, real WebView2 interaction assertions, and macOS/Linux evidence are still required. The next slice closes the app-wide quit and tray gaps rather than treating manual close as lifecycle parity.

@@ -7,8 +7,8 @@ Current summary:
 | Status | Count |
 | --- | ---: |
 | done | 0 |
-| in progress | 2 |
-| not started | 34 |
+| in progress | 3 |
+| not started | 33 |
 | blocked | 0 |
 
 The initial 36 rows cover lifecycle/windowing, workspaces/settings, filesystem/watcher, Git/worktrees/WSL, process/PTY/agents, SSH/remote, relay/mobile/wire, CLI/headless, updater/packaging, diagnostics/permissions, editor/terminal/rich UI, integrations, voice/computer use, i18n/theme, extensions, and session recovery.
