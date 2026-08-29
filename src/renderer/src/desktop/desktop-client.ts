@@ -44,14 +44,7 @@ export function createDesktopClient(
         return response
       }
     },
-    window: {
-      minimize: (): Promise<void> => windowCapability.minimize(),
-      toggleMaximize: (): Promise<void> => windowCapability.toggleMaximize(),
-      isMaximized: (): Promise<boolean> => windowCapability.isMaximized(),
-      onMaximizedChanged: (listener: (maximized: boolean) => void): Promise<() => void> =>
-        windowCapability.onMaximizedChanged(listener),
-      requestClose: (): Promise<void> => windowCapability.requestClose()
-    }
+    window: windowCapability
   }
 }
 

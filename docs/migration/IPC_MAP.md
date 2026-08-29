@@ -22,10 +22,10 @@ First migrated renderer surface:
 
 | Electron channel/API | Tauri/runtime target | Evidence | Remaining gap |
 | --- | --- | --- | --- |
-| `window:minimize` | typed client → Tauri core window `minimize` | client and component tests | cross-platform UI E2E |
-| `window:maximize` | typed client → Tauri core window `toggleMaximize` | client and component tests | cross-platform UI E2E |
+| `window:minimize` | typed client → Tauri core window `minimize` | client/component tests plus least-privilege capability contract | cross-platform UI E2E |
+| `window:maximize` | typed client → Tauri core window `toggleMaximize` | client/component tests plus least-privilege capability contract | cross-platform UI E2E |
 | `window:isMaximized` | typed client → Tauri core window `isMaximized` | client and component tests | persisted initial bounds/restore |
 | `window:maximize-changed` | typed client → Tauri resize event plus ordered maximize query | subscription/cleanup tests | platform event E2E |
-| `window:request-close` | typed client → interceptable Tauri core window `close` | client/component test and native build | terminal confirmation, tray, quit/session handshake |
+| `window:request-close` | typed client → interceptable Tauri core window `close` | client/component test, capability contract, and native build | terminal confirmation, tray, quit/session handshake |
 
 For every command, the final map will record the old registration and caller, request/response schema, Rust handler, capability, error codes, cancellation behavior, tests, and parity evidence. Generic `invoke(command, unknown)` wrappers are prohibited in product code.

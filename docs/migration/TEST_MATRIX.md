@@ -2,7 +2,7 @@
 
 | Lane | Windows | macOS | Linux | Current state |
 | --- | --- | --- | --- | --- |
-| Rust fmt/clippy/unit/integration | required | required | required | Windows bootstrap green: fmt, clippy `-D warnings`, 2 contract tests |
+| Rust fmt/clippy/unit/integration | required | required | required | Windows bootstrap green: fmt, clippy `-D warnings`, 3 contract tests including window ACL |
 | TypeScript typecheck, oxlint, oxfmt, Vitest | required | required | required | targeted Vitest green; baseline typecheck red |
 | Tauri lifecycle/workspace golden E2E | WebView2 | WKWebView | WebKitGTK | Windows debug smoke and typed window-control tests green; real behavioral E2E not started |
 | Monaco/xterm/IME/clipboard/drag/keyboard | required | required | required | Electron terminal perf: 9 pass, 4 fail, 1 skip, 7 not run |

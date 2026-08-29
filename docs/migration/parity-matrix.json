@@ -38,7 +38,8 @@
       "tests": [
         "src/renderer/src/desktop/desktop-client.test.ts",
         "src/renderer/src/desktop/runtime-desktop-window-client.test.ts",
-        "src/renderer/src/app-shell/WindowControls.test.tsx"
+        "src/renderer/src/app-shell/WindowControls.test.tsx",
+        "src-tauri/tests/window_capability_contract.rs"
       ],
       "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
       "status": "in_progress",
@@ -46,6 +47,7 @@
         "src-tauri/src/lib.rs creates the main WebView window with explicit bounds",
         "custom titlebar uses the typed runtime desktop client with no direct window.api access",
         "focused Vitest: 3 files and 13 tests passed",
+        "Rust capability contract locks core default plus only close, minimize, and toggle-maximize mutations",
         "Tauri renderer build passed with 10,651 modules",
         "tauri build --debug --no-bundle --ci passed",
         "debug smoke launch exited 0 using isolated WebView2 data"

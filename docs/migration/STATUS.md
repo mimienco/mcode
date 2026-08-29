@@ -31,6 +31,7 @@ Phase 3 – typed custom-window controls routed through Electron/Tauri runtime c
 - Added lazy Electron/Tauri runtime selection so Electron does not load Tauri window code and Tauri does not call the preload facade.
 - Implemented Tauri minimize, maximize/restore, maximize-state query/subscription, and interceptable close-request behavior.
 - Moved migration-owned renderer tests into the repository's normal Vitest/typecheck lane.
+- Added only the three non-default Tauri window mutation permissions required by this slice and locked the set with a Rust contract test.
 
 ## Tests executed
 
@@ -47,7 +48,7 @@ Phase 3 – typed custom-window controls routed through Electron/Tauri runtime c
 - Post-baseline original integrity: PASS (16,751 manifest entries).
 - Focused typed window/client Vitest: PASS (3 files, 13 tests).
 - `cargo fmt --all -- --check`: PASS.
-- `cargo test --workspace`: PASS (2 contract tests).
+- `cargo test --workspace`: PASS (3 contract tests, including the least-privilege window capability set).
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`: PASS.
 - `corepack pnpm install --frozen-lockfile` in rewrite: PASS in 17m19s with pnpm 10.24.0.
 - `corepack pnpm run build:tauri-renderer`: PASS (10,642 modules, 1m47s first run).
@@ -56,9 +57,9 @@ Phase 3 – typed custom-window controls routed through Electron/Tauri runtime c
 - Post-Tauri-bootstrap original integrity: PASS (16,748 present hashes, 3 expected deletions, 0 mismatches).
 - Unbounded `corepack pnpm run typecheck:web`: infrastructure FAIL; TypeScript-Go exhausted memory after spawning roughly 180 workers.
 - `GOMAXPROCS=4 corepack pnpm run typecheck:web`: expected baseline FAIL only (`mission` view, nullable AddRepo test nodes, unused terminal handler, optional Jira signal); no migration-owned diagnostic.
-- Custom-window renderer build: PASS (10,651 modules, 2m10s inside the Tauri CLI build).
-- Custom-window `tauri build --debug --no-bundle --ci`: PASS; native build completed in 3m11s after the frontend hook.
-- Custom-window isolated WebView2 smoke: PASS, exit 0 in 12.8s, no forced stop.
+- Permission-reviewed custom-window renderer build: PASS (10,651 modules, 3m09s inside the Tauri CLI build).
+- Permission-reviewed `tauri build --debug --no-bundle --ci`: PASS; native build completed in 6m38s after the frontend hook.
+- Permission-reviewed isolated WebView2 smoke: PASS, exit 0 in 8.9s, no forced stop.
 
 ## Current blockers
 
