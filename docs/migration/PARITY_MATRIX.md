@@ -13,6 +13,8 @@ Current summary:
 
 The initial 36 rows cover lifecycle/windowing, workspaces/settings, filesystem/watcher, Git/worktrees/WSL, process/PTY/agents, SSH/remote, relay/mobile/wire, CLI/headless, updater/packaging, diagnostics/permissions, editor/terminal/rich UI, integrations, voice/computer use, i18n/theme, extensions, and session recovery.
 
+Current Windows lifecycle evidence now includes real WebView2 Quit and Restart acknowledgement, durable checkpoint persistence, child relaunch, delivery-failure recovery, and atomic confirm-and-execute. The lifecycle row remains `in_progress` because full renderer integration, single-instance/headless behavior, tray handling, and macOS/Linux evidence are still missing.
+
 Evidence rules:
 
 - `currentFiles` must identify the Electron/Node implementation or behavioral tests.

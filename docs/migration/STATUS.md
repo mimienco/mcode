@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 3 – confirmed manual-close flow with a typed, durable Tauri shutdown checkpoint on Windows.
+Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement with a typed, durable Tauri shutdown checkpoint on Windows.
 
 ## Last green commit
 
-`d6fac64eb6` (`test(tauri): cover shutdown retirement edges`), following retirement-fence checkpoint `2d9df5ccf0`, reconciliation checkpoint `b8d8f66019`, and lifecycle checkpoint `f6bea5ce87`.
+`7284f6377f` (`fix(tauri): make shutdown execution atomic`), following renderer-ack checkpoints `11399f6cc0`, `eb8c0f4b55`, and `36d1b85d50`.
 
 ## Completed in this session
 
@@ -42,6 +42,13 @@ Phase 3 – confirmed manual-close flow with a typed, durable Tauri shutdown che
 - Added a shared Rust/TypeScript v1 fixture that covers every workspace-session field, top-level view, mirrored nested enum, TUI-agent variant, resumable-agent variant, and representative execution-host identity.
 - Kept the window open and displayed distinct localized errors for checkpoint durability failure and native close-confirmation failure.
 - Completed the required two-axis standards/spec review and committed its fixes separately; broader quit/tray/restore requirements remain open.
+- Added a versioned app-wide Quit/Restart protocol with exact request IDs, immediate renderer receipt acknowledgement, durable checkpoint confirmation, cancellation, and a bounded 10-second pre-receipt fallback.
+- Made confirm-and-execute one backend command so a renderer failure cannot strand a confirmed request between two IPC calls; confirmed requests also remain force-claimable as a final safety net.
+- Added a forced native Quit recovery when the main window is missing or event delivery fails after Tauri has already prevented the original exit.
+- Normalized structured Rust command failures into a validated TypeScript `DesktopCommandError` with typed code/context and a safe user-facing message.
+- Routed dirty-file Cancel back through the native request cancellation path and moved the native lifecycle subscription ahead of later renderer bootstrap work.
+- Ran isolated real Windows WebView2 Quit and Restart flows: both wrote the shutdown checkpoint; Restart relaunched a child that wrote `relaunched`; no native process or dev port remained.
+- Re-ran the two-axis review at `7284f6377f`: Standards PASS and Spec PASS with no remaining shutdown-slice findings.
 
 ## Tests executed
 
@@ -73,12 +80,21 @@ Phase 3 – confirmed manual-close flow with a typed, durable Tauri shutdown che
 - Current lifecycle-checkpoint source integrity: PASS (16,751 entries; 16,748 present hashes, 3 expected deletions, 0 mismatches).
 - Current Tauri renderer rebuild: infrastructure FAIL on three attempts because unrelated host processes left insufficient memory (latest failure while allocating 196 KiB); prior checkpoint output was not reused as current evidence.
 - Current renderer typecheck: baseline FAIL with 10 errors outside migration-owned files and none in this slice.
+- `cargo test -p mcode-app -j1 --test lifecycle_contract`: PASS (13 tests).
+- `cargo test -p mcode-desktop --test app_shutdown_command_contract -j1`: PASS (8 tests).
+- `cargo test -p mcode-desktop --lib -j1`: PASS (1 test).
+- `cargo check -p mcode-desktop --tests -j1`: PASS.
+- `cargo clippy -p mcode-desktop --all-targets --all-features -j1 -- -D warnings`: PASS.
+- Current migration-owned desktop Vitest: PASS (8 files, 34 tests); oxlint and oxfmt checks PASS.
+- Isolated WebView2 Quit smoke: PASS; receipt ACK, durability confirmation, exit 0, and checkpoint verified.
+- Isolated WebView2 Restart smoke: PASS; receipt ACK, durability confirmation, child relaunch marker `relaunched`, checkpoint, exit 0, and no remaining process verified.
+- Final original-integrity guard: PASS (`unchanged: true`; 16,748 checked, 3 expected missing, 0 unexpected or mismatched).
 
 ## Current blockers
 
 - The copied Electron baseline is not fully green: production build is blocked by existing type errors and four terminal-performance E2E scenarios fail.
 - The Tauri shell exposes the lifecycle context command and typed custom-window controls. The rest of the renderer still depends broadly on `window.api`, so the shell is not feature-complete or parity-ready.
-- Tauri manual close now uses the existing dirty-editor/running-child decision flow and awaits an atomic shutdown checkpoint. App-wide quit acknowledgement, restart/updater quit routing, minimize-to-tray, and startup restore are not yet connected.
+- Tauri manual close and app-wide native Quit/Restart now use the existing decision flow and await an atomic shutdown checkpoint. Updater-triggered restart integration in the full production renderer, minimize-to-tray, and startup restore remain incomplete.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
 
 ## Parity summary
@@ -91,6 +107,6 @@ Phase 3 – confirmed manual-close flow with a typed, durable Tauri shutdown che
 ## Exact next actions
 
 1. Finish the machine-readable Electron/Node surface inventory and map dynamic IPC registrations.
-2. Add app-wide quit acknowledgement and restart/updater quit routing without bypassing the confirmed durability boundary.
-3. Port Windows minimize-to-tray and startup restore, then add real WebView2 close/relaunch assertions.
+2. Connect updater-triggered restart and the full production renderer to the proven acknowledgement/durability protocol.
+3. Port Windows minimize-to-tray and startup restore, then expand the real WebView2 harness beyond the targeted lifecycle page.
 4. Route renderer startup services through typed lifecycle clients, then design scoped filesystem/process contracts.

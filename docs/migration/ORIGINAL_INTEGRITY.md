@@ -28,6 +28,7 @@
 | Original full source manifest after Electron baseline | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches |
 | Original full source manifest after Tauri bootstrap | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches |
 | Backup source-file protection | PASS: all 16,748 present manifest files marked read-only; 3 expected missing |
+| Original full source manifest after atomic shutdown/restart slice (`7284f6377f`) | PASS: unchanged HEAD/branch/diffs/status; 16,751 entries, 16,748 checked, 3 expected deletions, 0 mismatches |
 
 The file named `diff-binary.patch` was captured without Git binary payload bodies: it matches `git diff`, not fresh `git diff --binary` output. The integrity checker records this capture-mode fact and relies on the independent file manifest for binary content integrity.
 

@@ -13,3 +13,6 @@
 | Signing/notarization credentials unavailable | Cannot prove production artifact trust | Implement all credential-independent gates; document exact external secret checks without simulating success |
 | New dependency licensing | Distribution incompatibility | License allowlist and generated notices before adoption |
 | Scope is larger than one session | Incomplete handoff | Status, parity JSON, decisions, risks, test evidence, and small commits are mandatory checkpoints |
+| Renderer receives a native quit but never acknowledges it | Native exit can hang forever | Exact request IDs plus a 10-second timeout force only an unreceived request; a receipt ACK disarms the timeout while the user decides |
+| Renderer or WebView disappears during shutdown delivery/execution | A prevented native exit or confirmed request can be stranded | Delivery failure creates a fresh executing Quit; confirm-and-execute is one backend command; confirmed requests remain force-claimable |
+| Full renderer/package builds exhaust Windows pagefile under concurrent work | Current artifact evidence can be unavailable despite green focused contracts | Keep resource limits explicit, retain targeted real WebView2 protocol smoke evidence, and rerun full production build on a quiet/CI host before parity completion |

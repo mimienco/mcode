@@ -12,12 +12,18 @@
       "targetCommand": [
         "app_get_launch_context",
         "app_stage_shutdown_checkpoint",
-        "app_request_quit"
+        "app_request_shutdown",
+        "app_acknowledge_shutdown",
+        "app_cancel_shutdown",
+        "app_confirm_and_execute_shutdown"
       ],
       "tests": [
         "crates/mcode-app/tests/lifecycle_contract.rs",
+        "src-tauri/tests/app_shutdown_command_contract.rs",
         "src-tauri/tests/command_contract.rs",
         "src/renderer/src/desktop/desktop-client.test.ts",
+        "src/renderer/src/desktop/lifecycle-smoke-client.test.ts",
+        "src/renderer/src/desktop/tauri-desktop-app-lifecycle-capability.test.ts",
         "src/renderer/src/desktop/runtime-desktop-shutdown-checkpoint-client.test.ts",
         "src/shared/shutdown-checkpoint-contract.test.ts",
         "src-tauri/tests/shutdown_checkpoint_command_contract.rs"
@@ -30,6 +36,11 @@
         "corepack pnpm exec tauri build --debug --no-bundle --ci",
         "debug smoke launch exited 0 using isolated WebView2 data",
         "manual close awaits the validated atomic Rust checkpoint before confirmation",
+        "real Windows WebView2 Quit and Restart flows acknowledged the exact request, wrote the checkpoint, and exited cleanly",
+        "restart smoke relaunched a child that wrote the exact marker relaunched",
+        "missing-window or event-delivery failure forces a fresh executing Quit after prevent_exit",
+        "confirm, execution claim, and native execution are exposed as one backend command",
+        "typed TypeScript command errors preserve validated code, context, and safe userMessage",
         "shared v1 fixture guards every workspace-session field and mirrored enum set",
         "local and runtime-host checkpoints retain host-owned topology, apply retirement tombstones, and do not revive terminated SSH leases"
       ]
@@ -63,7 +74,8 @@
         "Tauri renderer build passed with 10,651 modules",
         "tauri build --debug --no-bundle --ci passed",
         "debug smoke launch exited 0 using isolated WebView2 data",
-        "manual close routes through existing renderer decisions and a single confirmed Tauri close"
+        "manual close routes through existing renderer decisions and the app-wide shutdown protocol",
+        "real Windows WebView2 Quit and Restart lifecycle smoke exited cleanly with no remaining process"
       ]
     },
     {
@@ -479,7 +491,8 @@
         "atomic merge preserves unrelated settings and local/remote host partitions",
         "local and runtime-host checkpoints retain newer host topology and live PTY bindings without reviving terminated SSH leases",
         "prior and incoming terminal retirement tombstones are applied before local binding preservation",
-        "durability or native-confirmation failure keeps the native window open"
+        "durability or native-confirmation failure keeps the native window open",
+        "real Windows WebView2 Quit and Restart smoke wrote the durable checkpoint before atomic native execution"
       ]
     }
   ]

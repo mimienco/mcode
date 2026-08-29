@@ -36,6 +36,12 @@ Status: accepted for the bootstrap.
 
 The initial shell pins Tauri core 2.11.5, Tauri CLI 2.11.4, `@tauri-apps/api` 2.11.1, `tauri-build` 2.6.3, and Rust 1.98.0. These versions were checked against the official Tauri release channel and then verified together by `tauri info`, Cargo tests, clippy, a Windows WebView2 smoke launch, and a CLI-driven debug build. Transitive `wry` and `tao` versions remain lockfile-controlled; an “outdated” advisory from `tauri info` is not overridden independently of Tauri core.
 
+## D-007: Two-stage renderer acknowledgement with atomic execution
+
+Status: accepted for the Windows lifecycle slice.
+
+A native Quit/Restart request first requires an immediate receipt ACK. The existing 10-second Electron bound applies only before that receipt, so an unresponsive or absent renderer cannot hang shutdown while a responsive renderer may leave a real dirty-file or running-process decision open indefinitely. After the renderer has staged the durable checkpoint and the user has approved, one Rust command confirms, claims, and starts native execution. Delivery failure after `prevent_exit()` forces a fresh executing Quit. Manual last-window close uses the same app-wide protocol rather than a separate native-close shortcut.
+
 ## Pending decisions
 
 - PTY crate/FFI strategy after behavior and throughput spikes on all platforms.
