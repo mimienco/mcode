@@ -42,6 +42,10 @@ Status: accepted for the Windows lifecycle slice.
 
 A native Quit/Restart request first requires an immediate receipt ACK. The existing 10-second Electron bound applies only before that receipt, so an unresponsive or absent renderer cannot hang shutdown while a responsive renderer may leave a real dirty-file or running-process decision open indefinitely. After the renderer has staged the durable checkpoint and the user has approved, one Rust command confirms, claims, and starts native execution. Delivery failure after `prevent_exit()` forces a fresh executing Quit. Manual last-window close uses the same app-wide protocol rather than a separate native-close shortcut.
 
+## D-008: Production-entry graph defines the renderer import boundary
+
+Renderer Node/Electron evidence is derived from the verified captured source backup's actual production entries, not repository-wide substring matches or filename guesses. The generator traces runtime local imports through shared source, records external packages, and rejects unresolved dynamic/local edges. Node imports may be allowlisted only when their exact source modules are unreachable from every production entry; stale exceptions and newly reachable exceptions are errors.
+
 ## Pending decisions
 
 - PTY crate/FFI strategy after behavior and throughput spikes on all platforms.

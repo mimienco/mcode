@@ -17,18 +17,30 @@
 
 ## Verification results
 
-| Check | Result |
-| --- | --- |
-| Backup manifest | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches |
-| Rewrite manifest before migration | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches |
-| Original HEAD and branch after guardrail work | PASS |
-| Original staged diff and porcelain status | PASS |
-| Original unstaged diff | PASS using the snapshot's actual `git diff` capture mode |
-| Original full source manifest after guardrail work | PASS: 16,751 entries |
-| Original full source manifest after Electron baseline | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches |
-| Original full source manifest after Tauri bootstrap | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches |
-| Backup source-file protection | PASS: all 16,748 present manifest files marked read-only; 3 expected missing |
-| Original full source manifest after atomic shutdown/restart slice (`7284f6377f`) | PASS: unchanged HEAD/branch/diffs/status; 16,751 entries, 16,748 checked, 3 expected deletions, 0 mismatches |
+| Check                                                                            | Result                                                                                                                            |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Backup manifest                                                                  | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches                                                                   |
+| Rewrite manifest before migration                                                | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches                                                                   |
+| Original HEAD and branch after guardrail work                                    | PASS                                                                                                                              |
+| Original staged diff and porcelain status                                        | PASS                                                                                                                              |
+| Original unstaged diff                                                           | PASS using the snapshot's actual `git diff` capture mode                                                                          |
+| Original full source manifest after guardrail work                               | PASS: 16,751 entries                                                                                                              |
+| Original full source manifest after Electron baseline                            | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches                                                                   |
+| Original full source manifest after Tauri bootstrap                              | PASS: 16,748 present hashes, 3 expected deletions, 0 mismatches                                                                   |
+| Backup source-file protection                                                    | PASS: all 16,748 present manifest files marked read-only; 3 expected missing                                                      |
+| Original full source manifest after atomic shutdown/restart slice (`7284f6377f`) | PASS: unchanged HEAD/branch/diffs/status; 16,751 entries, 16,748 checked, 3 expected deletions, 0 mismatches                      |
+| Original integrity after renderer-import inventory                               | EXTERNAL DELTA: HEAD, branch, and staged diff unchanged; unstaged diff/status changed; four manifest hash mismatches listed below |
+
+## Concurrent original delta detected on 2026-08-30
+
+The guard detected changes made outside the rewrite while this migration slice was running. No migration command wrote to the original. The original file timestamps and the read-only backup comparison identify:
+
+- `AGENTS.md` — modified 14:07:23; 96 inserted lines versus the captured backup.
+- `src/renderer/src/components/settings/Settings.tsx` — modified 14:18:37; 4 changed lines versus the captured backup.
+- `src/renderer/src/components/settings/settings-section-registry.ts` — modified 14:20:34; 8 inserted lines versus the captured backup.
+- `src/renderer/src/components/settings/settings-section-registry.test.ts` — modified 14:25:02; 24 inserted lines versus the captured backup.
+
+The verified read-only backup remains the authoritative captured-source input for subsequent inventories and behavioral comparison. The external original delta is preserved; it is neither reverted nor silently incorporated into the rewrite.
 
 The file named `diff-binary.patch` was captured without Git binary payload bodies: it matches `git diff`, not fresh `git diff --binary` output. The integrity checker records this capture-mode fact and relies on the independent file manifest for binary content integrity.
 

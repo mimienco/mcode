@@ -4,16 +4,18 @@ The machine-readable source of truth is `parity-matrix.json`. A row becomes `don
 
 Current summary:
 
-| Status | Count |
-| --- | ---: |
-| done | 0 |
-| in progress | 3 |
-| not started | 33 |
-| blocked | 0 |
+| Status      | Count |
+| ----------- | ----: |
+| done        |     0 |
+| in progress |     3 |
+| not started |    33 |
+| blocked     |     0 |
 
 The initial 36 rows cover lifecycle/windowing, workspaces/settings, filesystem/watcher, Git/worktrees/WSL, process/PTY/agents, SSH/remote, relay/mobile/wire, CLI/headless, updater/packaging, diagnostics/permissions, editor/terminal/rich UI, integrations, voice/computer use, i18n/theme, extensions, and session recovery.
 
 Current Windows lifecycle evidence now includes real WebView2 Quit and Restart acknowledgement, durable checkpoint persistence, child relaunch, delivery-failure recovery, and atomic confirm-and-execute. The lifecycle row remains `in_progress` because full renderer integration, single-instance/headless behavior, tray handling, and macOS/Linux evidence are still missing.
+
+The Electron/Node removal gate now also has a source-authoritative renderer import ledger: all three captured production entries resolve through 4,716 renderer/shared modules with zero reachable Node/Electron imports. Four Node imports remain only in two exact, unreachable test-support modules; this inventory is evidence for the removal gate but does not by itself advance a feature row.
 
 Evidence rules:
 

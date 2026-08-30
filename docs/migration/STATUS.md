@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement with a typed, durable Tauri shutdown checkpoint on Windows.
+Phase 3 – production renderer import boundary locked; continuing full-renderer lifecycle integration.
 
 ## Last green commit
 
-`7284f6377f` (`fix(tauri): make shutdown execution atomic`), following renderer-ack checkpoints `11399f6cc0`, `eb8c0f4b55`, and `36d1b85d50`.
+`b02ca0d82a` (`feat(migration): inventory Electron IPC surface`).
 
 ## Completed in this session
 
@@ -52,6 +52,11 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 - Replaced the preliminary IPC regex counts with a deterministic Babel-TypeScript AST inventory of the immutable original.
 - Correlated 1,935 operations and 978 channels; reconciled all 20 dynamic factories against explicit call sites with zero unresolved entries or parse failures.
 - Proved complete command pairing (no registrations without callers and no callers without registrations) and recorded the two subscription-only legacy event channels.
+- Added a deterministic production-entry import graph for the verified read-only source backup.
+- Traced 4,716 runtime-reachable renderer/shared modules and 25,964 import sites across the captured main, popout, and paired-web entries.
+- Inventoried 72 external package roots with exact importing-file sets and proved zero reachable Node built-ins or Electron imports.
+- Added an exact stale-checked allowlist for four Node imports in two production-named test-support modules; neither module is reachable from a production entry.
+- Made unresolved local imports, non-literal dynamic imports, newly reachable exceptions, and stale allowlist entries hard failures.
 
 ## Tests executed
 
@@ -94,6 +99,10 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 - Final original-integrity guard: PASS (`unchanged: true`; 16,748 checked, 3 expected missing, 0 unexpected or mismatched).
 - `node --test config/scripts/generate-electron-ipc-inventory.node-test.mjs`: PASS (3 tests).
 - Full original IPC generation plus `--check`: PASS (7,763 production files, 1,935 operations, 978 channels, 20 reconciled factories, 0 dynamic, 0 parse failures).
+- `node config/scripts/generate-renderer-import-inventory.node-test.mjs`: PASS (15 tests).
+- Captured-source renderer import generation plus `--check`: PASS (4,716 reachable files, 25,964 import sites, 72 packages, 0 reachable Node/Electron imports, 4 exact unreachable exceptions).
+- Focused renderer inventory oxlint: PASS; oxfmt check: PASS after formatting.
+- Post-inventory original integrity guard: EXTERNAL DELTA detected; HEAD, branch, and staged diff unchanged, while `AGENTS.md` and three Settings files changed in the original between 14:07 and 14:25. Migration evidence was regenerated from the verified read-only backup.
 
 ## Current blockers
 
@@ -101,6 +110,7 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 - The Tauri shell exposes the lifecycle context command and typed custom-window controls. The rest of the renderer still depends broadly on `window.api`, so the shell is not feature-complete or parity-ready.
 - Tauri manual close and app-wide native Quit/Restart now use the existing decision flow and await an atomic shutdown checkpoint. Updater-triggered restart integration in the full production renderer, minimize-to-tray, and startup restore remain incomplete.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
+- The original repository received concurrent edits after the migration snapshot. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
 
 ## Parity summary
 
@@ -111,7 +121,6 @@ Phase 3 – confirmed manual close plus app-wide Quit/Restart acknowledgement wi
 
 ## Exact next actions
 
-1. Finish the separate production renderer Node-built-in/import inventory using an exact allowlist.
-2. Connect updater-triggered restart and the full production renderer to the proven acknowledgement/durability protocol.
-3. Port Windows minimize-to-tray and startup restore, then expand the real WebView2 harness beyond the targeted lifecycle page.
-4. Use the correlated IPC ledger to prioritize and specify scoped filesystem/process contracts.
+1. Connect updater-triggered restart and the full production renderer to the proven acknowledgement/durability protocol.
+2. Port Windows minimize-to-tray and startup restore, then expand the real WebView2 harness beyond the targeted lifecycle page.
+3. Use the correlated IPC and renderer-import ledgers to prioritize and specify scoped filesystem/process contracts.

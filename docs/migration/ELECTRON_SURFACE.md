@@ -36,7 +36,20 @@ Current result:
 
 The checked artifact records every operation with process area, direction, transport, receiver, expression, channel set, relative file, line, and column. `--check` regenerates the entire ledger and fails on any byte difference.
 
-Production renderer imports still require a separate exact Node-built-in allowlist scan. Broad substring results are not accepted as evidence.
+## Production renderer import boundary
+
+`renderer-import-inventory.json` is generated from the verified read-only source backup with `generate-renderer-import-inventory.mjs`. It starts at the three production HTML module entries (`main.tsx`, `popout.tsx`, and `web/main.tsx`), follows static imports, re-exports, aliases, and literal dynamic imports through renderer and shared source, and fails closed on unresolved local or non-literal dynamic imports.
+
+Current result:
+
+- 4,406 production-named renderer source files inspected and 4,716 renderer/shared modules runtime-reachable.
+- 25,964 reachable import sites and 72 external package roots inventoried with exact importing-file sets.
+- Zero reachable Node built-ins and zero reachable Electron imports.
+- Zero unresolved dynamic imports and zero unresolved local source imports.
+- Four Node imports in two production-named test-support modules are explicitly listed in `renderer-import-allowlist.json`; both modules are unreachable from every production entry.
+- Real `*.test.*`, `*.spec.*`, and `*.bench.*` files are excluded by a locked filename rule. Production-like support filenames receive no heuristic exemption.
+
+The allowlist key is the exact file, specifier, and import kind. A new import, a stale entry, or an allowlisted module becoming production-reachable fails generation. `--check` regenerates the complete ledger and fails on any byte difference; broad substring scans are not accepted as parity evidence.
 
 ## Removal gate
 

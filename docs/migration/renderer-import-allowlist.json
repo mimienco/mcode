@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "file": "src/renderer/src/lib/worktree-activation-created-agent-test-state.ts",
+      "specifier": "node:path",
+      "importKind": "value",
+      "rationale": "Test-only worktree state builder imported exclusively by *.test.ts modules and unreachable from every production renderer entry."
+    },
+    {
+      "file": "src/renderer/src/store/slices/worktree-removal-host-collision-fixture.ts",
+      "specifier": "node:fs",
+      "importKind": "value",
+      "rationale": "Filesystem-backed test fixture imported exclusively by *.test.ts modules and unreachable from every production renderer entry."
+    },
+    {
+      "file": "src/renderer/src/store/slices/worktree-removal-host-collision-fixture.ts",
+      "specifier": "node:os",
+      "importKind": "value",
+      "rationale": "Filesystem-backed test fixture imported exclusively by *.test.ts modules and unreachable from every production renderer entry."
+    },
+    {
+      "file": "src/renderer/src/store/slices/worktree-removal-host-collision-fixture.ts",
+      "specifier": "node:path",
+      "importKind": "value",
+      "rationale": "Filesystem-backed test fixture imported exclusively by *.test.ts modules and unreachable from every production renderer entry."
+    }
+  ]
+}
