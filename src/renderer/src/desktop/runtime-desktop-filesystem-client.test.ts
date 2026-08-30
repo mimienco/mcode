@@ -15,13 +15,16 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
     .mockResolvedValueOnce(null)
     .mockResolvedValueOnce({ size: 42, isDirectory: false, mtime: 1234 })
     .mockResolvedValueOnce(true)
+    .mockResolvedValueOnce(null)
+    .mockResolvedValueOnce(true)
   const loadTauriInvoke = vi.fn(() => Promise.resolve(invoke))
   const electronFilesystem = {
     readDir: vi.fn(),
     readFile: vi.fn(),
     writeFile: vi.fn(),
     stat: vi.fn(),
-    pathExists: vi.fn()
+    pathExists: vi.fn(),
+    authorizeExternalPath: vi.fn()
   }
   const client = createRuntimeDesktopFilesystemClient({
     isTauri: () => true,
@@ -45,6 +48,8 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
     mtime: 1234
   })
   await expect(client.pathExists({ filePath: 'C:\\repo\\README.md' })).resolves.toBe(true)
+  await expect(client.authorizeExternalPath('C:\\outside\\report.md')).resolves.toBeUndefined()
+  await expect(client.revokeExternalPath('C:\\outside\\report.md')).resolves.toBe(true)
 
   expect(loadTauriInvoke).toHaveBeenCalledOnce()
   expect(invoke.mock.calls).toEqual([
@@ -52,7 +57,9 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
     ['fs_read_file', { filePath: 'C:\\repo\\README.md' }],
     ['fs_write_file_atomic', { filePath: 'C:\\repo\\README.md', content: 'changed' }],
     ['fs_stat', { filePath: 'C:\\repo\\README.md' }],
-    ['fs_path_exists', { filePath: 'C:\\repo\\README.md' }]
+    ['fs_path_exists', { filePath: 'C:\\repo\\README.md' }],
+    ['fs_authorize_external_path', { targetPath: 'C:\\outside\\report.md' }],
+    ['fs_revoke_external_path', { targetPath: 'C:\\outside\\report.md' }]
   ])
   expect(electronFilesystem.readDir).not.toHaveBeenCalled()
 })
@@ -63,7 +70,8 @@ it('falls back to the Electron filesystem without loading Tauri', async () => {
     readFile: vi.fn(() => Promise.resolve({ content: 'hello', isBinary: false })),
     writeFile: vi.fn(() => Promise.resolve()),
     stat: vi.fn(() => Promise.resolve({ size: 7, isDirectory: true, mtime: 99 })),
-    pathExists: vi.fn(() => Promise.resolve(false))
+    pathExists: vi.fn(() => Promise.resolve(false)),
+    authorizeExternalPath: vi.fn(() => Promise.resolve())
   }
   const loadTauriInvoke = vi.fn()
   const client = createRuntimeDesktopFilesystemClient({
@@ -86,6 +94,8 @@ it('falls back to the Electron filesystem without loading Tauri', async () => {
     mtime: 99
   })
   await expect(client.pathExists({ filePath: '/repo/missing.md' })).resolves.toBe(false)
+  await expect(client.authorizeExternalPath('/outside/report.md')).resolves.toBeUndefined()
+  await expect(client.revokeExternalPath('/outside/report.md')).resolves.toBe(false)
 
   expect(electronFilesystem.readDir).toHaveBeenCalledWith({ dirPath: '/repo' })
   expect(electronFilesystem.readFile).toHaveBeenCalledWith({ filePath: '/repo/readme.md' })
@@ -95,6 +105,9 @@ it('falls back to the Electron filesystem without loading Tauri', async () => {
   })
   expect(electronFilesystem.stat).toHaveBeenCalledWith({ filePath: '/repo/missing.md' })
   expect(electronFilesystem.pathExists).toHaveBeenCalledWith({ filePath: '/repo/missing.md' })
+  expect(electronFilesystem.authorizeExternalPath).toHaveBeenCalledWith({
+    targetPath: '/outside/report.md'
+  })
   expect(loadTauriInvoke).not.toHaveBeenCalled()
 })
 
@@ -208,7 +221,8 @@ it('preserves direct SSH mutation expectations on the Electron write fallback', 
       readFile: vi.fn(),
       writeFile,
       stat: vi.fn(),
-      pathExists: vi.fn()
+      pathExists: vi.fn(),
+      authorizeExternalPath: vi.fn()
     })
   })
   const request = {
@@ -246,9 +260,61 @@ it('preserves Electron rejections for compatibility', async () => {
       readFile: vi.fn(),
       writeFile: vi.fn(),
       stat: vi.fn(() => Promise.reject(electronError)),
-      pathExists: vi.fn()
+      pathExists: vi.fn(),
+      authorizeExternalPath: vi.fn()
     })
   })
 
   await expect(client.stat({ filePath: '/repo/missing' })).rejects.toBe(electronError)
+})
+
+it('validates external grant responses', async () => {
+  const clientFor = (response: unknown) =>
+    createRuntimeDesktopFilesystemClient({
+      isTauri: () => true,
+      loadTauriInvoke: () => Promise.resolve(vi.fn(() => Promise.resolve(response))),
+      getElectronFilesystem: vi.fn()
+    })
+
+  await expect(clientFor(true).authorizeExternalPath('/outside/report.md')).rejects.toThrow(
+    'Invalid fs_authorize_external_path response'
+  )
+  await expect(clientFor(null).revokeExternalPath('/outside/report.md')).rejects.toThrow(
+    'Invalid fs_revoke_external_path response'
+  )
+})
+
+it('treats an unstaged Tauri claim as a no-op so trusted-scope access can proceed', async () => {
+  const rejection = {
+    code: 'fs_path_denied',
+    context: { operation: 'fs_authorize_external_path' },
+    message: 'path cannot be authorized',
+    userMessage: 'MCode cannot access that path.'
+  }
+  const client = createRuntimeDesktopFilesystemClient({
+    isTauri: () => true,
+    loadTauriInvoke: () => Promise.resolve(vi.fn(() => Promise.reject(rejection))),
+    getElectronFilesystem: vi.fn()
+  })
+
+  await expect(client.authorizeExternalPath('/repo/file.txt')).resolves.toBeUndefined()
+})
+
+it('normalizes non-denial external grant Tauri rejections', async () => {
+  const rejection = {
+    code: 'fs_io',
+    context: { operation: 'fs_authorize_external_path' },
+    message: 'claim failed',
+    userMessage: 'MCode cannot access that path.'
+  }
+  const client = createRuntimeDesktopFilesystemClient({
+    isTauri: () => true,
+    loadTauriInvoke: () => Promise.resolve(vi.fn(() => Promise.reject(rejection))),
+    getElectronFilesystem: vi.fn()
+  })
+
+  const error = await client.authorizeExternalPath('/outside/secret').catch((reason) => reason)
+
+  expect(error).toBeInstanceOf(DesktopCommandError)
+  expect(error).toMatchObject(rejection)
 })

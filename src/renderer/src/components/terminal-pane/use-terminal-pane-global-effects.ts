@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { runtimeDesktopFileDropClient } from '@/desktop/runtime-desktop-file-drop-client'
 import {
   FOCUS_TERMINAL_PANE_EVENT,
   PASTE_TERMINAL_TEXT_EVENT,
@@ -297,7 +298,7 @@ export function useTerminalPaneGlobalEffects({
     if (!isActive && !isVisible) {
       return
     }
-    return window.api.ui.onFileDrop((data) => {
+    return runtimeDesktopFileDropClient.onFileDrop((data) => {
       if (data.target !== 'terminal') {
         return
       }

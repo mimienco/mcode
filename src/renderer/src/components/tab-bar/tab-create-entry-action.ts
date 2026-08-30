@@ -7,6 +7,7 @@ import {
   type RuntimeFileOperationArgs
 } from '@/runtime/runtime-file-client'
 import { useAppStore } from '@/store'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import type { OpenFile } from '@/store/slices/editor'
 import {
   buildSearchUrl,
@@ -290,7 +291,8 @@ export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
       openWorkspaceBrowserTab,
       openFile: state.openFile,
       statRuntimePath,
-      authorizeExternalPath: window.api.fs.authorizeExternalPath,
+      authorizeExternalPath: ({ targetPath }) =>
+        runtimeDesktopFilesystemClient.authorizeExternalPath(targetPath),
       assertAbsolutePathAllowed: () => {
         if (!getTabEntryAllowAbsolutePaths(useAppStore.getState(), args.worktreeId)) {
           throw new Error(TAB_ENTRY_ABSOLUTE_PATH_REMOTE_BLOCKED_MESSAGE)

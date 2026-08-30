@@ -3,7 +3,7 @@ import type { DirEntry } from '../../../shared/filesystem-entry-types'
 import { sortDirEntries } from '../../../shared/file-name-sort'
 import type { SshMutationExpectation } from '../../../shared/ssh-types'
 import type { DesktopInvoke } from './desktop-client'
-import { normalizeDesktopCommandError } from './desktop-client'
+import { DesktopCommandError, normalizeDesktopCommandError } from './desktop-client'
 
 export type DesktopFilesystemReadDirArgs = {
   dirPath: string
@@ -44,11 +44,13 @@ export type RuntimeDesktopFilesystemClient = {
   writeFileAtomic: (args: DesktopFilesystemWriteFileArgs) => Promise<void>
   stat: (args: DesktopFilesystemPathArgs) => Promise<DesktopFilesystemStat>
   pathExists: (args: DesktopFilesystemPathArgs) => Promise<boolean>
+  authorizeExternalPath: (targetPath: string) => Promise<void>
+  revokeExternalPath: (targetPath: string) => Promise<boolean>
 }
 
 type ElectronFilesystem = Pick<
   Window['api']['fs'],
-  'readDir' | 'readFile' | 'writeFile' | 'stat' | 'pathExists'
+  'readDir' | 'readFile' | 'writeFile' | 'stat' | 'pathExists' | 'authorizeExternalPath'
 >
 
 type RuntimeDesktopFilesystemDependencies = {
@@ -169,6 +171,37 @@ export function createRuntimeDesktopFilesystemClient(
         ? await invokeTauri('fs_path_exists', args)
         : await dependencies.getElectronFilesystem().pathExists(args)
       return validatePathExists(response)
+    },
+    async authorizeExternalPath(targetPath) {
+      if (dependencies.isTauri()) {
+        let response: unknown
+        try {
+          response = await invokeTauri('fs_authorize_external_path', { targetPath })
+        } catch (error) {
+          // Tauri claims only paths staged by a native producer. A path can
+          // already belong to a trusted root, so an unstaged claim is a no-op;
+          // the following filesystem operation still enforces the real scope.
+          if (error instanceof DesktopCommandError && error.code === 'fs_path_denied') {
+            return
+          }
+          throw error
+        }
+        if (response !== null && response !== undefined) {
+          throw new Error('Invalid fs_authorize_external_path response')
+        }
+        return
+      }
+      await dependencies.getElectronFilesystem().authorizeExternalPath({ targetPath })
+    },
+    async revokeExternalPath(targetPath) {
+      if (!dependencies.isTauri()) {
+        return false
+      }
+      const response = await invokeTauri('fs_revoke_external_path', { targetPath })
+      if (typeof response !== 'boolean') {
+        throw new Error('Invalid fs_revoke_external_path response')
+      }
+      return response
     }
   }
 }

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
+import { runtimeDesktopFileDropClient } from '@/desktop/runtime-desktop-file-drop-client'
 import { getDefaultRepoHookSettings } from '../../../shared/constants'
 import { getAgentLaunchPlatformForRepo } from '@/lib/agent-launch-platform'
 import { getAgentCatalog } from '@/lib/agent-catalog'
@@ -2621,8 +2623,8 @@ export function useComposerState(options: UseComposerStateOptions): UseComposerS
       const folderPaths: string[] = []
       for (const filePath of paths) {
         try {
-          await window.api.fs.authorizeExternalPath({ targetPath: filePath })
-          const stat = await window.api.fs.stat({ filePath })
+          await runtimeDesktopFilesystemClient.authorizeExternalPath(filePath)
+          const stat = await runtimeDesktopFilesystemClient.stat({ filePath })
           if (stat.isDirectory) {
             folderPaths.push(filePath)
           } else {
@@ -2650,12 +2652,12 @@ export function useComposerState(options: UseComposerStateOptions): UseComposerS
   const applyLocalComposerDropRef = useRef(applyLocalComposerDrop)
   applyLocalComposerDropRef.current = applyLocalComposerDrop
 
-  // Why: native OS file drops relay via the preload bridge; files become attachments, folders paste inline at the caret since a path can't be embedded as file content.
+  // Why: the desktop drop adapter relays native OS paths; files become attachments, folders paste inline at the caret since a path can't be embedded as file content.
   const instanceIdRef = useRef<symbol>(Symbol('composer'))
   useEffect(() => {
     const instanceId = instanceIdRef.current
     composerDropStack.push(instanceId)
-    const unsubscribe = window.api.ui.onFileDrop((data) => {
+    const unsubscribe = runtimeDesktopFileDropClient.onFileDrop((data) => {
       if (data.target !== 'composer') {
         return
       }

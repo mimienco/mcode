@@ -12,6 +12,8 @@ import {
   resolveSidebarProjectDropPath
 } from './sidebar-project-drop'
 import { translate } from '@/i18n/i18n'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
+import { runtimeDesktopFileDropClient } from '@/desktop/runtime-desktop-file-drop-client'
 
 type SidebarProjectDropHandlers = {
   onDragEnter: (event: React.DragEvent<HTMLElement>) => void
@@ -79,8 +81,8 @@ export function useSidebarProjectDrop(): {
 
       setIsHandlingDrop(true)
       try {
-        await window.api.fs.authorizeExternalPath({ targetPath: pathResolution.path })
-        const stat = await window.api.fs.stat({ filePath: pathResolution.path })
+        await runtimeDesktopFilesystemClient.authorizeExternalPath(pathResolution.path)
+        const stat = await runtimeDesktopFilesystemClient.stat({ filePath: pathResolution.path })
         if (!mountedRef.current) {
           return
         }
@@ -116,7 +118,7 @@ export function useSidebarProjectDrop(): {
   )
 
   useEffect(() => {
-    return window.api.ui.onFileDrop((data) => {
+    return runtimeDesktopFileDropClient.onFileDrop((data) => {
       if (data.target !== NATIVE_FILE_DROP_TARGET.projectSidebar) {
         return
       }

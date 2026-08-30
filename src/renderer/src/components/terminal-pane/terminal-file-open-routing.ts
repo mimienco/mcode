@@ -8,6 +8,7 @@ import {
   type RuntimeFileOperationArgs
 } from '@/runtime/runtime-file-client'
 import { settingsForRuntimeOwner } from '@/runtime/runtime-rpc-client'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { resolveKnownWorktreeRootPathLink } from './terminal-worktree-path-link'
@@ -162,7 +163,7 @@ export function openDetectedFilePath(
     try {
       // Why: remote paths don't need local auth — the relay/runtime is the security boundary.
       if (canOpenWithSystemDefault) {
-        await window.api.fs.authorizeExternalPath({ targetPath: mappedFilePath })
+        await runtimeDesktopFilesystemClient.authorizeExternalPath(mappedFilePath)
       }
       statResult = await statRuntimePath(fileContext, mappedFilePath)
     } catch {

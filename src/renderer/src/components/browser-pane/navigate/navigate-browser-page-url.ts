@@ -7,6 +7,7 @@ import {
   statRuntimePath,
   type RuntimeFileOperationArgs
 } from '@/runtime/runtime-file-client'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import {
   normalizeBrowserNavigationUrl,
   redactKagiSessionToken
@@ -108,7 +109,7 @@ export function navigateBrowserPageToUrl({
           connectionId: undefined
         }
         if (!isRemoteRuntimeFileOperation(fileContext, notebookPath)) {
-          await window.api.fs.authorizeExternalPath({ targetPath: notebookPath })
+          await runtimeDesktopFilesystemClient.authorizeExternalPath(notebookPath)
         }
         const stat = await statRuntimePath(fileContext, notebookPath)
         if (stat.isDirectory) {

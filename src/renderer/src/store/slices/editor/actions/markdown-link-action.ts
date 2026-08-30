@@ -9,6 +9,7 @@ import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/loc
 import { resolveMarkdownLinkTarget } from '@/components/editor/markdown-internal-links'
 import { settingsForRuntimeOwner } from '@/runtime/runtime-rpc-client'
 import { statRuntimePath } from '@/runtime/runtime-file-client'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import { getOpenedEditFileIdAfterOpen } from '../file-ids/editor-file-ids'
 import { scheduleEditorLineReveal } from '../focus/editor-focus-reveal'
 
@@ -87,7 +88,7 @@ export function createMarkdownLinkAction(
             return
           }
           // Why: markdown file:// links need the same user-gesture authorization terminal links get, so external paths (e.g. /tmp screenshots) can open in MCode.
-          await window.api.fs.authorizeExternalPath({ targetPath: target.absolutePath })
+          await runtimeDesktopFilesystemClient.authorizeExternalPath(target.absolutePath)
         } else {
           let stats: { isDirectory: boolean }
           try {

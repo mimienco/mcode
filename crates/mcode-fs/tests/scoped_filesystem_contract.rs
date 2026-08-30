@@ -1,4 +1,4 @@
-use mcode_fs::{BoundedFileRead, FsError, PathKind, ScopedFilesystem};
+use mcode_fs::{BoundedFileRead, ExactPathCapability, FsError, PathKind, ScopedFilesystem};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -446,6 +446,202 @@ fn dangling_leaf_symlink_is_not_found_for_stat_and_path_exists() {
         Err(FsError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound
     ));
     assert!(!filesystem.path_exists(&link).unwrap());
+}
+
+#[test]
+fn exact_file_capability_allows_only_the_authorized_file() {
+    let root = TestDirectory::new();
+    let allowed = root.path().join("allowed.txt");
+    let sibling = root.path().join("sibling.txt");
+    fs::write(&allowed, "allowed").unwrap();
+    fs::write(&sibling, "sibling").unwrap();
+    let capability = ExactPathCapability::authorize(&allowed).unwrap();
+
+    assert_eq!(
+        capability.read_file_bounded(&allowed, 32, None).unwrap(),
+        BoundedFileRead::Bytes(b"allowed".to_vec())
+    );
+    assert!(matches!(
+        capability.stat(&sibling),
+        Err(FsError::PathOutsideScope { .. })
+    ));
+    let write_error = capability
+        .write_file_atomic(&allowed, b"replacement", 32)
+        .unwrap_err();
+    assert_eq!(write_error.code(), "fs_external_write_unsupported");
+    assert_eq!(fs::read_to_string(&allowed).unwrap(), "allowed");
+}
+
+#[test]
+fn exact_directory_capability_grants_only_the_authorized_subtree() {
+    let root = TestDirectory::new();
+    let directory = root.path().join("external");
+    let child = directory.join("child.txt");
+    let created = directory.join("created.txt");
+    let outside_sibling = root.path().join("outside.txt");
+    fs::create_dir(&directory).unwrap();
+    fs::write(&child, "child").unwrap();
+    fs::write(&outside_sibling, "outside").unwrap();
+    let capability = ExactPathCapability::authorize(&directory).unwrap();
+
+    assert_eq!(
+        capability.read_dir(&directory).unwrap()[0].name,
+        "child.txt"
+    );
+    assert_eq!(
+        capability.read_file_bounded(&child, 32, None).unwrap(),
+        BoundedFileRead::Bytes(b"child".to_vec())
+    );
+    capability
+        .write_file_atomic(&created, b"created", 32)
+        .unwrap();
+    assert_eq!(fs::read_to_string(&created).unwrap(), "created");
+    assert!(matches!(
+        capability.read_file_bounded(&outside_sibling, 32, None),
+        Err(FsError::PathOutsideScope { .. })
+    ));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn exact_directory_capability_denies_symlink_escape() {
+    let root = TestDirectory::new();
+    let outside = TestDirectory::new();
+    let directory = root.path().join("external");
+    let escape = directory.join("escape");
+    fs::create_dir(&directory).unwrap();
+    fs::write(outside.path().join("secret.txt"), "secret").unwrap();
+    create_directory_symlink(outside.path(), &escape);
+    let capability = ExactPathCapability::authorize(&directory).unwrap();
+
+    assert!(matches!(
+        capability.read_file_bounded(&escape.join("secret.txt"), 32, None),
+        Err(FsError::PathOutsideScope { .. } | FsError::SymlinkTraversalDenied { .. })
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn exact_directory_capability_keeps_the_original_handle_after_root_retarget() {
+    let root = TestDirectory::new();
+    let outside = TestDirectory::new();
+    let directory = root.path().join("external");
+    let pinned = root.path().join("pinned");
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("safe.txt"), "safe").unwrap();
+    fs::write(outside.path().join("secret.txt"), "secret").unwrap();
+    let capability = ExactPathCapability::authorize(&directory).unwrap();
+
+    fs::rename(&directory, &pinned).unwrap();
+    create_directory_symlink(outside.path(), &directory);
+
+    assert_eq!(
+        capability
+            .read_file_bounded(&directory.join("safe.txt"), 32, None)
+            .unwrap(),
+        BoundedFileRead::Bytes(b"safe".to_vec())
+    );
+    assert!(matches!(
+        capability.read_file_bounded(&directory.join("secret.txt"), 32, None),
+        Err(FsError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound
+    ));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn exact_directory_capability_keeps_the_original_handle_after_alias_retarget() {
+    let root = TestDirectory::new();
+    let target = TestDirectory::new();
+    let outside = TestDirectory::new();
+    let alias = root.path().join("external");
+    fs::write(target.path().join("safe.txt"), "safe").unwrap();
+    fs::write(outside.path().join("secret.txt"), "secret").unwrap();
+    create_directory_symlink(target.path(), &alias);
+    let capability = ExactPathCapability::authorize(&alias).unwrap();
+
+    fs::remove_dir(&alias)
+        .or_else(|_| fs::remove_file(&alias))
+        .unwrap();
+    create_directory_symlink(outside.path(), &alias);
+
+    assert_eq!(
+        capability
+            .read_file_bounded(&alias.join("safe.txt"), 32, None)
+            .unwrap(),
+        BoundedFileRead::Bytes(b"safe".to_vec())
+    );
+    assert!(matches!(
+        capability.read_file_bounded(&alias.join("secret.txt"), 32, None),
+        Err(FsError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound
+    ));
+}
+
+#[test]
+fn exact_missing_leaf_capability_is_rejected() {
+    let root = TestDirectory::new();
+    let missing = root.path().join("missing.txt");
+
+    assert!(matches!(
+        ExactPathCapability::authorize(&missing),
+        Err(FsError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound
+    ));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn exact_symlink_capability_accepts_the_alias_without_exposing_target_siblings() {
+    let root = TestDirectory::new();
+    let target_root = TestDirectory::new();
+    let target = target_root.path().join("target.txt");
+    let sibling = target_root.path().join("secret.txt");
+    let alias = root.path().join("alias.txt");
+    fs::write(&target, "target").unwrap();
+    fs::write(&sibling, "secret").unwrap();
+    create_file_symlink(&target, &alias);
+    let capability = ExactPathCapability::authorize(&alias).unwrap();
+
+    assert_eq!(
+        capability.read_file_bounded(&alias, 32, None).unwrap(),
+        BoundedFileRead::Bytes(b"target".to_vec())
+    );
+    assert_eq!(
+        capability.read_file_bounded(&target, 32, None).unwrap(),
+        BoundedFileRead::Bytes(b"target".to_vec())
+    );
+    fs::remove_file(&alias).unwrap();
+    create_file_symlink(&sibling, &alias);
+    assert_eq!(
+        capability.read_file_bounded(&alias, 32, None).unwrap(),
+        BoundedFileRead::Bytes(b"target".to_vec())
+    );
+    assert!(matches!(
+        capability.read_file_bounded(&sibling, 32, None),
+        Err(FsError::PathOutsideScope { .. })
+    ));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn exact_file_capability_keeps_the_original_handle_after_leaf_retarget() {
+    let root = TestDirectory::new();
+    let allowed = root.path().join("allowed.txt");
+    let pinned_original = root.path().join("pinned-original.txt");
+    let sibling = root.path().join("sibling.txt");
+    fs::write(&allowed, "allowed").unwrap();
+    fs::write(&sibling, "sibling").unwrap();
+    let capability = ExactPathCapability::authorize(&allowed).unwrap();
+
+    fs::rename(&allowed, &pinned_original).unwrap();
+    create_file_symlink(&sibling, &allowed);
+
+    assert_eq!(
+        capability.read_file_bounded(&allowed, 32, None).unwrap(),
+        BoundedFileRead::Bytes(b"allowed".to_vec())
+    );
+    assert!(matches!(
+        capability.read_file_bounded(&sibling, 32, None),
+        Err(FsError::PathOutsideScope { .. })
+    ));
 }
 
 #[cfg(any(unix, windows))]

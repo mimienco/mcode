@@ -3,6 +3,8 @@ use cap_std::ambient_authority;
 use cap_std::fs::OpenOptionsExt;
 use cap_std::fs::{Dir, FileType, Metadata, MetadataExt, OpenOptions};
 use std::cmp::Ordering;
+#[cfg(windows)]
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -89,6 +91,9 @@ pub enum FsError {
     TargetIsDirectory {
         path: PathBuf,
     },
+    ExternalWriteUnsupported {
+        path: PathBuf,
+    },
     Io {
         operation: FsOperation,
         path: PathBuf,
@@ -108,6 +113,7 @@ impl FsError {
             Self::SymlinkTraversalDenied { .. } => "fs_symlink_traversal_denied",
             Self::FileTooLarge { .. } => "fs_file_too_large",
             Self::TargetIsDirectory { .. } => "fs_target_is_directory",
+            Self::ExternalWriteUnsupported { .. } => "fs_external_write_unsupported",
             Self::Io { .. } => "fs_io_failed",
         }
     }
@@ -153,6 +159,11 @@ impl fmt::Display for FsError {
             Self::TargetIsDirectory { path } => {
                 write!(formatter, "target is a directory: {}", path.display())
             }
+            Self::ExternalWriteUnsupported { path } => write!(
+                formatter,
+                "external file capability is read-only: {}",
+                path.display()
+            ),
             Self::Io {
                 operation,
                 path,
@@ -542,19 +553,19 @@ impl ScopedFilesystem {
 }
 
 #[cfg(unix)]
-fn file_identity(metadata: &Metadata) -> String {
+pub(crate) fn file_identity(metadata: &Metadata) -> String {
     format!("{}:{}:0", metadata.dev(), metadata.ino())
 }
 
 #[cfg(windows)]
-fn file_identity(metadata: &Metadata) -> String {
+pub(crate) fn file_identity(metadata: &Metadata) -> String {
     // The creation timestamp is stable across append-only growth and changes
     // when an atomic replacement installs a newly-created file.
     format!("0:0:{}", metadata.creation_time())
 }
 
 #[cfg(not(any(unix, windows)))]
-fn file_identity(metadata: &Metadata) -> String {
+pub(crate) fn file_identity(metadata: &Metadata) -> String {
     let created = metadata
         .created()
         .ok()
@@ -563,7 +574,7 @@ fn file_identity(metadata: &Metadata) -> String {
     format!("0:0:{created}")
 }
 
-fn enforce_file_size(path: &Path, size: u64, max_bytes: usize) -> Result<(), FsError> {
+pub(crate) fn enforce_file_size(path: &Path, size: u64, max_bytes: usize) -> Result<(), FsError> {
     let limit = max_bytes as u64;
     if size > limit {
         Err(FsError::FileTooLarge {
@@ -790,21 +801,21 @@ fn scoped_io_error(operation: FsOperation, target: &ScopedTarget, source: io::Er
     }
 }
 
-fn is_normalized_absolute(path: &Path) -> bool {
+pub(crate) fn is_normalized_absolute(path: &Path) -> bool {
     path.is_absolute()
         && path
             .components()
             .all(|component| !matches!(component, Component::CurDir | Component::ParentDir))
 }
 
-fn relative_to(path: &Path, root: &Path) -> Option<PathBuf> {
+pub(crate) fn relative_to(path: &Path, root: &Path) -> Option<PathBuf> {
     #[cfg(windows)]
     {
         let path_wsl = wsl_unc_components(path);
         let root_wsl = wsl_unc_components(root);
         match (path_wsl, root_wsl) {
             (Some((path_distro, path_tail)), Some((root_distro, root_tail))) => {
-                if !path_distro.eq_ignore_ascii_case(&root_distro)
+                if !os_str_eq_ignore_ascii_case(&path_distro, &root_distro)
                     || path_tail.len() < root_tail.len()
                     || !path_tail
                         .iter()
@@ -824,11 +835,7 @@ fn relative_to(path: &Path, root: &Path) -> Option<PathBuf> {
             || !path_components
                 .iter()
                 .zip(&root_components)
-                .all(|(left, right)| {
-                    left.as_os_str()
-                        .to_string_lossy()
-                        .eq_ignore_ascii_case(&right.as_os_str().to_string_lossy())
-                })
+                .all(|(left, right)| windows_component_eq(*left, *right))
         {
             return None;
         }
@@ -841,7 +848,44 @@ fn relative_to(path: &Path, root: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
-fn wsl_unc_components(path: &Path) -> Option<(String, Vec<std::ffi::OsString>)> {
+fn windows_component_eq(left: Component<'_>, right: Component<'_>) -> bool {
+    match (left, right) {
+        (Component::Prefix(left), Component::Prefix(right)) => {
+            windows_prefix_eq(left.kind(), right.kind())
+        }
+        _ => os_str_eq_ignore_ascii_case(left.as_os_str(), right.as_os_str()),
+    }
+}
+
+#[cfg(windows)]
+fn windows_prefix_eq(left: Prefix<'_>, right: Prefix<'_>) -> bool {
+    match (left, right) {
+        (Prefix::Disk(left), Prefix::Disk(right))
+        | (Prefix::Disk(left), Prefix::VerbatimDisk(right))
+        | (Prefix::VerbatimDisk(left), Prefix::Disk(right))
+        | (Prefix::VerbatimDisk(left), Prefix::VerbatimDisk(right)) => {
+            left.eq_ignore_ascii_case(&right)
+        }
+        (Prefix::UNC(left_server, left_share), Prefix::UNC(right_server, right_share))
+        | (Prefix::UNC(left_server, left_share), Prefix::VerbatimUNC(right_server, right_share))
+        | (Prefix::VerbatimUNC(left_server, left_share), Prefix::UNC(right_server, right_share))
+        | (
+            Prefix::VerbatimUNC(left_server, left_share),
+            Prefix::VerbatimUNC(right_server, right_share),
+        ) => {
+            os_str_eq_ignore_ascii_case(left_server, right_server)
+                && os_str_eq_ignore_ascii_case(left_share, right_share)
+        }
+        (Prefix::Verbatim(left), Prefix::Verbatim(right))
+        | (Prefix::DeviceNS(left), Prefix::DeviceNS(right)) => {
+            os_str_eq_ignore_ascii_case(left, right)
+        }
+        _ => false,
+    }
+}
+
+#[cfg(windows)]
+fn wsl_unc_components(path: &Path) -> Option<(OsString, Vec<OsString>)> {
     let mut components = path.components();
     let Component::Prefix(prefix) = components.next()? else {
         return None;
@@ -850,11 +894,12 @@ fn wsl_unc_components(path: &Path) -> Option<(String, Vec<std::ffi::OsString>)> 
         Prefix::UNC(server, distro) | Prefix::VerbatimUNC(server, distro) => (server, distro),
         _ => return None,
     };
-    let server = server.to_string_lossy();
-    if !server.eq_ignore_ascii_case("wsl.localhost") && !server.eq_ignore_ascii_case("wsl$") {
+    if !os_str_eq_ignore_ascii_case(server, OsStr::new("wsl.localhost"))
+        && !os_str_eq_ignore_ascii_case(server, OsStr::new("wsl$"))
+    {
         return None;
     }
-    let distro = distro.to_string_lossy().into_owned();
+    let distro = distro.to_os_string();
     let tail = components
         .filter_map(|component| match component {
             Component::Normal(value) => Some(value.to_os_string()),
@@ -862,6 +907,23 @@ fn wsl_unc_components(path: &Path) -> Option<(String, Vec<std::ffi::OsString>)> 
         })
         .collect();
     Some((distro, tail))
+}
+
+#[cfg(windows)]
+fn os_str_eq_ignore_ascii_case(left: &OsStr, right: &OsStr) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+
+    fn fold_ascii(unit: u16) -> u16 {
+        if (u16::from(b'A')..=u16::from(b'Z')).contains(&unit) {
+            unit + u16::from(b'a' - b'A')
+        } else {
+            unit
+        }
+    }
+
+    left.encode_wide()
+        .map(fold_ascii)
+        .eq(right.encode_wide().map(fold_ascii))
 }
 
 fn path_kind(file_type: FileType) -> PathKind {
@@ -876,7 +938,7 @@ fn path_kind(file_type: FileType) -> PathKind {
     }
 }
 
-fn modified_time_millis(metadata: &Metadata, path: &Path) -> Result<f64, FsError> {
+pub(crate) fn modified_time_millis(metadata: &Metadata, path: &Path) -> Result<f64, FsError> {
     let modified = metadata.modified().map_err(|source| FsError::Io {
         operation: FsOperation::Stat,
         path: path.to_path_buf(),
@@ -969,6 +1031,8 @@ fn compare_digit_runs(left: &str, right: &str) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use super::os_str_eq_ignore_ascii_case;
     use super::{RegisteredRoot, ScopeId, absolute_link_target_inside_root, relative_to};
     use cap_std::{ambient_authority, fs::Dir};
     #[cfg(windows)]
@@ -1009,5 +1073,20 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_path_comparison_does_not_conflate_invalid_wtf16() {
+        use std::ffi::OsString;
+        use std::os::windows::ffi::OsStringExt;
+
+        let left = OsString::from_wide(&[0xd800]);
+        let right = OsString::from_wide(&[0xd801]);
+        assert!(!os_str_eq_ignore_ascii_case(&left, &right));
+        assert!(os_str_eq_ignore_ascii_case(
+            std::ffi::OsStr::new("Repo"),
+            std::ffi::OsStr::new("repo")
+        ));
     }
 }

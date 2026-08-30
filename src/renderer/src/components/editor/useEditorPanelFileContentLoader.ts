@@ -4,6 +4,7 @@ import { getConnectionIdForFile, isWorktreeConnectionResolved } from '@/lib/conn
 import { useAppStore } from '@/store'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { getRuntimeFileReadScope, readRuntimeFileContent } from '@/runtime/runtime-file-client'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import { settingsForRuntimeOwner } from '@/runtime/runtime-rpc-client'
 import { findWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
 import {
@@ -118,7 +119,7 @@ export function useEditorPanelFileContentLoader({
             ? undefined
             : readSettings?.activeRuntimeEnvironmentId?.trim()
           if (isLiveTailLogTab) {
-            await window.api.fs.authorizeExternalPath({ targetPath: filePath })
+            await runtimeDesktopFilesystemClient.authorizeExternalPath(filePath)
             readConnectionId = undefined
           } else {
             const currentState = useAppStore.getState()
@@ -155,7 +156,7 @@ export function useEditorPanelFileContentLoader({
             if (!externalSshOwnerId) {
               // Why: client-local external tabs need their main-process path grant
               // refreshed because that authorization is only held in memory.
-              await window.api.fs.authorizeExternalPath({ targetPath: filePath })
+              await runtimeDesktopFilesystemClient.authorizeExternalPath(filePath)
               // Why: that grant covers the client path, so this read must stay off the
               // worktree's SSH host.
               readConnectionId = undefined

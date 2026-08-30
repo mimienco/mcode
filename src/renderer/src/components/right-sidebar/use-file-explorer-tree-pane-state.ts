@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { useWorkspaceFileBrowserActionPredicate } from '@/lib/file-preview'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
@@ -240,7 +241,8 @@ export function useFileExplorerTreePaneState({
     toggleDir: hasNameFilter ? handleToggleNameFilterDir : toggleDir,
     loadDir,
     statPath,
-    authorizeExternalPath: window.api.fs.authorizeExternalPath,
+    authorizeExternalPath: ({ targetPath }) =>
+      runtimeDesktopFilesystemClient.authorizeExternalPath(targetPath),
     markPathAsDirectory,
     setSelectedPath: setSingleSelectedPath,
     scrollRef

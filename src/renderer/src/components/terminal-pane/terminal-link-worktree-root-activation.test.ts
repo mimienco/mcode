@@ -78,7 +78,7 @@ describe('handleOscLink', () => {
 
   it('keeps shift+cmd/ctrl-click external open for a known worktree root', async () => {
     setPlatform('Macintosh')
-    statMock.mockResolvedValueOnce({ isDirectory: true })
+    statMock.mockResolvedValueOnce({ size: 0, isDirectory: true, mtime: 0 })
     storeState.worktreesByRepo = {
       repo: [{ id: 'wt-2', path: '/tmp/other-worktree' }]
     }

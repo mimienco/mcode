@@ -2,6 +2,7 @@ import type { ArtifactWriteRequest } from '../../../../../shared/artifacts'
 import { ARTIFACT_CLI_MAX_RPC_BYTES } from '../../../../../shared/artifacts'
 import { getRuntimePathBasename } from '../../../../../shared/cross-platform-path'
 import { ArtifactPublishPreparationError } from '@/components/artifacts/artifact-publish-flow'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 
 export type ShareableBrowserArtifactFile = {
   fileName: string
@@ -44,14 +45,15 @@ export async function readBrowserHtmlArtifactRequest(url: string): Promise<Artif
     throw new ArtifactPublishPreparationError('unsupported')
   }
   try {
-    const stat = await window.api.fs.stat({ filePath: file.filePath })
+    await runtimeDesktopFilesystemClient.authorizeExternalPath(file.filePath)
+    const stat = await runtimeDesktopFilesystemClient.stat({ filePath: file.filePath })
     if (stat.isDirectory) {
       throw new ArtifactPublishPreparationError('unsupported')
     }
     if (stat.size > ARTIFACT_CLI_MAX_RPC_BYTES) {
       throw new ArtifactPublishPreparationError('too-large')
     }
-    const result = await window.api.fs.readFile({ filePath: file.filePath })
+    const result = await runtimeDesktopFilesystemClient.readFile({ filePath: file.filePath })
     if (result.isBinary) {
       throw new ArtifactPublishPreparationError('binary')
     }

@@ -4,6 +4,7 @@ import type { AppState } from '@/store/types'
 import { detectLanguage } from '@/lib/language-detect'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { translate } from '@/i18n/i18n'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { canOpenAiVaultSessionLogInMCode } from './ai-vault-session-path-actions'
@@ -88,7 +89,7 @@ export async function openAiVaultSessionLogInMCode(session: AiVaultLogSession): 
     try {
       // The exact scanned path is the authorization oracle; the user click is the
       // trust gesture. Reuses MCode's existing external R/W open grant.
-      await window.api.fs.authorizeExternalPath({ targetPath: filePath })
+      await runtimeDesktopFilesystemClient.authorizeExternalPath(filePath)
     } catch {
       toast.error(
         translate(

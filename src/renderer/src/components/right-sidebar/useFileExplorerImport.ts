@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { runtimeDesktopFileDropClient } from '@/desktop/runtime-desktop-file-drop-client'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { importExternalPathsToRuntime } from '@/runtime/runtime-file-client'
 import { translate } from '@/i18n/i18n'
@@ -20,7 +21,7 @@ type UseFileExplorerImportParams = {
  * runs the import pipeline: copy into worktree, refresh, reveal.
  *
  * Why this is a separate hook: the actual filesystem paths from native OS
- * drops are only available through the preload-relayed IPC event, not the
+ * drops are only available through the desktop file-drop adapter, not the
  * React drop handler. The drop handler manages visual state; this hook
  * manages the import action.
  */
@@ -47,7 +48,7 @@ export function useFileExplorerImport({
   operationOwnerRef.current = operationOwner
 
   useEffect(() => {
-    return window.api.ui.onFileDrop((data) => {
+    return runtimeDesktopFileDropClient.onFileDrop((data) => {
       if (data.target !== 'file-explorer') {
         return
       }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react'
+import { runtimeDesktopFileDropClient } from '@/desktop/runtime-desktop-file-drop-client'
 import { NATIVE_FILE_DROP_TARGET } from '../../../../shared/native-file-drop'
 
 export function useNativeChatFileAttachmentActions(
@@ -6,7 +7,7 @@ export function useNativeChatFileAttachmentActions(
 ): { pickAttachment: () => void } {
   useEffect(
     () =>
-      window.api.ui.onFileDrop((payload) => {
+      runtimeDesktopFileDropClient.onFileDrop((payload) => {
         if (payload.target === NATIVE_FILE_DROP_TARGET.composer) {
           attachExternalPaths(payload.paths)
         }

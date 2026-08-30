@@ -17,6 +17,8 @@ type PreviewResult = {
   mimeType?: string
 }
 
+const authorizeExternalPath = vi.fn()
+
 function deferred<T>(): {
   promise: Promise<T>
   reject: (error: unknown) => void
@@ -37,7 +39,7 @@ function binaryPreview(content = 'AA=='): PreviewResult {
 
 function setReadFile(readFile: ReturnType<typeof vi.fn>): void {
   globalThis.window.api = {
-    fs: { readFile }
+    fs: { authorizeExternalPath, readFile }
   } as unknown as Window['api']
 }
 
@@ -61,6 +63,7 @@ function HookProbe({
 
 beforeEach(() => {
   resetLocalImageSrcStateForTests()
+  authorizeExternalPath.mockReset()
   vi.spyOn(URL, 'createObjectURL').mockReset()
   vi.spyOn(URL, 'revokeObjectURL').mockReset()
 })
@@ -105,6 +108,9 @@ describe('loadLocalImageSrc', () => {
 
     // Why: the authorize-then-read chain defers readFile by a microtask.
     await vi.waitFor(() => expect(readFile).toHaveBeenCalledTimes(1))
+    expect(authorizeExternalPath).toHaveBeenCalledExactlyOnceWith({
+      targetPath: '/repo/docs/diagram.png'
+    })
     read.resolve(binaryPreview())
 
     await expect(Promise.all([first, second])).resolves.toEqual([
@@ -239,6 +245,7 @@ describe('loadLocalImageSrc', () => {
     ).resolves.toBeNull()
 
     expect(readFile).not.toHaveBeenCalled()
+    expect(authorizeExternalPath).not.toHaveBeenCalled()
   })
 
   it('does not update mounted hook state after unmount', async () => {

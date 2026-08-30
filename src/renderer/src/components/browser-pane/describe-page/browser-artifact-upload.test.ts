@@ -10,10 +10,11 @@ import {
 
 const stat = vi.fn()
 const readFile = vi.fn()
+const authorizeExternalPath = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
-  window.api = { fs: { stat, readFile } } as never
+  window.api = { fs: { stat, readFile, authorizeExternalPath } } as never
   stat.mockResolvedValue({ size: 20, isDirectory: false, mtime: 1 })
   readFile.mockResolvedValue({ content: '<h1>Mock</h1>', isBinary: false })
 })
@@ -45,6 +46,7 @@ describe('browser artifact upload', () => {
     })
     expect(stat).toHaveBeenCalledWith({ filePath: '/tmp/report.html' })
     expect(readFile).toHaveBeenCalledWith({ filePath: '/tmp/report.html' })
+    expect(authorizeExternalPath).toHaveBeenCalledWith({ targetPath: '/tmp/report.html' })
   })
 
   it('rejects oversized and unreadable files before upload', async () => {

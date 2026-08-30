@@ -10,6 +10,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_shutdown_commands;
 mod desktop_window;
+mod external_path_grants;
 mod filesystem_commands;
 mod updater_commands;
 mod windows_tray;
@@ -33,7 +34,8 @@ use desktop_window::{
     window_set_minimize_to_tray_on_close,
 };
 use filesystem_commands::{
-    NativeFilesystemState, fs_path_exists, fs_read_dir, fs_read_file, fs_stat, fs_write_file_atomic,
+    NativeFilesystemState, fs_authorize_external_path, fs_path_exists, fs_read_dir, fs_read_file,
+    fs_revoke_external_path, fs_stat, fs_write_file_atomic,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -265,14 +267,18 @@ fn build_main_window(
     }
 
     let install_tray = smoke_mode.is_none() || smoke_mode == Some(SmokeTestMode::Windowing);
-    if install_tray {
-        let page_load_window_state = native_window_state.clone();
-        builder = builder.on_page_load(move |window, payload| {
-            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+    let page_load_window_state = native_window_state.clone();
+    let page_load_filesystem_state = app.state::<NativeFilesystemState>().inner().clone();
+    builder = builder.on_page_load(move |window, payload| match payload.event() {
+        tauri::webview::PageLoadEvent::Started => {
+            page_load_filesystem_state.revoke_window_grants(window.label());
+        }
+        tauri::webview::PageLoadEvent::Finished => {
+            if install_tray {
                 install_windows_tray(window.app_handle(), &page_load_window_state);
             }
-        });
-    }
+        }
+    });
 
     #[cfg(debug_assertions)]
     if let Some(data_directory) = std::env::var_os("MCODE_TAURI_WEBVIEW_DATA_DIR") {
@@ -280,6 +286,21 @@ fn build_main_window(
     }
 
     let window = builder.build()?;
+    let destroyed_window_label = window.label().to_owned();
+    let destroyed_filesystem_state = window
+        .app_handle()
+        .state::<NativeFilesystemState>()
+        .inner()
+        .clone();
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+            destroyed_filesystem_state.stage_external_paths(&destroyed_window_label, paths);
+        }
+        tauri::WindowEvent::Destroyed => {
+            destroyed_filesystem_state.revoke_window_grants(&destroyed_window_label);
+        }
+        _ => {}
+    });
     if install_tray {
         install_windows_tray(window.app_handle(), &native_window_state);
     }
@@ -474,6 +495,8 @@ pub fn run() {
             fs_write_file_atomic,
             fs_stat,
             fs_path_exists,
+            fs_authorize_external_path,
+            fs_revoke_external_path,
             update_get_status,
             update_check,
             update_download,

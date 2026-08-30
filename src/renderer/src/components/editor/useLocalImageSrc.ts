@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { resolveImageAbsolutePath } from './markdown-preview-links'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 import { readRuntimeFilePreview } from '@/runtime/runtime-file-client'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 
 // Why: the renderer is served from http://localhost in dev mode, so file://
 // URLs in <img> tags are blocked by cross-origin restrictions. Loading images
@@ -291,8 +292,12 @@ export function loadLocalImageAbsolutePath(
   // Why: preview targets (paste temp files, user-referenced paths like Downloads)
   // live outside workspace roots; the authorize IPC exists for exactly this
   // user-initiated read, and the renderer could invoke it directly regardless.
+  const ownsLocalPath =
+    !connectionId &&
+    !runtimeContext?.connectionId &&
+    !runtimeContext?.settings?.activeRuntimeEnvironmentId?.trim()
   const loadPromise = Promise.resolve(
-    window.api.fs.authorizeExternalPath?.({ targetPath: absolutePath })
+    ownsLocalPath ? runtimeDesktopFilesystemClient.authorizeExternalPath(absolutePath) : undefined
   )
     .catch(() => undefined)
     .then(() => readImagePreview(absolutePath, connectionId, runtimeContext))
@@ -347,6 +352,9 @@ function readImagePreview(
 ) {
   try {
     if (!runtimeContext) {
+      if (!connectionId) {
+        return runtimeDesktopFilesystemClient.readFile({ filePath: absolutePath })
+      }
       return window.api.fs.readFile({
         filePath: absolutePath,
         connectionId: connectionId ?? undefined

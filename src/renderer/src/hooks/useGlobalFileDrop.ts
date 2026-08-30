@@ -3,6 +3,8 @@ import { toast } from 'sonner'
 import { detectLanguage } from '@/lib/language-detect'
 import { isPathInsideWorktree, toWorktreeRelativePath } from '@/lib/terminal-links'
 import { useAppStore } from '@/store'
+import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
+import { runtimeDesktopFileDropClient } from '@/desktop/runtime-desktop-file-drop-client'
 import { getConnectionId } from '@/lib/connection-context'
 import { joinPath } from '@/lib/path'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
@@ -57,7 +59,7 @@ export function getEditorFileDropOperationContext(
 
 export function useGlobalFileDrop(): void {
   useEffect(() => {
-    return window.api.ui.onFileDrop((data) => {
+    return runtimeDesktopFileDropClient.onFileDrop((data) => {
       if (data.target === 'rejected') {
         showNativeFileDropRejection(data)
         return
@@ -162,7 +164,7 @@ export function useGlobalFileDrop(): void {
             const isRemoteRuntimePath = isRemoteRuntimeFileOperation(fileContext, filePath)
             // Why: remote paths don't need local auth — the relay/runtime is the security boundary.
             if (!connectionId && !isRemoteRuntimePath) {
-              await window.api.fs.authorizeExternalPath({ targetPath: filePath })
+              await runtimeDesktopFilesystemClient.authorizeExternalPath(filePath)
             }
             const stat = await statRuntimePath(fileContext, filePath)
             if (stat.isDirectory) {
@@ -177,7 +179,7 @@ export function useGlobalFileDrop(): void {
               }
             }
 
-            // Why: the preload bridge already proved this OS drop landed on the
+            // Why: the desktop drop adapter already proved this OS drop landed on the
             // tab-strip editor target. Keeping the editor-open path centralized
             // here avoids the regression where CLI drops were all coerced into
             // editor tabs once the renderer lost the original drop surface.
