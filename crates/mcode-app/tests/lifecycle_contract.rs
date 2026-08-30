@@ -244,3 +244,78 @@ fn shutdown_request_fixture_matches_the_rust_contract() {
     assert_eq!(request.request_id, "42");
     assert_eq!(request.intent, ShutdownIntent::Restart);
 }
+
+#[test]
+fn failed_update_install_execution_can_return_to_idle_without_weakening_other_requests() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Production);
+    let request = service
+        .request_shutdown(ShutdownIntent::UpdateInstall)
+        .unwrap();
+    service.acknowledge_shutdown(&request.request_id).unwrap();
+    service.confirm_shutdown(&request.request_id).unwrap();
+    service
+        .claim_shutdown_execution(&request.request_id)
+        .unwrap();
+
+    service
+        .abort_update_install_execution(&request.request_id)
+        .unwrap();
+
+    assert!(service.pending_shutdown().unwrap().is_none());
+    assert!(
+        !service
+            .is_shutdown_executing(ShutdownIntent::UpdateInstall)
+            .unwrap()
+    );
+    assert!(service.request_shutdown(ShutdownIntent::Quit).is_ok());
+}
+
+#[test]
+fn executing_quit_or_restart_cannot_use_update_install_recovery() {
+    for intent in [ShutdownIntent::Quit, ShutdownIntent::Restart] {
+        let service = LifecycleService::new("1.4.178", BuildLane::Production);
+        let request = service.request_shutdown(intent).unwrap();
+        service.confirm_shutdown(&request.request_id).unwrap();
+        service
+            .claim_shutdown_execution(&request.request_id)
+            .unwrap();
+
+        assert!(
+            service
+                .abort_update_install_execution(&request.request_id)
+                .is_err()
+        );
+        assert!(service.is_shutdown_executing(intent).unwrap());
+    }
+}
+
+#[test]
+fn only_an_unacknowledged_update_install_can_be_aborted_by_its_timeout() {
+    let pending_service = LifecycleService::new("1.4.178", BuildLane::Production);
+    let pending = pending_service
+        .request_shutdown(ShutdownIntent::UpdateInstall)
+        .unwrap();
+    assert!(
+        pending_service
+            .abort_unacknowledged_update_install(&pending.request_id)
+            .unwrap()
+    );
+    assert!(pending_service.pending_shutdown().unwrap().is_none());
+
+    let acknowledged_service = LifecycleService::new("1.4.178", BuildLane::Production);
+    let acknowledged = acknowledged_service
+        .request_shutdown(ShutdownIntent::UpdateInstall)
+        .unwrap();
+    acknowledged_service
+        .acknowledge_shutdown(&acknowledged.request_id)
+        .unwrap();
+    assert!(
+        !acknowledged_service
+            .abort_unacknowledged_update_install(&acknowledged.request_id)
+            .unwrap()
+    );
+    assert_eq!(
+        acknowledged_service.pending_shutdown().unwrap(),
+        Some(acknowledged)
+    );
+}

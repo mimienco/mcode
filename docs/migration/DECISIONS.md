@@ -50,6 +50,12 @@ Renderer Node/Electron evidence is derived from the verified captured source bac
 
 Every production renderer action that restarts or relaunches the app routes through the runtime desktop lifecycle client. Tauri therefore uses the versioned request/receipt/cancel/atomic-execute protocol, while Electron retains its compatibility implementation behind the same client. Applying a downloaded update remains a distinct updater capability: a plain restart must never masquerade as a successful Tauri update install.
 
+## D-010: The Rust updater owns trust, state, and install authorization
+
+The renderer can call only the narrow `update_get_status`, `update_check`, `update_download`, and `update_install` commands and receive the validated `mcode://updater/status` event; raw `updater:*` plugin permissions are not granted. Rust requires a non-empty Minisign public key and distinct HTTPS endpoints for stable, RC, hourly, daily, and adhoc feeds at compile time. The empty static plugin bootstrap exists only because the plugin requires a configuration object; every real check constructs a runtime updater with the validated key and exactly one selected endpoint, and an unconfigured build returns `updater_not_configured` rather than simulating success.
+
+Downloaded bytes are accepted only after the Tauri updater verifies their signature, then remain backend-owned until install. Update application uses the existing shutdown checkpoint protocol with the distinct `UpdateInstall` intent. An unacknowledged request times out back to the running app and emits an exact abort event that releases renderer restart preparation; a user veto does the same. An acknowledged request may wait for the user's dirty-file/process decision, and only atomic confirmation can execute the installer. A failed install restores the verified bytes for retry, records a structured error, and leaves the app open.
+
 ## Pending decisions
 
 - PTY crate/FFI strategy after behavior and throughput spikes on all platforms.

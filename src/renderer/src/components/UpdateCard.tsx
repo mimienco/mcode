@@ -16,6 +16,7 @@ import {
 import { getReleaseNotesUrlForVersion } from '../../../shared/release-channel'
 import { translate } from '@/i18n/i18n'
 import { desktopAppLifecycleClient } from '@/desktop/runtime-desktop-app-lifecycle-client'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ export function UpdateCard() {
   // Gated on hasStartedDownload so Settings-initiated downloads don't auto-restart (user expects "Restart" there).
   useEffect(() => {
     if (status.state === 'downloaded' && hasStartedDownload.current) {
-      void window.api.updater.quitAndInstall().catch((error) => {
+      void desktopUpdaterClient.quitAndInstall().catch((error) => {
         setInstallError(String((error as Error)?.message ?? error))
       })
     }
@@ -249,7 +250,7 @@ export function UpdateCard() {
     if (!reassuranceSeen) {
       markReassuranceSeen()
     }
-    void window.api.updater.download()
+    void desktopUpdaterClient.download()
   }
 
   // Why: the 'error' variant has no version field, so dismiss needs an explicit version override.
@@ -266,7 +267,7 @@ export function UpdateCard() {
   }
 
   const handleInstallRetry = () => {
-    void window.api.updater.quitAndInstall().catch((error) => {
+    void desktopUpdaterClient.quitAndInstall().catch((error) => {
       setInstallError(String((error as Error)?.message ?? error))
     })
   }
@@ -321,7 +322,7 @@ export function UpdateCard() {
             primaryAction: {
               label: translate('auto.components.UpdateCard.37d45c9ec1', 'Choose Another Build'),
               onClick: () => {
-                void window.api.updater.check({ localBuild: true })
+                void desktopUpdaterClient.check({ localBuild: true })
               }
             }
           }
@@ -397,7 +398,7 @@ export function UpdateCard() {
                     : {
                         label: translate('auto.components.UpdateCard.6b0085010d', 'Re-check'),
                         onClick: () => {
-                          void window.api.updater.check({ includePrerelease: false })
+                          void desktopUpdaterClient.check({ includePrerelease: false })
                         }
                       }
                 }
@@ -882,9 +883,13 @@ function DownloadingContent({
       <p className="text-sm text-muted-foreground">
         {release
           ? release.description
-          : translate('auto.components.UpdateCard.93794ea932', 'MCode v{{value0}} is downloading.', {
-              value0: version
-            })}
+          : translate(
+              'auto.components.UpdateCard.93794ea932',
+              'MCode v{{value0}} is downloading.',
+              {
+                value0: version
+              }
+            )}
       </p>
 
       {showReleaseNotes && (

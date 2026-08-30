@@ -71,7 +71,10 @@ export async function cancelPendingWindowClose(
 ): Promise<void> {
   try {
     const request = await desktopWindow.cancelClose()
-    if (request?.intent === 'restart' && typeof window.dispatchEvent === 'function') {
+    if (
+      (request?.intent === 'restart' || request?.intent === 'update_install') &&
+      typeof window.dispatchEvent === 'function'
+    ) {
       window.dispatchEvent(new Event(MCODE_APP_RESTART_ABORTED_EVENT))
     }
   } catch (error) {

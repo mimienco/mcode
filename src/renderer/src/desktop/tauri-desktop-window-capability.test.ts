@@ -1,9 +1,10 @@
 import { expect, it, vi } from 'vitest'
+import type { ShutdownIntent } from './desktop-client'
 import { createTauriDesktopWindowCapability } from './tauri-desktop-window-capability'
 
 function createLifecycleCapability() {
   return {
-    requestShutdown: (intent: 'quit' | 'restart') =>
+    requestShutdown: (intent: ShutdownIntent) =>
       Promise.resolve({ version: 1 as const, requestId: '1', intent }),
     onShutdownRequested: () => Promise.resolve(() => undefined),
     cancelShutdown: () => Promise.resolve(),

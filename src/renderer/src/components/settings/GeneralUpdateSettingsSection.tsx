@@ -11,6 +11,7 @@ import { getUpdateCheckClickOptions, getUpdateCheckHint } from '@/lib/update-che
 import { GeneralRemoteServerUpdates } from './GeneralRemoteServerUpdates'
 import { ReleaseChannelSection } from './ReleaseChannelSection'
 import { getReleaseNotesUrlForVersion } from '../../../../shared/release-channel'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 
 export function GeneralUpdateSettingsSection(): React.JSX.Element {
   const updateStatus = useAppStore((s) => s.updateStatus)
@@ -48,7 +49,7 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-    void window.api.updater.getVersion().then((version) => {
+    void desktopUpdaterClient.getVersion().then((version) => {
       if (!cancelled) {
         setAppVersion(version)
       }
@@ -63,7 +64,19 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
     // deferred timer in the main process), so rejection here is only possible
     // if the IPC channel itself breaks. Log defensively; the user will notice
     // the app didn't restart and can retry.
-    void window.api.updater.quitAndInstall().catch(console.error)
+    void desktopUpdaterClient.quitAndInstall().catch(console.error)
+  }
+
+  const handleCheckForUpdates = (event: React.MouseEvent): void => {
+    void desktopUpdaterClient.check(getUpdateCheckClickOptions(event)).catch((error) => {
+      toast.error(
+        translate(
+          'auto.components.settings.GeneralUpdateSettingsSection.updateCheckFailed',
+          'Could not check for updates.'
+        ),
+        { description: error instanceof Error ? error.message : undefined }
+      )
+    })
   }
 
   return (
@@ -106,7 +119,7 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
             size="sm"
             // Why: modifier-click channels are power-user update affordances, not
             // persistent settings toggles.
-            onClick={(event) => window.api.updater.check(getUpdateCheckClickOptions(event))}
+            onClick={handleCheckForUpdates}
             title={updateCheckHint}
             disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'}
             className="gap-2"
@@ -127,7 +140,7 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
               variant="default"
               size="sm"
               onClick={() => {
-                void window.api.updater.download().catch((error) => {
+                void desktopUpdaterClient.download().catch((error) => {
                   toast.error(
                     translate(
                       'auto.components.settings.GeneralUpdateSettingsSection.02dc082e70',

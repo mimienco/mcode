@@ -1,12 +1,12 @@
 import { expect, it, vi } from 'vitest'
-import type { DesktopAppLifecycleCapability } from './desktop-client'
+import type { DesktopAppLifecycleCapability, ShutdownIntent } from './desktop-client'
 import { runLifecycleSmoke } from './lifecycle-smoke-client'
 
 function createLifecycle() {
   let listener: Parameters<DesktopAppLifecycleCapability['onShutdownRequested']>[0] | undefined
   const calls: string[] = []
   const lifecycle = {
-    requestShutdown: vi.fn(async (intent: 'quit' | 'restart') => ({
+    requestShutdown: vi.fn(async (intent: ShutdownIntent) => ({
       version: 1 as const,
       requestId: '21',
       intent

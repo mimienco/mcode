@@ -161,6 +161,18 @@ describe('window-close-request-coordinator', () => {
     )
   })
 
+  it('releases renderer restart preparation when an update install is canceled', async () => {
+    const cancelClose = vi.fn(() =>
+      Promise.resolve({ version: 1 as const, requestId: '17', intent: 'update_install' as const })
+    )
+
+    await cancelPendingWindowClose({ cancelClose })
+
+    expect(dispatchEvent.mock.calls.map(([event]) => event.type)).toContain(
+      MCODE_APP_RESTART_ABORTED_EVENT
+    )
+  })
+
   it('cancels the exact native request when a deferred dirty-file decision is vetoed', async () => {
     const cancelClose = vi.fn(() =>
       Promise.resolve({ version: 1 as const, requestId: '16', intent: 'quit' as const })

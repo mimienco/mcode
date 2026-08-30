@@ -9,6 +9,7 @@ pub const SHUTDOWN_REQUEST_VERSION: u8 = 1;
 pub enum ShutdownIntent {
     Quit,
     Restart,
+    UpdateInstall,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -27,6 +28,7 @@ pub enum LifecycleServiceError {
     ShutdownNotConfirmed,
     ShutdownAlreadyConfirmed,
     ShutdownAlreadyExecuting,
+    ShutdownExecutionCannotBeAborted,
     StaleShutdownRequest,
 }
 
@@ -39,6 +41,7 @@ impl LifecycleServiceError {
             Self::ShutdownNotConfirmed => "shutdown_not_confirmed",
             Self::ShutdownAlreadyConfirmed => "shutdown_already_confirmed",
             Self::ShutdownAlreadyExecuting => "shutdown_already_executing",
+            Self::ShutdownExecutionCannotBeAborted => "shutdown_execution_cannot_be_aborted",
             Self::StaleShutdownRequest => "stale_shutdown_request",
         }
     }
@@ -53,6 +56,9 @@ impl fmt::Display for LifecycleServiceError {
             Self::ShutdownNotConfirmed => "shutdown request has not been confirmed",
             Self::ShutdownAlreadyConfirmed => "a shutdown request is already confirmed",
             Self::ShutdownAlreadyExecuting => "a shutdown request is already executing",
+            Self::ShutdownExecutionCannotBeAborted => {
+                "only an executing update installation can be aborted"
+            }
             Self::StaleShutdownRequest => "shutdown request does not match the pending request",
         })
     }
@@ -258,6 +264,71 @@ impl ShutdownCoordinator {
         };
         state.phase = ShutdownPhase::Executing(request.clone());
         Ok(Some(request))
+    }
+
+    pub(crate) fn abort_update_install_execution(
+        &self,
+        request_id: &str,
+    ) -> Result<(), LifecycleServiceError> {
+        let mut state = self.lock()?;
+        match &state.phase {
+            ShutdownPhase::Executing(request)
+                if request.request_id == request_id
+                    && request.intent == ShutdownIntent::UpdateInstall =>
+            {
+                state.phase = ShutdownPhase::Idle;
+                Ok(())
+            }
+            ShutdownPhase::Executing(request) if request.request_id != request_id => {
+                Err(LifecycleServiceError::StaleShutdownRequest)
+            }
+            ShutdownPhase::Executing(_) => {
+                Err(LifecycleServiceError::ShutdownExecutionCannotBeAborted)
+            }
+            ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
+            | ShutdownPhase::Confirmed(_) => Err(LifecycleServiceError::ShutdownNotConfirmed),
+            ShutdownPhase::Idle => Err(LifecycleServiceError::NoPendingShutdown),
+        }
+    }
+
+    pub(crate) fn abort_unacknowledged_update_install(
+        &self,
+        request_id: &str,
+    ) -> Result<bool, LifecycleServiceError> {
+        let mut state = self.lock()?;
+        match &state.phase {
+            ShutdownPhase::Pending(request)
+                if request.request_id == request_id
+                    && request.intent == ShutdownIntent::UpdateInstall =>
+            {
+                state.phase = ShutdownPhase::Idle;
+                Ok(true)
+            }
+            ShutdownPhase::Acknowledged(request)
+            | ShutdownPhase::Confirmed(request)
+            | ShutdownPhase::Executing(request)
+                if request.request_id == request_id
+                    && request.intent == ShutdownIntent::UpdateInstall =>
+            {
+                Ok(false)
+            }
+            ShutdownPhase::Pending(request)
+            | ShutdownPhase::Acknowledged(request)
+            | ShutdownPhase::Confirmed(request)
+            | ShutdownPhase::Executing(request)
+                if request.request_id != request_id =>
+            {
+                Err(LifecycleServiceError::StaleShutdownRequest)
+            }
+            ShutdownPhase::Pending(_)
+            | ShutdownPhase::Acknowledged(_)
+            | ShutdownPhase::Confirmed(_)
+            | ShutdownPhase::Executing(_) => {
+                Err(LifecycleServiceError::ShutdownExecutionCannotBeAborted)
+            }
+            ShutdownPhase::Idle => Err(LifecycleServiceError::NoPendingShutdown),
+        }
     }
 
     pub(crate) fn is_executing(

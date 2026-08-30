@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/mcode-app", "crates/mcode-settings", "src-tauri"]
+members = [
+  "crates/mcode-app",
+  "crates/mcode-settings",
+  "crates/mcode-updater",
+  "src-tauri",
+]
 resolver = "2"
 
 [workspace.package]
@@ -15,3 +20,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tauri = { version = "2.11.5" }
 tauri-build = { version = "2.6.3" }
+url = "2.5.8"

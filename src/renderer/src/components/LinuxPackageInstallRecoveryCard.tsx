@@ -5,6 +5,7 @@ import type {
 } from '../../../shared/update-status-types'
 import { UpdateErrorCardContent } from './UpdateErrorCardContent'
 import { translate } from '@/i18n/i18n'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 
 const COPY_CONFIRMATION_MS = 4_000
 
@@ -167,7 +168,7 @@ export function LinuxPackageInstallRecoveryCard({
     setCopiedFileName(null)
     // Why: a fresh install attempt re-evaluates the machine, so an earlier "no command" verdict must not stick.
     setCommandUnavailable(false)
-    void window.api.updater.quitAndInstall().catch((error: unknown) => {
+    void desktopUpdaterClient.quitAndInstall().catch((error: unknown) => {
       if (mountedRef.current) {
         setActionError(toMessage(error))
         setPendingAction(null)

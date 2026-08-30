@@ -1,0 +1,15 @@
+[package]
+name = "mcode-updater"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+minisign-verify = "0.2.5"
+serde_json.workspace = true

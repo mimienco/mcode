@@ -7,6 +7,19 @@ use crate::DesktopCommandError;
 pub const APP_SHUTDOWN_REQUESTED_EVENT: &str = "mcode://app/shutdown-requested";
 pub const SHUTDOWN_RENDERER_ACK_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShutdownTimeoutAction {
+    Force,
+    Abort,
+}
+
+pub fn shutdown_timeout_action_for(intent: ShutdownIntent) -> ShutdownTimeoutAction {
+    match intent {
+        ShutdownIntent::Quit | ShutdownIntent::Restart => ShutdownTimeoutAction::Force,
+        ShutdownIntent::UpdateInstall => ShutdownTimeoutAction::Abort,
+    }
+}
+
 pub fn app_request_shutdown_for(
     service: &LifecycleService,
     intent: ShutdownIntent,
@@ -58,6 +71,13 @@ pub fn app_force_shutdown_after_delivery_failure_for(
         .ok_or(LifecycleServiceError::ShutdownAlreadyExecuting)
 }
 
+pub fn app_abort_unacknowledged_update_install_for(
+    service: &LifecycleService,
+    request_id: &str,
+) -> Result<bool, LifecycleServiceError> {
+    service.abort_unacknowledged_update_install(request_id)
+}
+
 pub fn app_confirm_and_claim_shutdown_execution_for(
     service: &LifecycleService,
     request_id: &str,
@@ -70,15 +90,17 @@ pub fn app_should_allow_exit_for(
     service: &LifecycleService,
     exit_code: Option<i32>,
 ) -> Result<bool, LifecycleServiceError> {
-    let intent = match exit_code {
-        Some(tauri::RESTART_EXIT_CODE) => ShutdownIntent::Restart,
-        Some(_) => ShutdownIntent::Quit,
-        None => return Ok(false),
-    };
-    service.is_shutdown_executing(intent)
+    match exit_code {
+        Some(tauri::RESTART_EXIT_CODE) => Ok(service
+            .is_shutdown_executing(ShutdownIntent::Restart)?
+            || service.is_shutdown_executing(ShutdownIntent::UpdateInstall)?),
+        Some(_) => Ok(service.is_shutdown_executing(ShutdownIntent::Quit)?
+            || service.is_shutdown_executing(ShutdownIntent::UpdateInstall)?),
+        None => Ok(false),
+    }
 }
 
-fn emit_shutdown_request(
+pub(crate) fn emit_shutdown_request(
     app: &AppHandle,
     service: &LifecycleService,
     intent: ShutdownIntent,
@@ -112,24 +134,69 @@ fn emit_shutdown_request(
     Ok(request)
 }
 
-fn execute_shutdown_request(app: &AppHandle, request: &ShutdownRequest) {
+fn execute_shutdown_request(
+    app: &AppHandle,
+    request: &ShutdownRequest,
+) -> Result<(), DesktopCommandError> {
     match request.intent {
         ShutdownIntent::Quit => app.exit(0),
         ShutdownIntent::Restart => app.request_restart(),
+        ShutdownIntent::UpdateInstall => {
+            let result = crate::updater_commands::execute_downloaded_update(app);
+            if result.is_err() {
+                let lifecycle = app.state::<LifecycleService>();
+                if let Err(error) = lifecycle.abort_update_install_execution(&request.request_id) {
+                    eprintln!(
+                        "[updater] failed to recover lifecycle after update install failure: {error}"
+                    );
+                }
+            }
+            return result;
+        }
     }
+    Ok(())
 }
 
 fn arm_shutdown_timeout(app: AppHandle, request: ShutdownRequest) {
     std::thread::spawn(move || {
         std::thread::sleep(SHUTDOWN_RENDERER_ACK_TIMEOUT);
         let service = app.state::<LifecycleService>();
+        if shutdown_timeout_action_for(request.intent) == ShutdownTimeoutAction::Abort {
+            match app_abort_unacknowledged_update_install_for(&service, &request.request_id) {
+                Ok(true) => {
+                    eprintln!(
+                        "[updater] renderer did not acknowledge update install {}; installation aborted",
+                        request.request_id
+                    );
+                    if let Err(error) = app.emit(
+                        crate::updater_commands::UPDATE_INSTALL_ABORTED_EVENT,
+                        &request,
+                    ) {
+                        eprintln!(
+                            "[updater] failed to notify renderer about aborted install {}: {error}",
+                            request.request_id
+                        );
+                    }
+                }
+                Ok(false)
+                | Err(LifecycleServiceError::NoPendingShutdown)
+                | Err(LifecycleServiceError::StaleShutdownRequest) => {}
+                Err(error) => eprintln!(
+                    "[updater] failed to abort unacknowledged update install {}: {error}",
+                    request.request_id
+                ),
+            }
+            return;
+        }
         match app_force_claim_shutdown_execution_for(&service, &request.request_id) {
             Ok(Some(claimed)) => {
                 eprintln!(
                     "[lifecycle] renderer did not acknowledge shutdown request {}; forcing {:?}",
                     claimed.request_id, claimed.intent
                 );
-                execute_shutdown_request(&app, &claimed);
+                if let Err(error) = execute_shutdown_request(&app, &claimed) {
+                    eprintln!("[lifecycle] forced shutdown execution failed: {error:?}");
+                }
             }
             Ok(None)
             | Err(LifecycleServiceError::NoPendingShutdown)
@@ -198,7 +265,7 @@ pub(crate) fn app_confirm_and_execute_shutdown(
             "[lifecycle] renderer acknowledged shutdown request {} ({:?})",
             request.request_id, request.intent
         );
-        execute_shutdown_request(&app, &request);
+        execute_shutdown_request(&app, &request)?;
     }
     Ok(())
 }
@@ -227,7 +294,9 @@ pub(crate) fn handle_exit_requested(app: &AppHandle, exit_code: Option<i32>) {
                     "[lifecycle] renderer delivery failed for shutdown request {}; forcing {:?}",
                     request.request_id, request.intent
                 );
-                execute_shutdown_request(app, &request);
+                if let Err(error) = execute_shutdown_request(app, &request) {
+                    eprintln!("[lifecycle] forced delivery-failure shutdown failed: {error:?}");
+                }
             }
             Err(force_error) => {
                 eprintln!(

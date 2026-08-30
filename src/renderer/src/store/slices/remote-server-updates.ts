@@ -14,6 +14,7 @@ import {
   type RemoteServerUpdateTransport
 } from '@/runtime/remote-server-update-coordinator'
 import { runRemoteServerUpdateBatch } from '@/runtime/remote-server-update-batch'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 
 const MAX_CONCURRENT_REMOTE_SERVER_UPDATES = 2
 
@@ -110,7 +111,7 @@ export const createRemoteServerUpdatesSlice: StateCreator<
         })
       )
       set({ remoteServerUpdates: initial })
-      const clientVersion = await window.api.updater.getVersion()
+      const clientVersion = await desktopUpdaterClient.getVersion()
       await Promise.allSettled(
         environments.map(async (environment) => {
           const entry = await inspectRemoteServerUpdate(

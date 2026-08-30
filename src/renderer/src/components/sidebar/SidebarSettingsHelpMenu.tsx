@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { desktopAppLifecycleClient } from '@/desktop/runtime-desktop-app-lifecycle-client'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 import {
   BookOpen,
   CircleHelp,
@@ -160,7 +161,15 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
   const handleCheckForUpdates = (): void => {
     const modifiers = updateCheckModifiersRef.current
     updateCheckModifiersRef.current = NO_UPDATE_CHECK_MODIFIERS
-    void window.api.updater.check(getUpdateCheckClickOptions(modifiers))
+    void desktopUpdaterClient.check(getUpdateCheckClickOptions(modifiers)).catch((error) => {
+      toast.error(
+        translate(
+          'auto.components.sidebar.SidebarSettingsHelpMenu.updateCheckFailed',
+          'Could not check for updates.'
+        ),
+        { description: error instanceof Error ? error.message : undefined }
+      )
+    })
   }
 
   const openMilestones = (): void => {

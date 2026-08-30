@@ -11,7 +11,7 @@ export type LaunchContext = {
 
 export type DesktopInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
 
-export type ShutdownIntent = 'quit' | 'restart'
+export type ShutdownIntent = 'quit' | 'restart' | 'update_install'
 
 export type ShutdownRequest = {
   version: 1
@@ -54,7 +54,10 @@ function isDesktopCommandErrorContext(value: unknown): value is DesktopCommandEr
   return (
     typeof context.operation === 'string' &&
     (context.requestId === undefined || typeof context.requestId === 'string') &&
-    (context.intent === undefined || context.intent === 'quit' || context.intent === 'restart')
+    (context.intent === undefined ||
+      context.intent === 'quit' ||
+      context.intent === 'restart' ||
+      context.intent === 'update_install')
   )
 }
 
@@ -125,7 +128,9 @@ export function isShutdownRequest(value: unknown): value is ShutdownRequest {
     request.version === 1 &&
     typeof request.requestId === 'string' &&
     /^[1-9]\d*$/.test(request.requestId) &&
-    (request.intent === 'quit' || request.intent === 'restart')
+    (request.intent === 'quit' ||
+      request.intent === 'restart' ||
+      request.intent === 'update_install')
   )
 }
 

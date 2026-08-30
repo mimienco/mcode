@@ -1,5 +1,6 @@
 /* oxlint-disable max-lines -- Why: this App-level IPC bridge intentionally keeps the renderer's main-process event contract in one place so shortcut, runtime, updater, and agent-status wiring do not drift across files. */
 import { useEffect } from 'react'
+import { isTauri } from '@tauri-apps/api/core'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
 import { getTabIdsAwaitingHostHydrationRemount } from '@/lib/parked-terminal-host-hydration'
@@ -31,6 +32,7 @@ import type {
   TerminalPaneLayoutNode
 } from '../../../shared/terminal-tab-types'
 import type { UpdateStatus } from '../../../shared/update-status-types'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 import type { RateLimitState } from '../../../shared/rate-limit-types'
 import type { DirectSshAuthority, SshConnectionState } from '../../../shared/ssh-types'
 import {
@@ -2177,23 +2179,42 @@ export function useIpcEvents(): void {
       })
     )
 
-    // Hydrate initial update status then subscribe to changes
-    window.api.updater.getStatus().then((status) => {
-      useAppStore.getState().setUpdateStatus(status as UpdateStatus)
-    })
-
-    unsubs.push(
-      window.api.updater.onStatus((raw) => {
-        const status = raw as UpdateStatus
-        useAppStore.getState().setUpdateStatus(status)
+    // Subscribe before hydration so the native launch check cannot emit a state transition
+    // between the initial read and listener registration.
+    let updaterStatusSubscriptionDisposed = false
+    void desktopUpdaterClient
+      .onStatus((status) => {
+        if (!updaterStatusSubscriptionDisposed) {
+          useAppStore.getState().setUpdateStatus(status)
+        }
       })
-    )
-
-    unsubs.push(
-      window.api.updater.onClearDismissal(() => {
-        useAppStore.getState().clearDismissedUpdateVersion()
+      .then(async (unsubscribe) => {
+        if (updaterStatusSubscriptionDisposed) {
+          unsubscribe()
+          return
+        }
+        unsubs.push(unsubscribe)
+        const status = await desktopUpdaterClient.getStatus()
+        if (updaterStatusSubscriptionDisposed) {
+          return
+        }
+        useAppStore.getState().setUpdateStatus(status as UpdateStatus)
+        if (status.state === 'idle') {
+          await desktopUpdaterClient.checkOnLaunch?.()
+        }
       })
-    )
+      .catch((error) =>
+        console.error('[updater] Failed to initialize updater status and launch check', error)
+      )
+
+    // Clear-dismissal nudges belong to Electron campaigns; native feeds do not emit them.
+    if (!isTauri()) {
+      unsubs.push(
+        window.api.updater.onClearDismissal(() => {
+          useAppStore.getState().clearDismissedUpdateVersion()
+        })
+      )
+    }
 
     unsubs.push(
       window.api.ui.onFullscreenChanged((isFullScreen) => {
@@ -3916,6 +3937,7 @@ export function useIpcEvents(): void {
     }
 
     return () => {
+      updaterStatusSubscriptionDisposed = true
       // Why: React remount can leave an older snapshot promise in flight; it must not write through after the replacement effect processes a clear.
       agentStatusEffectDisposed = true
       snapshotRequestId += 1

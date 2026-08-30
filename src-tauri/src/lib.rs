@@ -7,17 +7,22 @@ use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_shutdown_commands;
+mod updater_commands;
 
 pub use app_shutdown_commands::{
-    SHUTDOWN_RENDERER_ACK_TIMEOUT, app_acknowledge_shutdown_for, app_cancel_shutdown_for,
-    app_claim_shutdown_execution_for, app_confirm_and_claim_shutdown_execution_for,
-    app_confirm_shutdown_for, app_force_claim_shutdown_execution_for,
-    app_force_shutdown_after_delivery_failure_for, app_request_shutdown_for,
-    app_should_allow_exit_for,
+    SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
+    app_abort_unacknowledged_update_install_for, app_acknowledge_shutdown_for,
+    app_cancel_shutdown_for, app_claim_shutdown_execution_for,
+    app_confirm_and_claim_shutdown_execution_for, app_confirm_shutdown_for,
+    app_force_claim_shutdown_execution_for, app_force_shutdown_after_delivery_failure_for,
+    app_request_shutdown_for, app_should_allow_exit_for, shutdown_timeout_action_for,
 };
 use app_shutdown_commands::{
     app_acknowledge_shutdown, app_cancel_shutdown, app_confirm_and_execute_shutdown,
     app_request_shutdown, handle_exit_requested,
+};
+use updater_commands::{
+    NativeUpdaterState, update_check, update_download, update_get_status, update_install,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -130,6 +135,7 @@ enum SmokeTestMode {
     Quit,
     RestartParent,
     RestartChild,
+    Updater,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -143,6 +149,9 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
             } else {
                 SmokeTestMode::RestartParent
             });
+        }
+        if intent.eq_ignore_ascii_case("updater") {
+            return Some(SmokeTestMode::Updater);
         }
         Some(SmokeTestMode::Quit)
     }
@@ -165,6 +174,7 @@ fn build_main_window(app: &tauri::App, smoke_mode: Option<SmokeTestMode>) -> tau
         Some(SmokeTestMode::RestartParent) => "lifecycle-smoke.html?intent=restart",
         Some(SmokeTestMode::Quit) => "lifecycle-smoke.html?intent=quit",
         Some(SmokeTestMode::RestartChild) | None => "index.html",
+        Some(SmokeTestMode::Updater) => "lifecycle-smoke.html?intent=quit&updater=true",
     };
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(entrypoint.into()))
         .title("MCode")
@@ -192,6 +202,8 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .manage(lifecycle)
+        .manage(NativeUpdaterState::from_compile_time())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             app.manage(SettingsService::new(settings_path(app)?));
             let smoke_mode = smoke_test_mode();
@@ -204,7 +216,7 @@ pub fn run() {
                 build_main_window(app, smoke_mode)?;
             }
             match smoke_mode {
-                Some(SmokeTestMode::Quit) => {
+                Some(SmokeTestMode::Quit) | Some(SmokeTestMode::Updater) => {
                     let app_handle = app.handle().clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(Duration::from_secs(3));
@@ -240,7 +252,11 @@ pub fn run() {
             app_request_shutdown,
             app_acknowledge_shutdown,
             app_cancel_shutdown,
-            app_confirm_and_execute_shutdown
+            app_confirm_and_execute_shutdown,
+            update_get_status,
+            update_check,
+            update_download,
+            update_install
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

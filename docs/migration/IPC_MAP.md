@@ -37,6 +37,10 @@ First migrated renderer surface:
 | `window:maximize-changed` | typed client → Tauri resize event plus ordered maximize query                     | subscription/cleanup tests                                                                                     | platform event E2E                                     |
 | `window:request-close`    | typed client → interceptable Tauri core window `close`                            | client/component test, capability contract, and native build                                                   | terminal confirmation, tray, quit/session handshake    |
 | app-wide Quit/Restart     | typed lifecycle client → versioned request/receipt/cancel/atomic-execute commands | Rust contracts, full-renderer routing contract, updater checkpoint contracts, real WebView2 Quit/Restart smoke | Tauri update-apply capability and non-Windows evidence |
+| updater status/check      | runtime updater client → `update_get_status` / `update_check`                     | strict Rust feed configuration, state-machine tests, renderer validation/routing tests, unconfigured-build WebView2 smoke | production feed key/endpoints and real signed feed |
+| updater download/apply    | runtime updater client → `update_download` / `update_install` → `UpdateInstall` lifecycle | native signature verification, progress/state events, lifecycle contracts, install retry/error handling | published signed artifact install, rollback, and non-Windows evidence |
+
+The Tauri updater events are `mcode://updater/status` and the exact-request `mcode://updater/install-aborted` recovery signal. Renderer code has no raw updater-plugin capability; the Rust command boundary owns feed selection, signature trust, downloaded bytes, lifecycle authorization, and native installation.
 
 For every command, the final map will record the old registration and caller, request/response schema, Rust handler, capability, error codes, cancellation behavior, tests, and parity evidence. Generic `invoke(command, unknown)` wrappers are prohibited in product code.
 

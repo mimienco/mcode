@@ -9,6 +9,7 @@ import { SettingsSegmentedControl, SettingsSubsectionHeader } from './SettingsFo
 import { Badge } from '../ui/badge'
 import { translate } from '@/i18n/i18n'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
+import { desktopUpdaterClient } from '@/desktop/runtime-desktop-updater-client'
 import {
   DEV_CHANNEL_PLATFORM_LABEL,
   RELEASE_CHANNELS,
@@ -100,7 +101,7 @@ export function ReleaseChannelSection(): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false
-    void window.api.updater.getVersion().then((version) => {
+    void desktopUpdaterClient.getVersion().then((version) => {
       if (!cancelled) {
         setAppVersion(version)
       }
@@ -163,7 +164,7 @@ export function ReleaseChannelSection(): React.JSX.Element {
   )
 
   const handleSwitchTo = (build: ReleaseBuild): void => {
-    void window.api.updater
+    void desktopUpdaterClient
       .check({ channel: build.channel, targetTag: build.tag })
       .catch((error) => {
         toast.error(

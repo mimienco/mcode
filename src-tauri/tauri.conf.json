@@ -15,8 +15,15 @@
     },
     "windows": []
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": []
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
   }

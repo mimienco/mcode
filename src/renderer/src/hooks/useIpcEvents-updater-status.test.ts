@@ -9,6 +9,7 @@ describe('useIpcEvents updater integration', () => {
 
   it('routes updater status events into store state', async () => {
     const setUpdateStatus = vi.fn()
+    const checkOnLaunch = vi.fn(async () => undefined)
     const removeSshCredentialRequest = vi.fn()
     const updaterStatusListenerRef: { current: ((status: unknown) => void) | null } = {
       current: null
@@ -60,6 +61,17 @@ describe('useIpcEvents updater integration', () => {
           removeSshCredentialRequest,
           settings: { terminalFontSize: 13 }
         })
+      }
+    }))
+
+    vi.doMock('@/desktop/runtime-desktop-updater-client', () => ({
+      desktopUpdaterClient: {
+        getStatus: () => Promise.resolve({ state: 'idle' }),
+        checkOnLaunch,
+        onStatus: (listener: (status: unknown) => void) => {
+          updaterStatusListenerRef.current = listener
+          return Promise.resolve(() => undefined)
+        }
       }
     }))
 
@@ -202,8 +214,10 @@ describe('useIpcEvents updater integration', () => {
 
     useIpcEvents()
     await Promise.resolve()
+    await Promise.resolve()
 
     expect(setUpdateStatus).toHaveBeenCalledWith({ state: 'idle' })
+    expect(checkOnLaunch).toHaveBeenCalledOnce()
 
     const availableStatus = { state: 'available', version: '1.2.3' }
     if (typeof updaterStatusListenerRef.current !== 'function') {

@@ -310,12 +310,32 @@
         ".github/workflows"
       ],
       "currentBehavior": "Stable, RC, hourly, daily, and adhoc discovery/download/apply, signatures, channel changes, rollback, and survival.",
-      "targetRustModule": "crates/mcode-updater/src/service",
-      "targetCommand": ["update_check", "update_download", "update_install", "update_set_channel"],
-      "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
-      "evidence": []
+      "targetRustModule": "crates/mcode-updater/src/service.rs",
+      "targetCommand": ["update_get_status", "update_check", "update_download", "update_install"],
+      "tests": [
+        "crates/mcode-updater/tests/configuration_contract.rs",
+        "crates/mcode-updater/tests/service_contract.rs",
+        "crates/mcode-updater/tests/signature_contract.rs",
+        "src-tauri/tests/updater_capability_contract.rs",
+        "src/renderer/src/desktop/tauri-desktop-updater-capability.test.ts",
+        "src/renderer/src/desktop/runtime-desktop-updater-client.test.ts",
+        "src/renderer/src/desktop/desktop-updater-routing.test.ts",
+        "src/renderer/src/components/window-close-request-coordinator.test.ts",
+        "src/renderer/src/hooks/useIpcEvents-updater-status.test.ts"
+      ],
+      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "status": "in_progress",
+      "evidence": [
+        "strict release configuration requires a public key and unique HTTPS endpoints for stable, RC, hourly, daily, and adhoc",
+        "native updater verifies signed bytes before returning them to backend-owned storage",
+        "real Minisign fixtures accept unchanged bytes and reject modified bytes",
+        "serialized updater state reports check, availability, download progress, downloaded, install, and retryable errors",
+        "update install uses the versioned shutdown checkpoint with the distinct UpdateInstall intent",
+        "native startup subscribes before a non-user-initiated channel check",
+        "timeout, user veto, and install failure release renderer restart preparation",
+        "production renderer updater callers route through the lazy runtime client without raw updater plugin permissions",
+        "isolated Windows WebView2 smoke returns updater_not_configured and exits cleanly without fake success"
+      ]
     },
     {
       "id": "packaging.release",
@@ -327,10 +347,14 @@
       "currentBehavior": "Installers, signing/notarization, manifests, artifact gates, Homebrew, AUR, and release publication.",
       "targetRustModule": "src-tauri/tauri.conf.json",
       "targetCommand": [],
-      "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
-      "evidence": []
+      "tests": ["src-tauri/tests/updater_capability_contract.rs"],
+      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "status": "in_progress",
+      "evidence": [
+        "Tauri bundle configuration enables updater artifacts",
+        "compile-time release configuration inputs are tracked by the native build",
+        "production publishing, signing, manifests, crossgrade, rollback, Homebrew, and AUR remain open"
+      ]
     },
     {
       "id": "telemetry.diagnostics",

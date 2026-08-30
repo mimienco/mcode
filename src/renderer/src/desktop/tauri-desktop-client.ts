@@ -4,6 +4,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { createDesktopClient, createDesktopInvoke } from './desktop-client'
 import { createTauriDesktopAppLifecycleCapability } from './tauri-desktop-app-lifecycle-capability'
 import { createTauriDesktopWindowCapability } from './tauri-desktop-window-capability'
+import { createTauriDesktopUpdaterCapability } from './tauri-desktop-updater-capability'
+import { MCODE_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
 
 const currentWindow = getCurrentWindow()
 const desktopInvoke = createDesktopInvoke((command, args) => invoke(command, args))
@@ -15,4 +17,11 @@ export const desktopClient = createDesktopClient(
   desktopInvoke,
   createTauriDesktopWindowCapability(currentWindow, appLifecycle),
   appLifecycle
+)
+
+export const desktopUpdater = createTauriDesktopUpdaterCapability(
+  desktopInvoke,
+  (event, listener) => listen(event, listener),
+  async () => (await desktopClient.app.getLaunchContext()).version,
+  () => window.dispatchEvent(new Event(MCODE_APP_RESTART_ABORTED_EVENT))
 )

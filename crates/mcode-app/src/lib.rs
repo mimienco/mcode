@@ -79,6 +79,21 @@ impl LifecycleService {
         self.shutdown.claim_execution(request_id)
     }
 
+    pub fn abort_update_install_execution(
+        &self,
+        request_id: &str,
+    ) -> Result<(), LifecycleServiceError> {
+        self.shutdown.abort_update_install_execution(request_id)
+    }
+
+    pub fn abort_unacknowledged_update_install(
+        &self,
+        request_id: &str,
+    ) -> Result<bool, LifecycleServiceError> {
+        self.shutdown
+            .abort_unacknowledged_update_install(request_id)
+    }
+
     pub fn force_claim_shutdown_execution(
         &self,
         request_id: &str,
