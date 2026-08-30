@@ -1,7 +1,6 @@
 use mcode_app::{
     BuildLane, LaunchContext, LifecycleService, LifecycleServiceError, ShutdownIntent,
 };
-use mcode_fs::ScopedFilesystem;
 use mcode_platform::{DesktopWindowPreferences, restorable_window_bounds};
 use mcode_settings::{SettingsService, SettingsServiceError, ShutdownCheckpoint};
 use serde::Serialize;
@@ -10,7 +9,6 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_shutdown_commands;
 mod desktop_window;
-mod filesystem_commands;
 mod updater_commands;
 mod windows_tray;
 
@@ -31,9 +29,6 @@ use desktop_window::{
     NativeWindowState, attach_placement_persistence, fit_inner_size_to_work_area,
     monitor_work_areas, primary_work_area, window_hide_to_tray_if_enabled,
     window_set_minimize_to_tray_on_close,
-};
-use filesystem_commands::{
-    NativeFilesystemState, fs_path_exists, fs_read_dir, fs_read_file, fs_stat, fs_write_file_atomic,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -152,7 +147,6 @@ enum SmokeTestMode {
     RestartChild,
     Updater,
     Windowing,
-    Filesystem,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -173,11 +167,6 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
         if intent.eq_ignore_ascii_case("windowing") {
             std::env::var_os("MCODE_TAURI_SMOKE_WINDOWING_MARKER")?;
             return Some(SmokeTestMode::Windowing);
-        }
-        if intent.eq_ignore_ascii_case("filesystem") {
-            std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_MARKER")?;
-            std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")?;
-            return Some(SmokeTestMode::Filesystem);
         }
         Some(SmokeTestMode::Quit)
     }
@@ -218,21 +207,11 @@ fn build_main_window(
     native_window_state: NativeWindowState,
 ) -> tauri::Result<()> {
     let entrypoint = match smoke_mode {
-        Some(SmokeTestMode::RestartParent) => "lifecycle-smoke.html?intent=restart".to_owned(),
-        Some(SmokeTestMode::Quit) => "lifecycle-smoke.html?intent=quit".to_owned(),
-        Some(SmokeTestMode::RestartChild) | None => "index.html".to_owned(),
-        Some(SmokeTestMode::Updater) => "lifecycle-smoke.html?intent=quit&updater=true".to_owned(),
-        Some(SmokeTestMode::Windowing) => {
-            "lifecycle-smoke.html?intent=quit&windowing=true".to_owned()
-        }
-        Some(SmokeTestMode::Filesystem) => {
-            let root = std::env::var("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
-                .expect("filesystem smoke root must be configured");
-            format!(
-                "lifecycle-smoke.html?intent=quit&filesystem=true&root={}",
-                encode_query_component(&root)
-            )
-        }
+        Some(SmokeTestMode::RestartParent) => "lifecycle-smoke.html?intent=restart",
+        Some(SmokeTestMode::Quit) => "lifecycle-smoke.html?intent=quit",
+        Some(SmokeTestMode::RestartChild) | None => "index.html",
+        Some(SmokeTestMode::Updater) => "lifecycle-smoke.html?intent=quit&updater=true",
+        Some(SmokeTestMode::Windowing) => "lifecycle-smoke.html?intent=quit&windowing=true",
     };
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(entrypoint.into()))
         .title("MCode")
@@ -315,11 +294,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let settings = SettingsService::new(settings_path(app)?);
-            let scoped_filesystem = ScopedFilesystem::new();
-            app.manage(NativeFilesystemState::new(
-                scoped_filesystem,
-                settings.clone(),
-            ));
             let preferences = settings
                 .desktop_window_preferences()
                 .unwrap_or_else(|error| {
@@ -404,42 +378,6 @@ pub fn run() {
                         app_handle.exit(0);
                     });
                 }
-                Some(SmokeTestMode::Filesystem) => {
-                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_MARKER")
-                        .expect("filesystem smoke marker must be configured");
-                    let root = std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
-                        .expect("filesystem smoke root must be configured");
-                    let app_handle = app.handle().clone();
-                    std::thread::spawn(move || {
-                        let mut renderer_revision = 0;
-                        let renderer_passed = (0..100).any(|_| {
-                            renderer_revision = app_handle
-                                .state::<NativeWindowState>()
-                                .close_to_tray_revision();
-                            let ready = renderer_revision > 0;
-                            if !ready {
-                                std::thread::sleep(Duration::from_millis(100));
-                            }
-                            ready
-                        });
-                        let renderer_error = std::fs::read_to_string(
-                            std::path::Path::new(&root)
-                                .join(".mcode-filesystem-smoke-error.txt"),
-                        )
-                        .ok();
-                        let marker_value = if let Some(error) = renderer_error {
-                            format!("renderer-error:{error}")
-                        } else if renderer_passed {
-                            "passed".to_owned()
-                        } else {
-                            "renderer-failed".to_owned()
-                        };
-                        if let Err(error) = std::fs::write(marker, marker_value.as_bytes()) {
-                            eprintln!("[smoke] failed to write filesystem marker: {error}");
-                        }
-                        app_handle.exit(i32::from(!renderer_passed));
-                    });
-                }
                 Some(SmokeTestMode::RestartChild) => {
                     let marker = std::env::var_os("MCODE_TAURI_SMOKE_RESTART_MARKER")
                         .expect("restart smoke marker must be configured");
@@ -469,11 +407,6 @@ pub fn run() {
             app_confirm_and_execute_shutdown,
             window_hide_to_tray_if_enabled,
             window_set_minimize_to_tray_on_close,
-            fs_read_dir,
-            fs_read_file,
-            fs_write_file_atomic,
-            fs_stat,
-            fs_path_exists,
             update_get_status,
             update_check,
             update_download,
@@ -497,19 +430,6 @@ pub fn run() {
             handle_exit_requested(app_handle, code);
         }
     });
-}
-
-fn encode_query_component(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            encoded.push(char::from(byte));
-        } else {
-            use std::fmt::Write as _;
-            write!(encoded, "%{byte:02X}").expect("writing to a string is infallible");
-        }
-    }
-    encoded
 }
 
 #[cfg(test)]
@@ -538,14 +458,6 @@ mod tests {
                 "message": "shutdown request does not match the pending request",
                 "userMessage": "MCode could not complete the shutdown request. Try again."
             })
-        );
-    }
-
-    #[test]
-    fn smoke_query_values_are_percent_encoded() {
-        assert_eq!(
-            encode_query_component(r"C:\Users\Milan M\repo"),
-            "C%3A%5CUsers%5CMilan%20M%5Crepo"
         );
     }
 }

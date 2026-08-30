@@ -18,9 +18,7 @@ path = "src/main.rs"
 tauri-build.workspace = true
 
 [dependencies]
-base64.workspace = true
 mcode-app = { path = "../crates/mcode-app" }
-mcode-fs = { path = "../crates/mcode-fs" }
 mcode-platform = { path = "../crates/mcode-platform" }
 mcode-settings = { path = "../crates/mcode-settings" }
 mcode-updater = { path = "../crates/mcode-updater" }

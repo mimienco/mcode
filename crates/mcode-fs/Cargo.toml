@@ -7,6 +7,14 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-cap-std.workspace = true
-getrandom.workspace = true
-same-file.workspace = true
+base64 = "0.22"
+crossbeam-channel = "0.5"
+mcode-platform = { path = "../mcode-platform" }
+notify = { version = "7", features = ["crossbeam-channel"] }
+regex = "1"
+serde.workspace = true
+serde_json.workspace = true
+trash = "5"
+tempfile = "3"
+
+[dev-dependencies]

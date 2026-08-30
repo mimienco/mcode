@@ -2,6 +2,7 @@
 members = [
   "crates/mcode-app",
   "crates/mcode-fs",
+  "crates/mcode-git",
   "crates/mcode-platform",
   "crates/mcode-settings",
   "crates/mcode-updater",
