@@ -6,7 +6,7 @@ Phase 3 – production renderer import boundary locked; continuing full-renderer
 
 ## Last green commit
 
-`b02ca0d82a` (`feat(migration): inventory Electron IPC surface`).
+`463f002bc2` (`feat(migration): lock renderer import boundary`).
 
 ## Completed in this session
 
@@ -57,6 +57,7 @@ Phase 3 – production renderer import boundary locked; continuing full-renderer
 - Inventoried 72 external package roots with exact importing-file sets and proved zero reachable Node built-ins or Electron imports.
 - Added an exact stale-checked allowlist for four Node imports in two production-named test-support modules; neither module is reachable from a production entry.
 - Made unresolved local imports, non-literal dynamic imports, newly reachable exceptions, and stale allowlist entries hard failures.
+- Re-ran the two-axis review at `463f002bc2`: Standards PASS and Spec PASS with no remaining renderer-inventory findings.
 
 ## Tests executed
 
