@@ -5,7 +5,13 @@ const TAURI_LIB: &str = include_str!("../src/lib.rs");
 
 #[test]
 fn scoped_filesystem_commands_are_typed_and_registered_for_camel_case_arguments() {
-    let commands = ["fs_read_dir", "fs_stat", "fs_path_exists"];
+    let commands = [
+        "fs_read_dir",
+        "fs_read_file",
+        "fs_write_file_atomic",
+        "fs_stat",
+        "fs_path_exists",
+    ];
     for command in commands {
         assert!(
             FILESYSTEM_COMMANDS.contains(&format!("pub(crate) async fn {command}(")),
@@ -19,6 +25,8 @@ fn scoped_filesystem_commands_are_typed_and_registered_for_camel_case_arguments(
         commands.len()
     );
     assert!(FILESYSTEM_COMMANDS.contains("Result<Vec<FsDirectoryEntry>"));
+    assert!(FILESYSTEM_COMMANDS.contains("Result<FsFileContent"));
+    assert!(FILESYSTEM_COMMANDS.contains("write_file_atomic"));
     assert!(FILESYSTEM_COMMANDS.contains("Result<FsPathMetadata"));
     assert!(FILESYSTEM_COMMANDS.contains("Result<bool, FilesystemCommandError>"));
 }
@@ -29,7 +37,13 @@ fn filesystem_state_and_commands_are_wired_into_the_desktop_builder() {
     assert!(TAURI_LIB.contains("let scoped_filesystem = ScopedFilesystem::new();"));
     assert!(TAURI_LIB.contains("scoped_filesystem,"));
     assert!(TAURI_LIB.contains("tauri::generate_handler!["));
-    for command in ["fs_read_dir", "fs_stat", "fs_path_exists"] {
+    for command in [
+        "fs_read_dir",
+        "fs_read_file",
+        "fs_write_file_atomic",
+        "fs_stat",
+        "fs_path_exists",
+    ] {
         assert!(
             TAURI_LIB.contains(command),
             "desktop invoke handler is missing {command}"
@@ -44,9 +58,9 @@ fn commands_keep_blocking_io_off_the_async_runtime_and_use_scoped_state() {
         FILESYSTEM_COMMANDS
             .matches("tauri::State<'_, NativeFilesystemState>")
             .count(),
-        3
+        5
     );
-    assert!(FILESYSTEM_COMMANDS.contains("state.refresh_roots_if_changed(operation)?"));
+    assert!(FILESYSTEM_COMMANDS.contains("state.refresh_roots_if_changed(operation).and_then"));
     assert!(FILESYSTEM_COMMANDS.contains(".replace_roots(roots.iter())"));
     assert!(FILESYSTEM_COMMANDS.contains(".local_filesystem_roots()"));
     assert!(FILESYSTEM_COMMANDS.contains("cached_roots.as_ref() == Some(&roots)"));

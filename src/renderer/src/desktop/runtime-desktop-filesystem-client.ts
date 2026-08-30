@@ -1,6 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core'
 import type { DirEntry } from '../../../shared/filesystem-entry-types'
 import { sortDirEntries } from '../../../shared/file-name-sort'
+import type { SshMutationExpectation } from '../../../shared/ssh-types'
 import type { DesktopInvoke } from './desktop-client'
 import { normalizeDesktopCommandError } from './desktop-client'
 
@@ -14,6 +15,23 @@ export type DesktopFilesystemPathArgs = {
   connectionId?: string
 }
 
+export type DesktopFilesystemReadFileArgs = DesktopFilesystemPathArgs & {
+  includeLocalLogMetadata?: boolean
+}
+
+export type DesktopFilesystemWriteFileArgs = DesktopFilesystemPathArgs &
+  SshMutationExpectation & {
+    content: string
+  }
+
+export type DesktopFilesystemFileContent = {
+  content: string
+  isBinary: boolean
+  isImage?: boolean
+  mimeType?: string
+  fileIdentity?: string
+}
+
 export type DesktopFilesystemStat = {
   size: number
   isDirectory: boolean
@@ -22,11 +40,16 @@ export type DesktopFilesystemStat = {
 
 export type RuntimeDesktopFilesystemClient = {
   readDir: (args: DesktopFilesystemReadDirArgs) => Promise<DirEntry[]>
+  readFile: (args: DesktopFilesystemReadFileArgs) => Promise<DesktopFilesystemFileContent>
+  writeFileAtomic: (args: DesktopFilesystemWriteFileArgs) => Promise<void>
   stat: (args: DesktopFilesystemPathArgs) => Promise<DesktopFilesystemStat>
   pathExists: (args: DesktopFilesystemPathArgs) => Promise<boolean>
 }
 
-type ElectronFilesystem = Pick<Window['api']['fs'], 'readDir' | 'stat' | 'pathExists'>
+type ElectronFilesystem = Pick<
+  Window['api']['fs'],
+  'readDir' | 'readFile' | 'writeFile' | 'stat' | 'pathExists'
+>
 
 type RuntimeDesktopFilesystemDependencies = {
   isTauri: () => boolean
@@ -70,6 +93,24 @@ function validateStat(value: unknown): DesktopFilesystemStat {
   return value as DesktopFilesystemStat
 }
 
+function validateOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string'
+}
+
+function validateReadFile(value: unknown): DesktopFilesystemFileContent {
+  if (
+    !isRecord(value) ||
+    typeof value.content !== 'string' ||
+    typeof value.isBinary !== 'boolean' ||
+    (value.isImage !== undefined && typeof value.isImage !== 'boolean') ||
+    !validateOptionalString(value.mimeType) ||
+    !validateOptionalString(value.fileIdentity)
+  ) {
+    throw new Error('Invalid fs_read_file response')
+  }
+  return value as DesktopFilesystemFileContent
+}
+
 function validatePathExists(value: unknown): boolean {
   if (typeof value !== 'boolean') {
     throw new Error('Invalid fs_path_exists response')
@@ -100,6 +141,22 @@ export function createRuntimeDesktopFilesystemClient(
         ? await invokeTauri('fs_read_dir', args)
         : await dependencies.getElectronFilesystem().readDir(args)
       return sortDirEntries(validateReadDir(response))
+    },
+    async readFile(args) {
+      const response = dependencies.isTauri()
+        ? await invokeTauri('fs_read_file', args)
+        : await dependencies.getElectronFilesystem().readFile(args)
+      return validateReadFile(response)
+    },
+    async writeFileAtomic(args) {
+      if (dependencies.isTauri()) {
+        const response = await invokeTauri('fs_write_file_atomic', args)
+        if (response !== null && response !== undefined) {
+          throw new Error('Invalid fs_write_file_atomic response')
+        }
+        return
+      }
+      await dependencies.getElectronFilesystem().writeFile(args)
     },
     async stat(args) {
       const response = dependencies.isTauri()

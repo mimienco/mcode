@@ -11,11 +11,15 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
   const invoke = vi
     .fn()
     .mockResolvedValueOnce(directoryEntries)
+    .mockResolvedValueOnce({ content: 'hello', isBinary: false })
+    .mockResolvedValueOnce(null)
     .mockResolvedValueOnce({ size: 42, isDirectory: false, mtime: 1234 })
     .mockResolvedValueOnce(true)
   const loadTauriInvoke = vi.fn(() => Promise.resolve(invoke))
   const electronFilesystem = {
     readDir: vi.fn(),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
     stat: vi.fn(),
     pathExists: vi.fn()
   }
@@ -28,6 +32,13 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
   expect(loadTauriInvoke).not.toHaveBeenCalled()
 
   await expect(client.readDir({ dirPath: 'C:\\repo\\src' })).resolves.toEqual(directoryEntries)
+  await expect(client.readFile({ filePath: 'C:\\repo\\README.md' })).resolves.toEqual({
+    content: 'hello',
+    isBinary: false
+  })
+  await expect(
+    client.writeFileAtomic({ filePath: 'C:\\repo\\README.md', content: 'changed' })
+  ).resolves.toBeUndefined()
   await expect(client.stat({ filePath: 'C:\\repo\\README.md' })).resolves.toEqual({
     size: 42,
     isDirectory: false,
@@ -38,6 +49,8 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
   expect(loadTauriInvoke).toHaveBeenCalledOnce()
   expect(invoke.mock.calls).toEqual([
     ['fs_read_dir', { dirPath: 'C:\\repo\\src' }],
+    ['fs_read_file', { filePath: 'C:\\repo\\README.md' }],
+    ['fs_write_file_atomic', { filePath: 'C:\\repo\\README.md', content: 'changed' }],
     ['fs_stat', { filePath: 'C:\\repo\\README.md' }],
     ['fs_path_exists', { filePath: 'C:\\repo\\README.md' }]
   ])
@@ -47,6 +60,8 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
 it('falls back to the Electron filesystem without loading Tauri', async () => {
   const electronFilesystem = {
     readDir: vi.fn(() => Promise.resolve(directoryEntries)),
+    readFile: vi.fn(() => Promise.resolve({ content: 'hello', isBinary: false })),
+    writeFile: vi.fn(() => Promise.resolve()),
     stat: vi.fn(() => Promise.resolve({ size: 7, isDirectory: true, mtime: 99 })),
     pathExists: vi.fn(() => Promise.resolve(false))
   }
@@ -58,6 +73,13 @@ it('falls back to the Electron filesystem without loading Tauri', async () => {
   })
 
   await expect(client.readDir({ dirPath: '/repo' })).resolves.toEqual(directoryEntries)
+  await expect(client.readFile({ filePath: '/repo/readme.md' })).resolves.toEqual({
+    content: 'hello',
+    isBinary: false
+  })
+  await expect(
+    client.writeFileAtomic({ filePath: '/repo/readme.md', content: 'changed' })
+  ).resolves.toBeUndefined()
   await expect(client.stat({ filePath: '/repo/missing.md' })).resolves.toEqual({
     size: 7,
     isDirectory: true,
@@ -66,6 +88,11 @@ it('falls back to the Electron filesystem without loading Tauri', async () => {
   await expect(client.pathExists({ filePath: '/repo/missing.md' })).resolves.toBe(false)
 
   expect(electronFilesystem.readDir).toHaveBeenCalledWith({ dirPath: '/repo' })
+  expect(electronFilesystem.readFile).toHaveBeenCalledWith({ filePath: '/repo/readme.md' })
+  expect(electronFilesystem.writeFile).toHaveBeenCalledWith({
+    filePath: '/repo/readme.md',
+    content: 'changed'
+  })
   expect(electronFilesystem.stat).toHaveBeenCalledWith({ filePath: '/repo/missing.md' })
   expect(electronFilesystem.pathExists).toHaveBeenCalledWith({ filePath: '/repo/missing.md' })
   expect(loadTauriInvoke).not.toHaveBeenCalled()
@@ -94,24 +121,31 @@ it('preserves the pinned Electron directory ordering for Unicode and numeric nam
   ])
 })
 
-it.each([
-  ['readDir', 'fs_read_dir', { dirPath: '/repo' }, null],
-  [
-    'readDir',
-    'fs_read_dir',
-    { dirPath: '/repo' },
-    [{ name: 'src', isDirectory: 'yes', isSymlink: false }]
-  ],
-  ['stat', 'fs_stat', { filePath: '/repo/a.ts' }, { size: -1, isDirectory: false, mtime: 1 }],
-  ['pathExists', 'fs_path_exists', { filePath: '/repo/a.ts' }, 'yes']
-] as const)('rejects an invalid %s response', async (method, command, args, response) => {
-  const client = createRuntimeDesktopFilesystemClient({
-    isTauri: () => true,
-    loadTauriInvoke: () => Promise.resolve(vi.fn(() => Promise.resolve(response))),
-    getElectronFilesystem: vi.fn()
-  })
+it('rejects invalid filesystem responses', async () => {
+  const clientFor = (response: unknown) =>
+    createRuntimeDesktopFilesystemClient({
+      isTauri: () => true,
+      loadTauriInvoke: () => Promise.resolve(vi.fn(() => Promise.resolve(response))),
+      getElectronFilesystem: vi.fn()
+    })
 
-  await expect(client[method](args)).rejects.toThrow(`Invalid ${command} response`)
+  await expect(clientFor(null).readDir({ dirPath: '/repo' })).rejects.toThrow(
+    'Invalid fs_read_dir response'
+  )
+  await expect(
+    clientFor([{ name: 'src', isDirectory: 'yes', isSymlink: false }]).readDir({
+      dirPath: '/repo'
+    })
+  ).rejects.toThrow('Invalid fs_read_dir response')
+  await expect(
+    clientFor({ content: 42, isBinary: false }).readFile({ filePath: '/repo/a.ts' })
+  ).rejects.toThrow('Invalid fs_read_file response')
+  await expect(
+    clientFor({ size: -1, isDirectory: false, mtime: 1 }).stat({ filePath: '/repo/a.ts' })
+  ).rejects.toThrow('Invalid fs_stat response')
+  await expect(clientFor('yes').pathExists({ filePath: '/repo/a.ts' })).rejects.toThrow(
+    'Invalid fs_path_exists response'
+  )
 })
 
 it('normalizes a structured Tauri rejection into DesktopCommandError', async () => {
@@ -138,6 +172,70 @@ it('normalizes a structured Tauri rejection into DesktopCommandError', async () 
   })
 })
 
+it('forwards local log metadata requests and validates the snapshot identity', async () => {
+  const invoke = vi.fn(() =>
+    Promise.resolve({ content: 'first', isBinary: false, fileIdentity: '1:2:3' })
+  )
+  const client = createRuntimeDesktopFilesystemClient({
+    isTauri: () => true,
+    loadTauriInvoke: () => Promise.resolve(invoke),
+    getElectronFilesystem: vi.fn()
+  })
+
+  const result = await client.readFile({
+    filePath: '/repo/live.log',
+    includeLocalLogMetadata: true
+  })
+
+  expect(invoke).toHaveBeenCalledWith('fs_read_file', {
+    filePath: '/repo/live.log',
+    includeLocalLogMetadata: true
+  })
+  expect(result).toEqual({
+    content: 'first',
+    isBinary: false,
+    fileIdentity: '1:2:3'
+  })
+})
+
+it('preserves direct SSH mutation expectations on the Electron write fallback', async () => {
+  const writeFile = vi.fn(() => Promise.resolve())
+  const client = createRuntimeDesktopFilesystemClient({
+    isTauri: () => false,
+    loadTauriInvoke: vi.fn(),
+    getElectronFilesystem: () => ({
+      readDir: vi.fn(),
+      readFile: vi.fn(),
+      writeFile,
+      stat: vi.fn(),
+      pathExists: vi.fn()
+    })
+  })
+  const request = {
+    filePath: '/repo/.mcp.json',
+    content: '{}',
+    connectionId: 'server',
+    expectedExecutionHostId: 'ssh:server' as const,
+    expectedSshTargetId: 'server',
+    expectedSshConnectionGeneration: 7
+  }
+
+  await expect(client.writeFileAtomic(request)).resolves.toBeUndefined()
+  expect(writeFile).toHaveBeenCalledWith(request)
+})
+
+it('rejects a non-void atomic write response', async () => {
+  const client = createRuntimeDesktopFilesystemClient({
+    isTauri: () => true,
+    loadTauriInvoke: () => Promise.resolve(vi.fn(() => Promise.resolve({ ok: true }))),
+    getElectronFilesystem: vi.fn()
+  })
+
+  await expect(client.writeFileAtomic({ filePath: '/repo/a.ts', content: 'a' })).rejects.toThrow(
+    'Invalid fs_write_file_atomic response'
+  )
+})
+
 it('preserves Electron rejections for compatibility', async () => {
   const electronError = new Error('ENOENT')
   const client = createRuntimeDesktopFilesystemClient({
@@ -145,6 +243,8 @@ it('preserves Electron rejections for compatibility', async () => {
     loadTauriInvoke: vi.fn(),
     getElectronFilesystem: () => ({
       readDir: vi.fn(),
+      readFile: vi.fn(),
+      writeFile: vi.fn(),
       stat: vi.fn(() => Promise.reject(electronError)),
       pathExists: vi.fn()
     })

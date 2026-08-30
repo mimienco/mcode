@@ -1,4 +1,4 @@
-use mcode_fs::{FsError, PathKind, ScopedFilesystem};
+use mcode_fs::{BoundedFileRead, FsError, PathKind, ScopedFilesystem};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -75,6 +75,182 @@ fn target_paths_must_be_normalized_absolute_and_inside_a_registered_root() {
         filesystem.path_exists(outside.path()),
         Err(FsError::PathOutsideScope { .. })
     ));
+}
+
+#[test]
+fn bounded_file_reads_return_bytes_detect_binary_prefixes_and_reject_oversized_files() {
+    let root = TestDirectory::new();
+    let text_path = root.path().join("notes.txt");
+    let binary_path = root.path().join("archive.bin");
+    fs::write(&text_path, "hello 🌍").unwrap();
+    fs::write(&binary_path, [b'a', 0, b'b']).unwrap();
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    assert_eq!(
+        filesystem
+            .read_file_bounded(&text_path, 32, Some(8))
+            .unwrap(),
+        BoundedFileRead::Bytes("hello 🌍".as_bytes().to_vec())
+    );
+    assert_eq!(
+        filesystem
+            .read_file_bounded(&binary_path, 32, Some(8))
+            .unwrap(),
+        BoundedFileRead::BinaryPrefix
+    );
+    assert!(matches!(
+        filesystem.read_file_bounded(&text_path, 4, Some(4)),
+        Err(FsError::FileTooLarge { limit: 4, .. })
+    ));
+}
+
+#[test]
+fn bounded_reads_enforce_byte_limits_at_multibyte_utf8_boundaries() {
+    let root = TestDirectory::new();
+    let file_path = root.path().join("unicode.txt");
+    fs::write(&file_path, "🌍").unwrap();
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    assert_eq!(
+        filesystem.read_file_bounded(&file_path, 4, None).unwrap(),
+        BoundedFileRead::Bytes("🌍".as_bytes().to_vec())
+    );
+    assert!(matches!(
+        filesystem.read_file_bounded(&file_path, 3, None),
+        Err(FsError::FileTooLarge { limit: 3, .. })
+    ));
+}
+
+#[test]
+fn bounded_snapshots_keep_identity_across_growth_and_change_it_after_atomic_replacement() {
+    let root = TestDirectory::new();
+    let file_path = root.path().join("live.log");
+    fs::write(&file_path, "first").unwrap();
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    let first = filesystem
+        .read_file_snapshot_bounded(&file_path, 64, None)
+        .unwrap();
+    fs::write(&file_path, "first\nsecond").unwrap();
+    let appended = filesystem
+        .read_file_snapshot_bounded(&file_path, 64, None)
+        .unwrap();
+    filesystem
+        .write_file_atomic(&file_path, b"replacement", 64)
+        .unwrap();
+    let replaced = filesystem
+        .read_file_snapshot_bounded(&file_path, 64, None)
+        .unwrap();
+
+    assert_eq!(first.file_identity, appended.file_identity);
+    assert_ne!(first.file_identity, replaced.file_identity);
+}
+
+#[test]
+fn atomic_write_creates_and_replaces_without_leaving_temporary_files() {
+    let root = TestDirectory::new();
+    let file_path = root.path().join("notes.txt");
+    fs::write(&file_path, "old").unwrap();
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    filesystem
+        .write_file_atomic(&file_path, b"new", 16)
+        .unwrap();
+    let created_path = root.path().join("created.txt");
+    filesystem
+        .write_file_atomic(&created_path, "hello 🌍".as_bytes(), 16)
+        .unwrap();
+
+    assert_eq!(fs::read(&file_path).unwrap(), b"new");
+    assert_eq!(fs::read(&created_path).unwrap(), "hello 🌍".as_bytes());
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+    assert!(matches!(
+        filesystem.write_file_atomic(&file_path, b"too long", 3),
+        Err(FsError::FileTooLarge { limit: 3, .. })
+    ));
+    assert_eq!(fs::read(&file_path).unwrap(), b"new");
+}
+
+#[test]
+fn concurrent_readers_observe_only_complete_atomic_versions() {
+    let root = TestDirectory::new();
+    let file_path = root.path().join("state.txt");
+    let old = vec![b'a'; 16 * 1024];
+    let new = vec![b'b'; 16 * 1024];
+    fs::write(&file_path, &old).unwrap();
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    std::thread::scope(|scope| {
+        let reader_filesystem = filesystem.clone();
+        let reader_path = file_path.clone();
+        let reader_old = old.clone();
+        let reader_new = new.clone();
+        scope.spawn(move || {
+            for _ in 0..200 {
+                let BoundedFileRead::Bytes(bytes) = reader_filesystem
+                    .read_file_bounded(&reader_path, 32 * 1024, None)
+                    .unwrap()
+                else {
+                    panic!("binary detection was disabled")
+                };
+                assert!(bytes == reader_old || bytes == reader_new);
+            }
+        });
+
+        for index in 0..100 {
+            let contents = if index % 2 == 0 { &new } else { &old };
+            filesystem
+                .write_file_atomic(&file_path, contents, 32 * 1024)
+                .unwrap();
+        }
+    });
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn atomic_write_rejects_directories_and_follows_contained_symlink_targets() {
+    let root = TestDirectory::new();
+    let real_file = root.path().join("real.txt");
+    let link = root.path().join("linked.txt");
+    fs::write(&real_file, "original").unwrap();
+    create_file_symlink(&real_file, &link);
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    assert!(matches!(
+        filesystem.write_file_atomic(root.path(), b"no", 8),
+        Err(FsError::TargetIsDirectory { .. })
+    ));
+    filesystem
+        .write_file_atomic(&link, b"replacement", 16)
+        .unwrap();
+    assert_eq!(fs::read_to_string(&real_file).unwrap(), "replacement");
+    assert!(fs::symlink_metadata(link).unwrap().file_type().is_symlink());
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_write_preserves_restrictive_unix_permissions() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let root = TestDirectory::new();
+    let file_path = root.path().join("secret.txt");
+    fs::write(&file_path, "old").unwrap();
+    fs::set_permissions(&file_path, fs::Permissions::from_mode(0o600)).unwrap();
+    let filesystem = ScopedFilesystem::new();
+    filesystem.register_root(root.path()).unwrap();
+
+    filesystem
+        .write_file_atomic(&file_path, b"new secret", 32)
+        .unwrap();
+
+    assert_eq!(fs::read_to_string(&file_path).unwrap(), "new secret");
+    assert_eq!(fs::metadata(file_path).unwrap().mode() & 0o777, 0o600);
 }
 
 #[test]
@@ -344,4 +520,14 @@ fn create_directory_symlink(target: &Path, link: &Path) {
 #[cfg(windows)]
 fn create_directory_symlink(target: &Path, link: &Path) {
     std::os::windows::fs::symlink_dir(target, link).unwrap();
+}
+
+#[cfg(unix)]
+fn create_file_symlink(target: &Path, link: &Path) {
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+
+#[cfg(windows)]
+fn create_file_symlink(target: &Path, link: &Path) {
+    std::os::windows::fs::symlink_file(target, link).unwrap();
 }

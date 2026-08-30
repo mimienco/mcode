@@ -32,7 +32,9 @@ use desktop_window::{
     monitor_work_areas, primary_work_area, window_hide_to_tray_if_enabled,
     window_set_minimize_to_tray_on_close,
 };
-use filesystem_commands::{NativeFilesystemState, fs_path_exists, fs_read_dir, fs_stat};
+use filesystem_commands::{
+    NativeFilesystemState, fs_path_exists, fs_read_dir, fs_read_file, fs_stat, fs_write_file_atomic,
+};
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
 };
@@ -405,6 +407,8 @@ pub fn run() {
                 Some(SmokeTestMode::Filesystem) => {
                     let marker = std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_MARKER")
                         .expect("filesystem smoke marker must be configured");
+                    let root = std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
+                        .expect("filesystem smoke root must be configured");
                     let app_handle = app.handle().clone();
                     std::thread::spawn(move || {
                         let mut renderer_revision = 0;
@@ -418,7 +422,14 @@ pub fn run() {
                             }
                             ready
                         });
-                        let marker_value = if renderer_passed {
+                        let renderer_error = std::fs::read_to_string(
+                            std::path::Path::new(&root)
+                                .join(".mcode-filesystem-smoke-error.txt"),
+                        )
+                        .ok();
+                        let marker_value = if let Some(error) = renderer_error {
+                            format!("renderer-error:{error}")
+                        } else if renderer_passed {
                             "passed".to_owned()
                         } else {
                             "renderer-failed".to_owned()
@@ -459,6 +470,8 @@ pub fn run() {
             window_hide_to_tray_if_enabled,
             window_set_minimize_to_tray_on_close,
             fs_read_dir,
+            fs_read_file,
+            fs_write_file_atomic,
             fs_stat,
             fs_path_exists,
             update_get_status,

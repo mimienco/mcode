@@ -2001,6 +2001,7 @@ dependencies = [
 name = "mcode-desktop"
 version = "1.4.178"
 dependencies = [
+ "base64 0.22.1",
  "mcode-app",
  "mcode-fs",
  "mcode-platform",
@@ -2018,6 +2019,7 @@ name = "mcode-fs"
 version = "1.4.178"
 dependencies = [
  "cap-std",
+ "getrandom 0.3.4",
  "same-file",
 ]
 

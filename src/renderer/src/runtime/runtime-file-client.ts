@@ -263,10 +263,16 @@ export async function readRuntimeFileContent({
   assertExternalSshReadOwnership(settings, connectionId, expectedExternalSshTargetId)
   const target = getActiveRuntimeTarget(settings)
   if (target.kind !== 'environment') {
-    return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
+    if (connectionId) {
+      return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
+    }
+    return runtimeDesktopFilesystemClient.readFile({ filePath, includeLocalLogMetadata })
   }
   if (!worktreeId) {
-    return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
+    if (connectionId) {
+      return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
+    }
+    return runtimeDesktopFilesystemClient.readFile({ filePath, includeLocalLogMetadata })
   }
   if (!canReadRelativeRuntimeFile(relativePath)) {
     throw new Error('Remote file is outside the owning runtime worktree')
@@ -317,7 +323,10 @@ export async function readRuntimeFilePreview(
     if (hasRemoteRuntimeOwner(context)) {
       throw new Error('Remote file is outside the owning runtime worktree')
     }
-    return window.api.fs.readFile({ filePath, connectionId: context.connectionId })
+    if (context.connectionId) {
+      return window.api.fs.readFile({ filePath, connectionId: context.connectionId })
+    }
+    return runtimeDesktopFilesystemClient.readFile({ filePath })
   }
   return callRuntimeRpc<RuntimeFilePreviewResult>(
     remoteArgs.target,
@@ -504,9 +513,15 @@ export async function writeRuntimeFile(
   const remoteArgs = getRemoteFileArgs(context, filePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    await window.api.fs.writeFile(
-      withSshMutationExpectation(context, { filePath, content, connectionId: context.connectionId })
-    )
+    await (context.connectionId
+      ? window.api.fs.writeFile(
+          withSshMutationExpectation(context, {
+            filePath,
+            content,
+            connectionId: context.connectionId
+          })
+        )
+      : runtimeDesktopFilesystemClient.writeFileAtomic({ filePath, content }))
     return
   }
   await callRuntimeFileMutation(

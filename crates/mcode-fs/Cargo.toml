@@ -8,4 +8,5 @@ repository.workspace = true
 
 [dependencies]
 cap-std.workspace = true
+getrandom.workspace = true
 same-file.workspace = true

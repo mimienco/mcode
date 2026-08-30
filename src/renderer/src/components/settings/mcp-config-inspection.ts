@@ -8,6 +8,7 @@ import {
 } from '../../../../shared/mcp-config'
 import { joinPath } from '../../lib/path'
 import { extractIpcErrorMessage } from '../../lib/ipc-error'
+import { runtimeDesktopFilesystemClient } from '../../desktop/runtime-desktop-filesystem-client'
 import type { LoadedMcpConfigInspection } from './McpConfigFileRow'
 
 function isMissingFileError(error: unknown): boolean {
@@ -20,7 +21,10 @@ export async function loadMcpConfigInspections(
   connectionId: string | undefined
 ): Promise<LoadedMcpConfigInspection[]> {
   const entriesByRelativeDir = new Map<string, readonly McpConfigDirectoryEntry[]>()
-  const rootEntries = await window.api.fs.readDir({ dirPath: targetRootPath, connectionId })
+  const rootEntries = await runtimeDesktopFilesystemClient.readDir({
+    dirPath: targetRootPath,
+    connectionId
+  })
   entriesByRelativeDir.set('', rootEntries)
 
   const rootDirectoryNames = new Set(
@@ -33,7 +37,7 @@ export async function loadMcpConfigInspections(
         return
       }
       try {
-        const entries = await window.api.fs.readDir({
+        const entries = await runtimeDesktopFilesystemClient.readDir({
           dirPath: joinPath(targetRootPath, relativeDir),
           connectionId
         })
@@ -74,7 +78,10 @@ export async function loadMcpConfigInspections(
       }
 
       try {
-        const result = await window.api.fs.readFile({ filePath: absolutePath, connectionId })
+        const result = await runtimeDesktopFilesystemClient.readFile({
+          filePath: absolutePath,
+          connectionId
+        })
         const inspection = inspectMcpConfigContent(candidate, result.isBinary ? '' : result.content)
         return { ...inspection, absolutePath }
       } catch (error) {

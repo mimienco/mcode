@@ -1,5 +1,6 @@
 mod scoped;
 
 pub use scoped::{
-    DirectoryEntry, FsError, FsOperation, PathKind, PathMetadata, ScopeId, ScopedFilesystem,
+    BoundedFileRead, BoundedFileSnapshot, DirectoryEntry, FsError, FsOperation, PathKind,
+    PathMetadata, ScopeId, ScopedFilesystem,
 };

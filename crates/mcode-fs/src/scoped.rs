@@ -1,9 +1,11 @@
 use cap_std::ambient_authority;
-use cap_std::fs::{Dir, FileType, Metadata};
+#[cfg(unix)]
+use cap_std::fs::OpenOptionsExt;
+use cap_std::fs::{Dir, FileType, Metadata, MetadataExt, OpenOptions};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fs;
-use std::io;
+use std::io::{self, Read, Write};
 #[cfg(windows)]
 use std::path::Prefix;
 use std::path::{Component, Path, PathBuf};
@@ -35,11 +37,25 @@ pub struct PathMetadata {
     pub modified_time_millis: f64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum BoundedFileRead {
+    Bytes(Vec<u8>),
+    BinaryPrefix,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundedFileSnapshot {
+    pub read: BoundedFileRead,
+    pub file_identity: String,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FsOperation {
     RegisterRoot,
     ResolvePath,
     ReadDirectory,
+    ReadFile,
+    WriteFileAtomic,
     Stat,
     PathExists,
 }
@@ -65,6 +81,14 @@ pub enum FsError {
     SymlinkTraversalDenied {
         path: PathBuf,
     },
+    FileTooLarge {
+        path: PathBuf,
+        size: u64,
+        limit: u64,
+    },
+    TargetIsDirectory {
+        path: PathBuf,
+    },
     Io {
         operation: FsOperation,
         path: PathBuf,
@@ -82,6 +106,8 @@ impl FsError {
             Self::RootNotDirectory { .. } => "fs_root_not_directory",
             Self::PathOutsideScope { .. } => "fs_path_outside_scope",
             Self::SymlinkTraversalDenied { .. } => "fs_symlink_traversal_denied",
+            Self::FileTooLarge { .. } => "fs_file_too_large",
+            Self::TargetIsDirectory { .. } => "fs_target_is_directory",
             Self::Io { .. } => "fs_io_failed",
         }
     }
@@ -118,6 +144,14 @@ impl fmt::Display for FsError {
             }
             Self::SymlinkTraversalDenied { path } => {
                 write!(formatter, "symlink traversal is denied: {}", path.display())
+            }
+            Self::FileTooLarge { path, size, limit } => write!(
+                formatter,
+                "file {} is {size} bytes and exceeds the {limit}-byte limit",
+                path.display()
+            ),
+            Self::TargetIsDirectory { path } => {
+                write!(formatter, "target is a directory: {}", path.display())
             }
             Self::Io {
                 operation,
@@ -281,7 +315,188 @@ impl ScopedFilesystem {
             .map_err(|source| scoped_io_error(FsOperation::PathExists, &target, source))
     }
 
+    pub fn read_file_bounded(
+        &self,
+        target_path: &Path,
+        max_bytes: usize,
+        binary_probe_bytes: Option<usize>,
+    ) -> Result<BoundedFileRead, FsError> {
+        self.read_file_snapshot_bounded(target_path, max_bytes, binary_probe_bytes)
+            .map(|snapshot| snapshot.read)
+    }
+
+    pub fn read_file_snapshot_bounded(
+        &self,
+        target_path: &Path,
+        max_bytes: usize,
+        binary_probe_bytes: Option<usize>,
+    ) -> Result<BoundedFileSnapshot, FsError> {
+        let target = self.resolve(target_path)?;
+        let mut file = target
+            .root
+            .directory
+            .open(&target.relative_path)
+            .map_err(|source| scoped_io_error(FsOperation::ReadFile, &target, source))?;
+        let metadata = file
+            .metadata()
+            .map_err(|source| scoped_io_error(FsOperation::ReadFile, &target, source))?;
+        if metadata.is_dir() {
+            return Err(FsError::TargetIsDirectory {
+                path: target.requested_path,
+            });
+        }
+        enforce_file_size(&target.requested_path, metadata.len(), max_bytes)?;
+        let file_identity = file_identity(&metadata);
+
+        let probe_limit = binary_probe_bytes.unwrap_or(0).min(max_bytes);
+        let mut bytes = Vec::with_capacity(metadata.len().min(max_bytes as u64) as usize);
+        if probe_limit > 0 {
+            (&mut file)
+                .take(probe_limit as u64)
+                .read_to_end(&mut bytes)
+                .map_err(|source| scoped_io_error(FsOperation::ReadFile, &target, source))?;
+            if bytes.contains(&0) {
+                return Ok(BoundedFileSnapshot {
+                    read: BoundedFileRead::BinaryPrefix,
+                    file_identity,
+                });
+            }
+        }
+
+        let remaining_with_sentinel = max_bytes.saturating_sub(bytes.len()).saturating_add(1);
+        (&mut file)
+            .take(remaining_with_sentinel as u64)
+            .read_to_end(&mut bytes)
+            .map_err(|source| scoped_io_error(FsOperation::ReadFile, &target, source))?;
+        enforce_file_size(&target.requested_path, bytes.len() as u64, max_bytes)?;
+        Ok(BoundedFileSnapshot {
+            read: BoundedFileRead::Bytes(bytes),
+            file_identity,
+        })
+    }
+
+    pub fn write_file_atomic(
+        &self,
+        target_path: &Path,
+        contents: &[u8],
+        max_bytes: usize,
+    ) -> Result<(), FsError> {
+        enforce_file_size(target_path, contents.len() as u64, max_bytes)?;
+        let target = self.resolve_write_target(target_path)?;
+        let target_name = target
+            .relative_path
+            .file_name()
+            .ok_or_else(|| FsError::TargetIsDirectory {
+                path: target.requested_path.clone(),
+            })?
+            .to_os_string();
+        let parent_path = target
+            .relative_path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty());
+        let parent_path = parent_path.unwrap_or_else(|| Path::new("."));
+        let parent = target
+            .root
+            .directory
+            .open_dir(parent_path)
+            .map_err(|source| scoped_io_error(FsOperation::WriteFileAtomic, &target, source))?;
+        let permissions = match parent.symlink_metadata(&target_name) {
+            Ok(metadata) if metadata.is_dir() => {
+                return Err(FsError::TargetIsDirectory {
+                    path: target.requested_path,
+                });
+            }
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(FsError::SymlinkTraversalDenied {
+                    path: target.requested_path,
+                });
+            }
+            Ok(metadata) => Some(metadata.permissions()),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => None,
+            Err(source) => {
+                return Err(scoped_io_error(
+                    FsOperation::WriteFileAtomic,
+                    &target,
+                    source,
+                ));
+            }
+        };
+
+        let (temporary_name, mut temporary_file) = create_temporary_file(&parent, &target)?;
+        let result = (|| {
+            if let Some(permissions) = permissions {
+                // Apply the target's access policy before payload bytes exist;
+                // a named temporary file must never be broader than the file
+                // it is going to replace.
+                temporary_file
+                    .set_permissions(permissions)
+                    .map_err(|source| {
+                        scoped_io_error(FsOperation::WriteFileAtomic, &target, source)
+                    })?;
+            }
+            temporary_file
+                .write_all(contents)
+                .and_then(|()| temporary_file.sync_all())
+                .map_err(|source| scoped_io_error(FsOperation::WriteFileAtomic, &target, source))?;
+            drop(temporary_file);
+            parent
+                .rename(&temporary_name, &parent, &target_name)
+                .and_then(|()| sync_directory(&parent))
+                .map_err(|source| scoped_io_error(FsOperation::WriteFileAtomic, &target, source))
+        })();
+        if result.is_err() {
+            let _ = parent.remove_file(&temporary_name);
+        }
+        result
+    }
+
+    fn resolve_write_target(&self, target_path: &Path) -> Result<ScopedTarget, FsError> {
+        let mut target = self.resolve(target_path)?;
+        let canonical =
+            match target.root.directory.canonicalize(&target.relative_path) {
+                Ok(path) => path,
+                Err(source) if source.kind() == io::ErrorKind::NotFound => {
+                    let name = target.relative_path.file_name().ok_or_else(|| {
+                        FsError::TargetIsDirectory {
+                            path: target.requested_path.clone(),
+                        }
+                    })?;
+                    let parent = target
+                        .relative_path
+                        .parent()
+                        .filter(|path| !path.as_os_str().is_empty())
+                        .unwrap_or_else(|| Path::new("."));
+                    let mut canonical_parent =
+                        target
+                            .root
+                            .directory
+                            .canonicalize(parent)
+                            .map_err(|source| {
+                                scoped_io_error(FsOperation::WriteFileAtomic, &target, source)
+                            })?;
+                    canonical_parent.push(name);
+                    canonical_parent
+                }
+                Err(source) => {
+                    return Err(scoped_io_error(
+                        FsOperation::WriteFileAtomic,
+                        &target,
+                        source,
+                    ));
+                }
+            };
+        target.relative_path = canonical;
+        Ok(target)
+    }
+
     fn resolve(&self, target_path: &Path) -> Result<ScopedTarget, FsError> {
+        let mut target = self.resolve_without_symlinks(target_path)?;
+        target.relative_path =
+            rewrite_absolute_symlinks(&target.root, &target.relative_path, &target.requested_path)?;
+        Ok(target)
+    }
+
+    fn resolve_without_symlinks(&self, target_path: &Path) -> Result<ScopedTarget, FsError> {
         if !is_normalized_absolute(target_path) {
             return Err(FsError::InvalidTargetPath {
                 path: target_path.to_path_buf(),
@@ -310,7 +525,6 @@ impl ScopedFilesystem {
         } else {
             relative_path
         };
-        let relative_path = rewrite_absolute_symlinks(&root, &relative_path, target_path)?;
         Ok(ScopedTarget {
             root,
             relative_path,
@@ -325,6 +539,94 @@ impl ScopedFilesystem {
                 .fetch_add(1, AtomicOrdering::Relaxed),
         )
     }
+}
+
+#[cfg(unix)]
+fn file_identity(metadata: &Metadata) -> String {
+    format!("{}:{}:0", metadata.dev(), metadata.ino())
+}
+
+#[cfg(windows)]
+fn file_identity(metadata: &Metadata) -> String {
+    // The creation timestamp is stable across append-only growth and changes
+    // when an atomic replacement installs a newly-created file.
+    format!("0:0:{}", metadata.creation_time())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn file_identity(metadata: &Metadata) -> String {
+    let created = metadata
+        .created()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_nanos());
+    format!("0:0:{created}")
+}
+
+fn enforce_file_size(path: &Path, size: u64, max_bytes: usize) -> Result<(), FsError> {
+    let limit = max_bytes as u64;
+    if size > limit {
+        Err(FsError::FileTooLarge {
+            path: path.to_path_buf(),
+            size,
+            limit,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn create_temporary_file(
+    parent: &Dir,
+    target: &ScopedTarget,
+) -> Result<(PathBuf, cap_std::fs::File), FsError> {
+    for _ in 0..32 {
+        let mut random_bytes = [0_u8; 16];
+        getrandom::fill(&mut random_bytes).map_err(|source| FsError::Io {
+            operation: FsOperation::WriteFileAtomic,
+            path: target.requested_path.clone(),
+            source: io::Error::other(format!("temporary filename randomness failed: {source}")),
+        })?;
+        let name = PathBuf::from(format!(
+            ".mcode-write-{:032x}.tmp",
+            u128::from_ne_bytes(random_bytes)
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        match parent.open_with(&name, &options) {
+            Ok(file) => return Ok((name, file)),
+            Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(source) => {
+                return Err(scoped_io_error(
+                    FsOperation::WriteFileAtomic,
+                    target,
+                    source,
+                ));
+            }
+        }
+    }
+    Err(FsError::Io {
+        operation: FsOperation::WriteFileAtomic,
+        path: target.requested_path.clone(),
+        source: io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "could not allocate an atomic-write temporary file",
+        ),
+    })
+}
+
+#[cfg(unix)]
+fn sync_directory(directory: &Dir) -> io::Result<()> {
+    Dir::reopen_dir(directory)?.into_std_file().sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_directory: &Dir) -> io::Result<()> {
+    // Windows does not expose a portable directory-fsync primitive. The
+    // capability-relative rename remains atomic after the temp file is flushed.
+    Ok(())
 }
 
 fn rewrite_absolute_symlinks(

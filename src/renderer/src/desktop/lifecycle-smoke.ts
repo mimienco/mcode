@@ -65,24 +65,58 @@ void runLifecycleSmoke({
       }
       const separator = root.includes('\\') ? '\\' : '/'
       const childPath = `${root}${separator}visible.txt`
+      const savedPath = `${root}${separator}saved.txt`
       const missingPath = `${root}${separator}missing.txt`
       const entries = await runtimeDesktopFilesystemClient.readDir({ dirPath: root })
+      const initialContent = await runtimeDesktopFilesystemClient.readFile({ filePath: childPath })
+      const logSnapshot = await runtimeDesktopFilesystemClient.readFile({
+        filePath: childPath,
+        includeLocalLogMetadata: true
+      })
       const metadata = await runtimeDesktopFilesystemClient.stat({ filePath: childPath })
       const missingExists = await runtimeDesktopFilesystemClient.pathExists({
         filePath: missingPath
       })
       let outsideDenied = false
+      let outsideWriteDenied = false
       try {
         await runtimeDesktopFilesystemClient.pathExists({ filePath: `${root}-outside` })
       } catch (error) {
         outsideDenied = error instanceof DesktopCommandError && error.code === 'fs_path_denied'
       }
+      try {
+        await runtimeDesktopFilesystemClient.writeFileAtomic({
+          filePath: `${root}-outside${separator}denied.txt`,
+          content: 'denied'
+        })
+      } catch (error) {
+        outsideWriteDenied = error instanceof DesktopCommandError && error.code === 'fs_path_denied'
+      }
+      await runtimeDesktopFilesystemClient.writeFileAtomic({
+        filePath: savedPath,
+        content: 'atomic save'
+      })
+      await runtimeDesktopFilesystemClient.writeFileAtomic({
+        filePath: childPath,
+        content: 'atomic replacement'
+      })
+      const savedContent = await runtimeDesktopFilesystemClient.readFile({ filePath: savedPath })
+      const replacedContent = await runtimeDesktopFilesystemClient.readFile({ filePath: childPath })
       if (
         !entries.some((entry) => entry.name === 'visible.txt' && !entry.isDirectory) ||
+        initialContent.content !== 'visible' ||
+        initialContent.isBinary ||
+        typeof logSnapshot.fileIdentity !== 'string' ||
+        logSnapshot.fileIdentity.length === 0 ||
         metadata.size !== 7 ||
         metadata.isDirectory ||
         missingExists ||
-        !outsideDenied
+        !outsideDenied ||
+        !outsideWriteDenied ||
+        savedContent.content !== 'atomic save' ||
+        savedContent.isBinary ||
+        replacedContent.content !== 'atomic replacement' ||
+        replacedContent.isBinary
       ) {
         throw new Error('filesystem smoke assertions failed')
       }
@@ -106,4 +140,20 @@ void runLifecycleSmoke({
   })
   .catch((error: unknown) => {
     console.error('[smoke] lifecycle smoke failed', error)
+    if (shouldCheckFilesystem) {
+      const root = smokeParameters.get('root')
+      if (root) {
+        const separator = root.includes('\\') ? '\\' : '/'
+        const message = error instanceof Error ? error.message : String(error)
+        void runtimeDesktopFilesystemClient
+          .writeFileAtomic({
+            filePath: `${root}${separator}.mcode-filesystem-smoke-error.txt`,
+            content: message
+          })
+          .then(() => desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true }))
+          .catch((reportError: unknown) => {
+            console.error('[smoke] failed to report filesystem smoke error', reportError)
+          })
+      }
+    }
   })
