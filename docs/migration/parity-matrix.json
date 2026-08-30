@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
+  "sourceHead": "b62baa05c628d29384d442bcf1bbc32f944dcaf5",
   "updatedAt": "2026-08-30",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
@@ -140,7 +140,13 @@
       "currentFiles": ["src/main", "src/preload/index.ts"],
       "currentBehavior": "Workspace-scoped reads/writes, canonicalization, atomic updates, ignores, and path validation.",
       "targetRustModule": "crates/mcode-fs/src/scoped",
-      "targetCommand": ["fs_read_dir", "fs_stat", "fs_path_exists"],
+      "targetCommand": [
+        "fs_read_dir",
+        "fs_read_file",
+        "fs_write_file_atomic",
+        "fs_stat",
+        "fs_path_exists"
+      ],
       "tests": [
         "crates/mcode-fs/tests/scoped_filesystem_contract.rs",
         "crates/mcode-platform/src/lib.rs",
@@ -155,10 +161,12 @@
         "eligible local repository, worktree-base, project-group, and folder-workspace roots refresh transactionally from native settings; WSL worktree roots use the distro's probed actual home while remote/runtime records, imported paths, and unverified worktree metadata are not promoted to authority",
         "identity-verified capability-directory handles and atomic root replacement/revocation prevent traversal, symlink, stale-snapshot, and replacement-race escapes; WSL Linux tails retain case sensitivity",
         "the typed renderer client reapplies the existing pinned English numeric collator so readDir preserves Electron-compatible Unicode and numeric ordering",
+        "bounded same-handle reads enforce a 50 MiB byte limit with a growth sentinel, binary-prefix detection, Electron-compatible image/PDF previews, and stable live-log snapshot identity",
+        "atomic saves use cryptographically random capability-relative same-directory temporary files, preserve target permissions, flush content, follow only contained symlinks, atomically replace the target, and clean up returned-error temporaries",
         "Tauri commands run blocking filesystem operations off the async runtime and reject SSH-owned requests",
-        "the renderer routes local readDir/stat/pathExists through a lazy typed desktop client while direct SSH and remote runtime routes retain their existing owners",
-        "Windows WebView2 smoke proves authorized listing/stat/missing behavior and outside-root denial with lifecycle ACK and clean exit",
-        "directory listing, stat, and existence are migrated; file content, writes, linked worktree verification, external grants, search, watchers, native SSH, and cross-platform evidence remain open"
+        "the renderer routes local readDir/readFile/writeFile/stat/pathExists through a lazy typed desktop client while direct SSH and remote runtime routes retain their existing owners",
+        "Windows WebView2 smoke proves authorized listing/read/stat/missing behavior, file creation, existing-file replacement, live-snapshot identity, outside-root read/write denial, lifecycle ACK, and clean exit",
+        "directory listing, bounded content, atomic save, stat, and existence are migrated; linked-worktree verification, dynamic external grants, stale crash-temp recovery, watcher/tail streaming, native SSH, Windows ACL preservation, and cross-platform evidence remain open"
       ]
     },
     {
