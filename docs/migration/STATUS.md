@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 3 – native updater and Windows lifecycle implemented; capability-scoped filesystem discovery, bounded content, and atomic local saves integrated and verified.
+Phase 3 – native updater and Windows lifecycle implemented; capability-scoped filesystem discovery, bounded content, atomic local saves, and native-drop external claims integrated and verified on Windows.
 
 ## Last green commit
 
-`b62baa05c6` (`feat(tauri): add bounded reads and atomic file saves`).
+`538aa17657` (`feat(tauri): claim native dropped filesystem paths`).
 
 ## Completed in this session
 
@@ -158,8 +158,8 @@ Phase 3 – native updater and Windows lifecycle implemented; capability-scoped 
 - The renderer's local directory/stat/exists routes now use a lazy typed desktop filesystem client and reapply the existing pinned English numeric collator for Unicode-compatible Electron ordering. Direct SSH continues through the existing Electron SSH provider, and remote runtime RPC routes remain unchanged.
 - Focused evidence: 15 core Rust contracts, 1 WSL-home platform contract, 8 settings-root contracts, 12 Tauri adapter unit tests, 4 command/wiring source contracts, and 33 renderer contracts. Full workspace Rust tests, workspace clippy with `-D warnings`, focused oxlint/oxfmt, and the 10,649-module Tauri renderer production build pass.
 - Real Windows Tauri/WebView2 filesystem smoke: PASS for authorized directory listing, file metadata, missing-path behavior, and an outside-root `fs_path_denied`; lifecycle ACK, exit 0, marker `passed`, and zero remaining processes were confirmed.
-- Post-filesystem original-integrity guard: EXTERNAL DELTA is now 28 hash mismatches; original HEAD, branch, and staged diff remain unchanged. The two additions are worktree-palette test/implementation files, and none of the external edits were copied into the rewrite.
-- Remaining discovery work: independently verified linked-worktree registration, dynamic external-path grants, search/ignore behavior, watchers, native SSH replacement, and macOS/Linux evidence.
+- Post-filesystem original-integrity guard: EXTERNAL DELTA is now 45 hash mismatches; original HEAD, branch, and staged diff remain unchanged. None of the external edits were copied into the rewrite.
+- Remaining discovery work: independently verified linked-worktree registration, native non-drop external-path producers, search/ignore behavior, watchers, native SSH replacement, and macOS/Linux evidence.
 
 ## Scoped filesystem content and atomic-save slice
 
@@ -168,8 +168,17 @@ Phase 3 – native updater and Windows lifecycle implemented; capability-scoped 
 - Added native `fs_read_file` and `fs_write_file_atomic` commands, strict renderer response validation, local editor/MCP routing through the typed desktop client, explicit direct-SSH ownership retention, and unchanged remote-runtime RPC ownership. Independently authorized external previews/uploads remain on the existing provider until native grants exist.
 - Evidence: the full Rust workspace test suite passes, including 19 core filesystem contracts, 15 Tauri adapter tests, and 4 command/wiring contracts; 4 renderer files/47 tests and scoped all-target clippy pass with `-D warnings`. Full web typecheck reports only the known unrelated baseline errors. The production Tauri renderer built 10,649 modules, and `tauri build --debug --no-bundle --ci` produced the embedded debug application.
 - Real Windows Tauri/WebView2 filesystem smoke: PASS in 7.24 seconds. It verified bounded text read, non-empty log identity, atomic create (`atomic save`), atomic replacement (`atomic replacement`), missing behavior, and outside-root read/write denial; lifecycle ACK, exit 0, marker `passed`, and zero remaining processes were confirmed.
-- The original guard still shows unchanged HEAD, branch, and staged diff. External user changes in the original now account for 42 manifest hash mismatches; none were copied into the rewrite.
-- Remaining content work: dynamic external grants, watcher/local-tail service, crash-stale temporary recovery, Windows DACL/extended-metadata preservation, linked-worktree evidence, native SSH, and macOS/Linux validation.
+- The original guard still shows unchanged HEAD, branch, and staged diff. External user changes in the original now account for 45 manifest hash mismatches; none were copied into the rewrite.
+- Remaining content work: native chooser/import authorities, writable external-file save semantics, watcher/local-tail service, crash-stale temporary recovery, Windows DACL/extended-metadata preservation, linked-worktree evidence, native SSH, and macOS/Linux validation.
+
+## Native-drop external capability slice
+
+- Added a native-origin grant registry: only paths staged by a Tauri `DragDrop::Drop` event for the same window can be claimed. Pending and active grants are bounded per-window LRUs; repeated claims are idempotent; explicit revoke removes pending and active state; navigation and destroy advance a generation and reject stale in-flight claims.
+- Added pinned external capabilities. A dropped file is opened once and remains read-only, so replacing its leaf or retargeting an alias never exposes a sibling. A dropped directory grants its complete captured subtree through the existing capability-relative filesystem while retaining symlink-containment and atomic-write protections. Individual external-file writes fail with stable `fs_external_write_unsupported`.
+- Added typed Tauri authorize/revoke commands and a runtime renderer drop adapter. Tauri uses `WebviewWindow.onDragDropEvent`; Electron keeps the existing preload subscription. All six production drop subscribers now share the adapter, including CSS-coordinate conversion, Shadow DOM target discovery, and race-safe asynchronous unsubscription.
+- Security evidence: 3 core unit tests plus 26 filesystem capability contracts; 27 desktop adapter/registry tests; 6 command/wiring contracts; and 8 focused renderer files/66 tests pass. Scoped clippy with `-D warnings`, changed-file oxfmt/oxlint, `git diff --check`, and the 10,652-module production Tauri renderer build pass.
+- The existing real Windows WebView2 filesystem smoke was rebuilt through the Tauri CLI and rerun successfully: marker `passed`, atomic create/replacement exact, renderer shutdown acknowledgement present, exit 0, and no remaining process. It does not synthesize a native OS drop.
+- This is intentionally not full external-path parity. Non-drop producers still require dedicated native authorities; individually dropped files cannot yet be saved; the raw native path is pinned during the asynchronous claim rather than in the window-event callback; and a real OS-level drop smoke plus macOS/Linux evidence remain open.
 
 ## Current blockers
 
@@ -178,7 +187,7 @@ Phase 3 – native updater and Windows lifecycle implemented; capability-scoped 
 - Tauri manual close, close-to-tray, every direct full-renderer Restart/Relaunch action, tray Quit, and native update application now share the existing decision flow and atomic shutdown checkpoint. Real tray Open/left-click/Quit interaction, the one-time tray notice, tray attention/activity icon states, popout restoration, and non-Windows windowing evidence remain incomplete.
 - The native updater capability has no production public key or channel endpoint values, and no workflow publishes signed Tauri artifacts/feeds yet. Real network download/install, pinned/local/performance builds, crossgrade, rollback, session survival, and non-Windows evidence remain incomplete.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
-- The original repository received concurrent edits after the migration snapshot. Twenty-eight files now differ while its HEAD, branch, and staged diff remain unchanged. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
+- The original repository received concurrent edits after the migration snapshot. Forty-five files now differ while its HEAD, branch, and staged diff remain unchanged. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
 
 ## Parity summary
 
@@ -191,4 +200,4 @@ Phase 3 – native updater and Windows lifecycle implemented; capability-scoped 
 
 1. Close the remaining Windows shell/window gaps: one-time tray notice, attention/activity icon states, popout restoration, navigation containment, and focused E2E assertions.
 2. Add release-workflow artifact/manifest gates before attempting production key injection or a live updater install.
-3. Continue scoped filesystem parity with dynamic external grants, verified folder/linked-worktree scopes, native watcher/local-tail recovery, and crash-stale temporary cleanup before process/PTY migration.
+3. Continue scoped filesystem parity with verified folder/linked-worktree scopes, native watcher/local-tail recovery, native chooser/import authorities, writable external-file save semantics, and crash-stale temporary cleanup before process/PTY migration.
