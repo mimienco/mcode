@@ -150,6 +150,17 @@ Phase 3 – native updater complete at the credential-independent boundary; Wind
 - Final two-axis re-review: Standards PASS and Spec PASS after tray-install state separation, serialized effective-value preference transactions, release-CFG correction, and persistence-freeze deadlock prevention.
 - Post-windowing original-integrity guard: EXTERNAL DELTA remains exactly 26 hash mismatches; original HEAD, branch, and staged diff remain unchanged, and none of those files were copied into the rewrite.
 
+## Scoped filesystem discovery slice
+
+- Added the `mcode-fs` Rust boundary with identity-verified open capability-directory handles, handle-relative traversal, atomic root replacement/revocation, deterministic directory listing, stat, and existence probes.
+- Native `fs_read_dir`, `fs_stat`, and `fs_path_exists` commands use typed Electron-compatible payloads, structured errors, and `spawn_blocking`; an accidental SSH-owned invocation fails explicitly instead of touching local disk.
+- Native authority refresh serializes settings snapshots, exact root-set comparison, and capability replacement before every operation. Slow WSL probes run outside the settings-write lock, memoize each distro per extraction, and revalidate the snapshot before returning. WSL worktree roots use the distro's probed actual `$HOME`, fall back to the configured desktop root like Electron when unavailable, keep distribution-qualified UNC identity, and compare the Linux tail case-sensitively. Remote/runtime records, imported external paths, and unverified worktree metadata remain excluded, and removed roots are revoked atomically.
+- The renderer's local directory/stat/exists routes now use a lazy typed desktop filesystem client and reapply the existing pinned English numeric collator for Unicode-compatible Electron ordering. Direct SSH continues through the existing Electron SSH provider, and remote runtime RPC routes remain unchanged.
+- Focused evidence: 15 core Rust contracts, 1 WSL-home platform contract, 8 settings-root contracts, 12 Tauri adapter unit tests, 4 command/wiring source contracts, and 33 renderer contracts. Full workspace Rust tests, workspace clippy with `-D warnings`, focused oxlint/oxfmt, and the 10,649-module Tauri renderer production build pass.
+- Real Windows Tauri/WebView2 filesystem smoke: PASS for authorized directory listing, file metadata, missing-path behavior, and an outside-root `fs_path_denied`; lifecycle ACK, exit 0, marker `passed`, and zero remaining processes were confirmed.
+- Post-filesystem original-integrity guard: EXTERNAL DELTA is now 28 hash mismatches; original HEAD, branch, and staged diff remain unchanged. The two additions are worktree-palette test/implementation files, and none of the external edits were copied into the rewrite.
+- Remaining scoped-filesystem work: bounded file content, atomic writes, independently verified linked-worktree registration, external-path grants, search/ignore behavior, watchers, native SSH replacement, and macOS/Linux evidence.
+
 ## Current blockers
 
 - The copied Electron baseline is not fully green: production build is blocked by existing type errors and four terminal-performance E2E scenarios fail.
@@ -157,17 +168,17 @@ Phase 3 – native updater complete at the credential-independent boundary; Wind
 - Tauri manual close, close-to-tray, every direct full-renderer Restart/Relaunch action, tray Quit, and native update application now share the existing decision flow and atomic shutdown checkpoint. Real tray Open/left-click/Quit interaction, the one-time tray notice, tray attention/activity icon states, popout restoration, and non-Windows windowing evidence remain incomplete.
 - The native updater capability has no production public key or channel endpoint values, and no workflow publishes signed Tauri artifacts/feeds yet. Real network download/install, pinned/local/performance builds, crossgrade, rollback, session survival, and non-Windows evidence remain incomplete.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
-- The original repository received concurrent edits after the migration snapshot. Twenty-six files now differ while its HEAD, branch, and staged diff remain unchanged. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
+- The original repository received concurrent edits after the migration snapshot. Twenty-eight files now differ while its HEAD, branch, and staged diff remain unchanged. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
 
 ## Parity summary
 
 - done: 0
-- in progress: 6
-- not started: 30
+- in progress: 7
+- not started: 29
 - blocked: 0
 
 ## Exact next actions
 
 1. Close the remaining Windows shell/window gaps: one-time tray notice, attention/activity icon states, popout restoration, navigation containment, and focused E2E assertions.
 2. Add release-workflow artifact/manifest gates before attempting production key injection or a live updater install.
-3. Use the correlated IPC and renderer-import ledgers to implement the next scoped filesystem/process contracts.
+3. Continue scoped filesystem parity with bounded file reads, verified folder/linked-worktree scopes, atomic writes, and watcher recovery before process/PTY migration.

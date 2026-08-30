@@ -12,6 +12,7 @@
 - Minimal Tauri capabilities per window/webview and a restrictive CSP.
 - No remote content in privileged webviews; validated deep links and external URLs.
 - Canonical workspace roots, traversal/symlink escape protection, atomic files, and safe temporary paths.
+- Filesystem operations are relative to open capability-directory handles whose identity is checked against the canonical requested root at capture time. Trusted-root refresh serializes exact snapshot comparison and atomic replacement; slow platform discovery releases the settings-write lock, memoizes failures per extraction, then revalidates the snapshot so stale authority cannot be returned or reinstalled. Temporarily unavailable roots are retried, absolute symlink targets with parent components fail closed, and WSL UNC containment preserves the Linux tail's case sensitivity.
 - Validated argument vectors, bounded environment forwarding, process-tree ownership, and terminal control-sequence handling.
 - Host-key verification, protected credentials, established cryptography, protocol versioning, and replay/downgrade tests.
 - Signed updates, artifact provenance, draft gates, and channel allowlists.

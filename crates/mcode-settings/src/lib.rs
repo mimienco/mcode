@@ -2,6 +2,7 @@ use atomic_write_file::AtomicWriteFile;
 use mcode_platform::{DesktopWindowPreferences, WindowBounds};
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Map, Value};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
 use std::io::{self, Write};
@@ -270,6 +271,46 @@ impl SettingsService {
         })
     }
 
+    pub fn local_filesystem_roots(&self) -> Result<Vec<PathBuf>, SettingsServiceError> {
+        self.local_filesystem_roots_with_wsl_home(mcode_platform::wsl_home_directory)
+    }
+
+    pub fn local_filesystem_roots_with_wsl_home(
+        &self,
+        mut resolve_wsl_home: impl FnMut(&str) -> Option<PathBuf>,
+    ) -> Result<Vec<PathBuf>, SettingsServiceError> {
+        let mut resolved_homes = BTreeMap::<String, Option<PathBuf>>::new();
+        loop {
+            let persisted = {
+                let _read_guard = self
+                    .write_lock
+                    .lock()
+                    .map_err(|_| SettingsServiceError::LockPoisoned)?;
+                self.read_persisted()?
+            };
+            let roots = {
+                let mut resolve_once = |distro: &str| {
+                    let key = distro.to_ascii_lowercase();
+                    resolved_homes
+                        .entry(key)
+                        .or_insert_with(|| resolve_wsl_home(distro))
+                        .clone()
+                };
+                local_filesystem_roots_from_persisted(&persisted, &mut resolve_once)
+            };
+            let still_current = {
+                let _read_guard = self
+                    .write_lock
+                    .lock()
+                    .map_err(|_| SettingsServiceError::LockPoisoned)?;
+                self.read_persisted()? == persisted
+            };
+            if still_current {
+                return Ok(roots);
+            }
+        }
+    }
+
     pub fn persist_window_placement(
         &self,
         bounds: Option<WindowBounds>,
@@ -394,6 +435,338 @@ impl SettingsService {
         atomic_file
             .commit()
             .map_err(|error| SettingsServiceError::CommitAtomicFile(error.to_string()))
+    }
+}
+
+fn local_filesystem_roots_from_persisted(
+    persisted: &Value,
+    resolve_wsl_home: &mut impl FnMut(&str) -> Option<PathBuf>,
+) -> Vec<PathBuf> {
+    let mut roots = BTreeSet::new();
+    let repos = object_array(persisted, "repos");
+    let groups = object_array(persisted, "projectGroups");
+    let local_repos = repos
+        .iter()
+        .copied()
+        .filter(|repo| record_is_local(repo))
+        .collect::<Vec<_>>();
+
+    for repo in &local_repos {
+        insert_nonempty_path(&mut roots, repo.get("path"));
+        insert_worktree_base_root(
+            &mut roots,
+            repo,
+            persisted.get("settings"),
+            resolve_wsl_home,
+        );
+    }
+    if local_repos.is_empty() {
+        let workspace_dir = persisted
+            .get("settings")
+            .and_then(Value::as_object)
+            .and_then(|settings| settings.get("workspaceDir"))
+            .and_then(Value::as_str)
+            .filter(|path| !path.trim().is_empty());
+        if let Some(workspace_dir) = workspace_dir {
+            let workspace_dir = PathBuf::from(workspace_dir);
+            let resolved = if workspace_dir.is_absolute() {
+                workspace_dir
+            } else if let Ok(current_dir) = std::env::current_dir() {
+                current_dir.join(workspace_dir)
+            } else {
+                PathBuf::new()
+            };
+            if !resolved.as_os_str().is_empty() {
+                roots.insert(lexically_normalize(&resolved));
+            }
+        }
+    }
+
+    for group in &groups {
+        let Some(group_id) = group.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(parent_path) = group.get("parentPath").and_then(Value::as_str) else {
+            continue;
+        };
+        if !is_remote_only_folder_scope(parent_path, group_id, group, &groups, &repos) {
+            roots.insert(PathBuf::from(parent_path));
+        }
+    }
+
+    for workspace in object_array(persisted, "folderWorkspaces") {
+        let Some(folder_path) = workspace.get("folderPath").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(group_id) = workspace.get("projectGroupId").and_then(Value::as_str) else {
+            continue;
+        };
+        let inherited_group = groups
+            .iter()
+            .copied()
+            .find(|group| group.get("id").and_then(Value::as_str) == Some(group_id));
+        let explicitly_remote =
+            record_is_remote(workspace) || inherited_group.is_some_and(record_is_remote);
+        if !explicitly_remote
+            && !candidate_repos(folder_path, group_id, &groups, &repos)
+                .is_some_and(|candidates| candidates.iter().all(|repo| record_is_remote(repo)))
+        {
+            roots.insert(PathBuf::from(folder_path));
+        }
+    }
+
+    roots.into_iter().collect()
+}
+
+fn object_array<'a>(persisted: &'a Value, key: &str) -> Vec<&'a Map<String, Value>> {
+    persisted
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .collect()
+}
+
+fn insert_worktree_base_root(
+    roots: &mut BTreeSet<PathBuf>,
+    repo: &Map<String, Value>,
+    settings: Option<&Value>,
+    resolve_wsl_home: &mut impl FnMut(&str) -> Option<PathBuf>,
+) {
+    let Some(repo_path) = repo.get("path").and_then(Value::as_str) else {
+        return;
+    };
+    let repo_configured = repo
+        .get("worktreeBasePath")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty());
+    let global_configured = settings
+        .and_then(Value::as_object)
+        .and_then(|settings| settings.get("workspaceDir"))
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty());
+    let Some(configured) = repo_configured.or(global_configured) else {
+        return;
+    };
+    let configured = resolve_wsl_repo_worktree_base_path(repo_path, configured);
+    let configured = if is_wsl_unc_path(repo_path)
+        && is_windows_desktop_absolute(&configured)
+        && !is_wsl_unc_path(&configured)
+    {
+        let Some((distro, _)) = parse_wsl_unc_path(repo_path) else {
+            return;
+        };
+        resolve_wsl_home(distro).map_or(configured, |home| {
+            format!(
+                r"{}\mcode\workspaces",
+                home.to_string_lossy().trim_end_matches(['\\', '/'])
+            )
+        })
+    } else {
+        configured
+    };
+    let configured = PathBuf::from(configured);
+    let root = if configured.is_absolute() {
+        configured
+    } else {
+        PathBuf::from(repo_path).join(configured)
+    };
+    roots.insert(lexically_normalize(&root));
+}
+
+fn resolve_wsl_repo_worktree_base_path(repo_path: &str, base_path: &str) -> String {
+    let Some((distro, _)) = parse_wsl_unc_path(repo_path) else {
+        return base_path.to_owned();
+    };
+    if !base_path.starts_with('/') || base_path.starts_with("//") {
+        return base_path.to_owned();
+    }
+    let collapsed = collapse_posix_dot_segments(base_path);
+    format!(
+        r"\\wsl.localhost\{distro}{}",
+        if collapsed == "/" {
+            r"\".to_owned()
+        } else {
+            collapsed.replace('/', r"\")
+        }
+    )
+}
+
+fn parse_wsl_unc_path(path: &str) -> Option<(&str, String)> {
+    let normalized = path.replace('\\', "/");
+    let mut components = normalized.strip_prefix("//")?.split('/');
+    let host = components.next()?;
+    if !host.eq_ignore_ascii_case("wsl.localhost") && !host.eq_ignore_ascii_case("wsl$") {
+        return None;
+    }
+    let distro = components.next()?.trim();
+    if distro.is_empty() {
+        return None;
+    }
+    let linux_path = format!("/{}", components.collect::<Vec<_>>().join("/"));
+    let distro_start = path.find(distro)?;
+    let distro_end = distro_start.checked_add(distro.len())?;
+    Some((path.get(distro_start..distro_end)?, linux_path))
+}
+
+fn is_wsl_unc_path(path: &str) -> bool {
+    parse_wsl_unc_path(path).is_some()
+}
+
+fn is_windows_desktop_absolute(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    (bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\'))
+        || (path.starts_with(r"\\") && !is_wsl_unc_path(path))
+}
+
+fn collapse_posix_dot_segments(path: &str) -> String {
+    let mut segments = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            segment => segments.push(segment),
+        }
+    }
+    format!("/{}", segments.join("/"))
+}
+
+fn lexically_normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            component => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn is_remote_only_folder_scope(
+    folder_path: &str,
+    group_id: &str,
+    scope: &Map<String, Value>,
+    groups: &[&Map<String, Value>],
+    repos: &[&Map<String, Value>],
+) -> bool {
+    record_is_remote(scope)
+        || candidate_repos(folder_path, group_id, groups, repos)
+            .is_some_and(|candidates| candidates.iter().all(|repo| record_is_remote(repo)))
+}
+
+fn candidate_repos<'a>(
+    folder_path: &str,
+    group_id: &str,
+    groups: &[&Map<String, Value>],
+    repos: &[&'a Map<String, Value>],
+) -> Option<Vec<&'a Map<String, Value>>> {
+    let candidates = repos
+        .iter()
+        .copied()
+        .filter(|repo| {
+            repo.get("projectGroupId")
+                .and_then(Value::as_str)
+                .is_some_and(|repo_group_id| group_contains(groups, group_id, repo_group_id))
+                || repo
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .is_some_and(|path| path_is_within(folder_path, path))
+        })
+        .collect::<Vec<_>>();
+    (!candidates.is_empty()).then_some(candidates)
+}
+
+fn group_contains(groups: &[&Map<String, Value>], ancestor_id: &str, child_id: &str) -> bool {
+    let mut current = Some(child_id);
+    for _ in 0..=groups.len() {
+        let Some(id) = current else {
+            return false;
+        };
+        if id == ancestor_id {
+            return true;
+        }
+        current = groups
+            .iter()
+            .copied()
+            .find(|group| group.get("id").and_then(Value::as_str) == Some(id))
+            .and_then(|group| group.get("parentGroupId"))
+            .and_then(Value::as_str);
+    }
+    false
+}
+
+fn path_is_within(root: &str, target: &str) -> bool {
+    #[cfg(windows)]
+    {
+        let root_wsl = parse_wsl_unc_path(root);
+        let target_wsl = parse_wsl_unc_path(target);
+        match (root_wsl, target_wsl) {
+            (Some((root_distro, root_tail)), Some((target_distro, target_tail))) => {
+                if !root_distro.eq_ignore_ascii_case(target_distro) {
+                    return false;
+                }
+                let root_segments = root_tail
+                    .split('/')
+                    .filter(|segment| !segment.is_empty())
+                    .collect::<Vec<_>>();
+                let target_segments = target_tail
+                    .split('/')
+                    .filter(|segment| !segment.is_empty())
+                    .collect::<Vec<_>>();
+                return target_segments.len() >= root_segments.len()
+                    && target_segments
+                        .iter()
+                        .zip(root_segments)
+                        .all(|(target_segment, root_segment)| target_segment == &root_segment);
+            }
+            (Some(_), None) | (None, Some(_)) => return false,
+            (None, None) => {}
+        }
+        let root = Path::new(root);
+        let target = Path::new(target);
+        let root = root.components().collect::<Vec<_>>();
+        let target = target.components().collect::<Vec<_>>();
+        target.len() >= root.len()
+            && target.iter().zip(root).all(|(target, root)| {
+                target
+                    .as_os_str()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&root.as_os_str().to_string_lossy())
+            })
+    }
+    #[cfg(not(windows))]
+    {
+        Path::new(target).starts_with(Path::new(root))
+    }
+}
+
+fn record_is_local(record: &Map<String, Value>) -> bool {
+    let connection_is_local = record.get("connectionId").is_none_or(Value::is_null);
+    let execution_host_is_local = record
+        .get("executionHostId")
+        .is_none_or(|host| host.is_null() || host.as_str() == Some("local"));
+    connection_is_local && execution_host_is_local
+}
+
+fn record_is_remote(record: &Map<String, Value>) -> bool {
+    !record_is_local(record)
+}
+
+fn insert_nonempty_path(roots: &mut BTreeSet<PathBuf>, value: Option<&Value>) {
+    if let Some(path) = value
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+    {
+        roots.insert(PathBuf::from(path));
     }
 }
 

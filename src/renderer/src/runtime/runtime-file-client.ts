@@ -47,6 +47,7 @@ import {
   searchLegacyQuickOpenInventory
 } from './runtime-legacy-quick-open-inventory'
 import type { QuickOpenMatchMode } from '../../../shared/quick-open-path-search'
+import { runtimeDesktopFilesystemClient } from '../desktop/runtime-desktop-filesystem-client'
 
 export type RuntimeReadableFileContent = {
   content: string
@@ -480,7 +481,12 @@ export async function readRuntimeDirectory(
   const remoteArgs = getRemoteFileArgs(context, dirPath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    return window.api.fs.readDir({ dirPath, connectionId: context.connectionId })
+    if (context.connectionId) {
+      return window.api.fs.readDir({ dirPath, connectionId: context.connectionId })
+    }
+    return runtimeDesktopFilesystemClient.readDir({
+      dirPath
+    })
   }
   return callRuntimeRpc<DirEntry[]>(
     remoteArgs.target,
@@ -1201,9 +1207,14 @@ export async function statRuntimePath(
   const remoteArgs = getRemoteFileArgs(context, absolutePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    return window.api.fs.stat({
-      filePath: absolutePath,
-      connectionId: context.connectionId
+    if (context.connectionId) {
+      return window.api.fs.stat({
+        filePath: absolutePath,
+        connectionId: context.connectionId
+      })
+    }
+    return runtimeDesktopFilesystemClient.stat({
+      filePath: absolutePath
     })
   }
   return callRuntimeRpc<{ size: number; isDirectory: boolean; mtime: number }>(
@@ -1421,9 +1432,14 @@ export async function runtimePathExists(
   const remoteArgs = getRemoteFileArgs(context, absolutePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    return window.api.fs.pathExists({
-      filePath: absolutePath,
-      connectionId: context.connectionId
+    if (context.connectionId) {
+      return window.api.fs.pathExists({
+        filePath: absolutePath,
+        connectionId: context.connectionId
+      })
+    }
+    return runtimeDesktopFilesystemClient.pathExists({
+      filePath: absolutePath
     })
   }
 

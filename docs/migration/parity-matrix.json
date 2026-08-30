@@ -140,11 +140,26 @@
       "currentFiles": ["src/main", "src/preload/index.ts"],
       "currentBehavior": "Workspace-scoped reads/writes, canonicalization, atomic updates, ignores, and path validation.",
       "targetRustModule": "crates/mcode-fs/src/scoped",
-      "targetCommand": ["fs_read", "fs_write_atomic", "fs_list"],
-      "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
-      "evidence": []
+      "targetCommand": ["fs_read_dir", "fs_stat", "fs_path_exists"],
+      "tests": [
+        "crates/mcode-fs/tests/scoped_filesystem_contract.rs",
+        "crates/mcode-platform/src/lib.rs",
+        "crates/mcode-settings/tests/filesystem_scope_roots.rs",
+        "src-tauri/tests/filesystem_command_contract.rs",
+        "src/renderer/src/desktop/runtime-desktop-filesystem-client.test.ts",
+        "src/renderer/src/runtime/runtime-file-client.test.ts"
+      ],
+      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "status": "in_progress",
+      "evidence": [
+        "eligible local repository, worktree-base, project-group, and folder-workspace roots refresh transactionally from native settings; WSL worktree roots use the distro's probed actual home while remote/runtime records, imported paths, and unverified worktree metadata are not promoted to authority",
+        "identity-verified capability-directory handles and atomic root replacement/revocation prevent traversal, symlink, stale-snapshot, and replacement-race escapes; WSL Linux tails retain case sensitivity",
+        "the typed renderer client reapplies the existing pinned English numeric collator so readDir preserves Electron-compatible Unicode and numeric ordering",
+        "Tauri commands run blocking filesystem operations off the async runtime and reject SSH-owned requests",
+        "the renderer routes local readDir/stat/pathExists through a lazy typed desktop client while direct SSH and remote runtime routes retain their existing owners",
+        "Windows WebView2 smoke proves authorized listing/stat/missing behavior and outside-root denial with lifecycle ACK and clean exit",
+        "directory listing, stat, and existence are migrated; file content, writes, linked worktree verification, external grants, search, watchers, native SSH, and cross-platform evidence remain open"
+      ]
     },
     {
       "id": "filesystem.watcher",

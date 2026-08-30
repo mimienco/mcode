@@ -9,6 +9,7 @@
 pub mod events;
 pub mod tray;
 pub mod window;
+pub mod wsl;
 
 pub use events::TrayEvent;
 pub use tray::{TRAY_ICON_PATH, TRAY_TOOLTIP, TrayError, install_tray};
@@ -17,3 +18,4 @@ pub use window::{
     MIN_VISIBLE_WINDOW_HEIGHT, MIN_VISIBLE_WINDOW_WIDTH, MonitorBounds, WindowBounds,
     bounds_to_persist, restorable_window_bounds, should_hide_close_to_tray,
 };
+pub use wsl::wsl_home_directory;
