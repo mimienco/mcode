@@ -118,6 +118,13 @@ vi.mock('./SidebarFeedbackDialog', () => ({
   SidebarFeedbackDialog: () => <div data-testid="feedback-dialog" />
 }))
 
+vi.mock('@/desktop/runtime-desktop-app-lifecycle-client', () => ({
+  desktopAppLifecycleClient: {
+    restart: mocks.appRestart,
+    relaunch: vi.fn()
+  }
+}))
+
 function installWindowApi(): void {
   Object.assign(window, {
     api: {
@@ -230,6 +237,17 @@ describe('SidebarSettingsHelpMenu', () => {
   it('renders Restart MCode by default', () => {
     const html = renderToStaticMarkup(<SidebarSettingsHelpMenu />)
     expect(html).toContain('Restart MCode')
+  })
+
+  it('routes Restart MCode through the runtime lifecycle client', async () => {
+    const container = await renderMenu()
+    const restartButton = findMenuItem(container, 'Restart MCode')
+
+    await act(async () => {
+      restartButton.click()
+    })
+
+    expect(mocks.appRestart).toHaveBeenCalledOnce()
   })
 
   it('renders Docs link', () => {

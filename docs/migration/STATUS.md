@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 3 – production renderer import boundary locked; continuing full-renderer lifecycle integration.
+Phase 3 – full-renderer restarts routed through the durable lifecycle client; beginning the native Tauri updater capability.
 
 ## Last green commit
 
@@ -58,6 +58,9 @@ Phase 3 – production renderer import boundary locked; continuing full-renderer
 - Added an exact stale-checked allowlist for four Node imports in two production-named test-support modules; neither module is reachable from a production entry.
 - Made unresolved local imports, non-literal dynamic imports, newly reachable exceptions, and stale allowlist entries hard failures.
 - Re-ran the two-axis review at `463f002bc2`: Standards PASS and Spec PASS with no remaining renderer-inventory findings.
+- Routed all four remaining production renderer Restart/Relaunch callers through the runtime desktop lifecycle client.
+- Added a production-source contract that rejects any new direct `window.api.app.restart()` or `relaunch()` caller outside the Electron compatibility adapter.
+- Kept update application separate from ordinary restart: the existing Electron `quitAndInstall` checkpoint contracts remain green, while a real Tauri updater apply path is still required.
 
 ## Tests executed
 
@@ -104,12 +107,15 @@ Phase 3 – production renderer import boundary locked; continuing full-renderer
 - Captured-source renderer import generation plus `--check`: PASS (4,716 reachable files, 25,964 import sites, 72 packages, 0 reachable Node/Electron imports, 4 exact unreachable exceptions).
 - Focused renderer inventory oxlint: PASS; oxfmt check: PASS after formatting.
 - Post-inventory original integrity guard: EXTERNAL DELTA detected; HEAD, branch, and staged diff unchanged, while `AGENTS.md` and three Settings files changed in the original between 14:07 and 14:25. Migration evidence was regenerated from the verified read-only backup.
+- Full-renderer restart routing plus runtime lifecycle client: PASS (2 files, 4 tests).
+- Existing updater/app-restart preparation and durability contracts: PASS (3 files, 11 tests).
+- Affected startup, UpdateCard, AdvancedPane, and Sidebar restart paths: PASS (84 full-suite tests plus 2 focused Sidebar restart tests). The full Sidebar suite retains two unrelated pre-existing Discord assertions against concurrently changed source.
 
 ## Current blockers
 
 - The copied Electron baseline is not fully green: production build is blocked by existing type errors and four terminal-performance E2E scenarios fail.
 - The Tauri shell exposes the lifecycle context command and typed custom-window controls. The rest of the renderer still depends broadly on `window.api`, so the shell is not feature-complete or parity-ready.
-- Tauri manual close and app-wide native Quit/Restart now use the existing decision flow and await an atomic shutdown checkpoint. Updater-triggered restart integration in the full production renderer, minimize-to-tray, and startup restore remain incomplete.
+- Tauri manual close and every direct full-renderer Restart/Relaunch action now use the existing decision flow and await an atomic shutdown checkpoint. Native Tauri update check/download/apply, minimize-to-tray, and startup restore remain incomplete.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
 - The original repository received concurrent edits after the migration snapshot. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
 
@@ -122,6 +128,6 @@ Phase 3 – production renderer import boundary locked; continuing full-renderer
 
 ## Exact next actions
 
-1. Connect updater-triggered restart and the full production renderer to the proven acknowledgement/durability protocol.
+1. Implement the real Tauri updater check/download/apply capability without substituting a plain restart for a successful install.
 2. Port Windows minimize-to-tray and startup restore, then expand the real WebView2 harness beyond the targeted lifecycle page.
 3. Use the correlated IPC and renderer-import ledgers to prioritize and specify scoped filesystem/process contracts.

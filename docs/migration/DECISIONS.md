@@ -46,6 +46,10 @@ A native Quit/Restart request first requires an immediate receipt ACK. The exist
 
 Renderer Node/Electron evidence is derived from the verified captured source backup's actual production entries, not repository-wide substring matches or filename guesses. The generator traces runtime local imports through shared source, records external packages, and rejects unresolved dynamic/local edges. Node imports may be allowlisted only when their exact source modules are unreachable from every production entry; stale exceptions and newly reachable exceptions are errors.
 
+## D-009: Renderer restart and update application remain separate capabilities
+
+Every production renderer action that restarts or relaunches the app routes through the runtime desktop lifecycle client. Tauri therefore uses the versioned request/receipt/cancel/atomic-execute protocol, while Electron retains its compatibility implementation behind the same client. Applying a downloaded update remains a distinct updater capability: a plain restart must never masquerade as a successful Tauri update install.
+
 ## Pending decisions
 
 - PTY crate/FFI strategy after behavior and throughput spikes on all platforms.

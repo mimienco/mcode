@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { desktopAppLifecycleClient } from '@/desktop/runtime-desktop-app-lifecycle-client'
 import {
   BookOpen,
   CircleHelp,
@@ -126,7 +127,7 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
     toast.info(
       translate('auto.components.sidebar.SidebarSettingsHelpMenu.5161eef55d', 'Restarting MCode…')
     )
-    void window.api.app.restart().catch((error) => {
+    void desktopAppLifecycleClient.restart().catch((error) => {
       if (mountedRef.current) {
         setIsRestartingMCode(false)
         toast.error(

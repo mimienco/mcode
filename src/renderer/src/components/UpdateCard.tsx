@@ -15,6 +15,7 @@ import {
 } from '../../../shared/updater-windows-signature-check'
 import { getReleaseNotesUrlForVersion } from '../../../shared/release-channel'
 import { translate } from '@/i18n/i18n'
+import { desktopAppLifecycleClient } from '@/desktop/runtime-desktop-app-lifecycle-client'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -280,7 +281,7 @@ export function UpdateCard() {
     setCompatibilitySetupError(null)
     void window.api.settings
       .set({ electronHttp1CompatibilityMode: true })
-      .then(() => window.api.app.relaunch())
+      .then(() => desktopAppLifecycleClient.relaunch())
       .catch((error) => {
         const message = String((error as Error)?.message ?? error)
         console.error('[updates] failed to enable HTTP/1.1 compatibility:', error)

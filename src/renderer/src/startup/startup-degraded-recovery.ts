@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '../store'
 import { getStartupErrorFallbackUI } from '../lib/startup-ui-hydration'
+import { desktopAppLifecycleClient } from '../desktop/runtime-desktop-app-lifecycle-client'
 import {
   collectTerminalProviderSnapshotPtyIds,
   refreshTerminalProviderSnapshotCapabilities
@@ -73,7 +74,7 @@ export async function recoverFromDegradedStartup(args: DegradedStartupRecoveryAr
     action: {
       label: translate('auto.App.caea5b51b9', 'Restart now'),
       onClick: () => {
-        void window.api.app.relaunch()
+        void desktopAppLifecycleClient.relaunch()
       }
     }
   })

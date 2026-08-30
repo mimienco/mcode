@@ -10,6 +10,7 @@ import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitch } from './SettingsFormControls'
 import { getAdvancedPaneSearchEntries, getAdvancedSearchEntry } from './advanced-search'
 import { translate } from '@/i18n/i18n'
+import { desktopAppLifecycleClient } from '@/desktop/runtime-desktop-app-lifecycle-client'
 
 export { getAdvancedPaneSearchEntries }
 
@@ -32,7 +33,7 @@ export function AdvancedPane({ settings, updateSettings }: AdvancedPaneProps): R
 
   const handleHttp1CompatibilityRelaunch = (): void => {
     setHttp1CompatibilityRelaunching(true)
-    void window.api.app.relaunch().catch((error) => {
+    void desktopAppLifecycleClient.relaunch().catch((error) => {
       console.error('[settings] failed to relaunch for HTTP/1.1 compatibility:', error)
       if (mountedRef.current) {
         setHttp1CompatibilityRelaunching(false)

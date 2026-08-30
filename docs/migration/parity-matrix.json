@@ -24,6 +24,8 @@
         "src/renderer/src/desktop/desktop-client.test.ts",
         "src/renderer/src/desktop/lifecycle-smoke-client.test.ts",
         "src/renderer/src/desktop/tauri-desktop-app-lifecycle-capability.test.ts",
+        "src/renderer/src/desktop/runtime-desktop-app-lifecycle-client.test.ts",
+        "src/renderer/src/desktop/desktop-app-restart-routing.test.ts",
         "src/renderer/src/desktop/runtime-desktop-shutdown-checkpoint-client.test.ts",
         "src/shared/shutdown-checkpoint-contract.test.ts",
         "src-tauri/tests/shutdown_checkpoint_command_contract.rs"
@@ -42,7 +44,8 @@
         "confirm, execution claim, and native execution are exposed as one backend command",
         "typed TypeScript command errors preserve validated code, context, and safe userMessage",
         "shared v1 fixture guards every workspace-session field and mirrored enum set",
-        "local and runtime-host checkpoints retain host-owned topology, apply retirement tombstones, and do not revive terminated SSH leases"
+        "local and runtime-host checkpoints retain host-owned topology, apply retirement tombstones, and do not revive terminated SSH leases",
+        "all production renderer restart and relaunch callers route through the runtime lifecycle client"
       ]
     },
     {
