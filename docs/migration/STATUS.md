@@ -6,7 +6,7 @@ Phase 3 – full-renderer restarts routed through the durable lifecycle client; 
 
 ## Last green commit
 
-`463f002bc2` (`feat(migration): lock renderer import boundary`).
+`2834a9574e` (`refactor(tauri): route renderer restarts through lifecycle`).
 
 ## Completed in this session
 
@@ -61,6 +61,7 @@ Phase 3 – full-renderer restarts routed through the durable lifecycle client; 
 - Routed all four remaining production renderer Restart/Relaunch callers through the runtime desktop lifecycle client.
 - Added a production-source contract that rejects any new direct `window.api.app.restart()` or `relaunch()` caller outside the Electron compatibility adapter.
 - Kept update application separate from ordinary restart: the existing Electron `quitAndInstall` checkpoint contracts remain green, while a real Tauri updater apply path is still required.
+- Re-ran the two-axis review at `2834a9574e`: Standards PASS and Spec PASS with no remaining restart-routing findings.
 
 ## Tests executed
 
