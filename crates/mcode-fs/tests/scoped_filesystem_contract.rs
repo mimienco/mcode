@@ -477,12 +477,13 @@ fn exact_directory_capability_grants_only_the_authorized_subtree() {
     let root = TestDirectory::new();
     let directory = root.path().join("external");
     let child = directory.join("child.txt");
-    let created = directory.join("created.txt");
     let outside_sibling = root.path().join("outside.txt");
     fs::create_dir(&directory).unwrap();
     fs::write(&child, "child").unwrap();
     fs::write(&outside_sibling, "outside").unwrap();
     let capability = ExactPathCapability::authorize(&directory).unwrap();
+    assert!(capability.matches_root(&directory));
+    assert!(!capability.matches_root(&child));
 
     assert_eq!(
         capability.read_dir(&directory).unwrap()[0].name,
@@ -492,10 +493,11 @@ fn exact_directory_capability_grants_only_the_authorized_subtree() {
         capability.read_file_bounded(&child, 32, None).unwrap(),
         BoundedFileRead::Bytes(b"child".to_vec())
     );
-    capability
-        .write_file_atomic(&created, b"created", 32)
-        .unwrap();
-    assert_eq!(fs::read_to_string(&created).unwrap(), "created");
+    let write_error = capability
+        .write_file_atomic(&child, b"replacement", 32)
+        .unwrap_err();
+    assert_eq!(write_error.code(), "fs_external_write_unsupported");
+    assert_eq!(fs::read_to_string(&child).unwrap(), "child");
     assert!(matches!(
         capability.read_file_bounded(&outside_sibling, 32, None),
         Err(FsError::PathOutsideScope { .. })

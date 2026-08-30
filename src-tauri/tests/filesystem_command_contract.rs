@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 const FILESYSTEM_COMMANDS: &str = include_str!("../src/filesystem_commands.rs");
 const TAURI_LIB: &str = include_str!("../src/lib.rs");
 const EXACT_PATH_CAPABILITY: &str = include_str!("../../crates/mcode-fs/src/external.rs");
+const EXTERNAL_PATH_GRANTS: &str = include_str!("../src/external_path_grants.rs");
+const NATIVE_FILE_DROP: &str = include_str!("../../src/shared/native-file-drop.ts");
 
 const FILESYSTEM_COMMAND_NAMES: [&str; 7] = [
     "fs_read_dir",
@@ -107,6 +109,21 @@ fn external_grants_are_exact_window_scoped_and_revoked_on_navigation_or_destroy(
     assert!(TAURI_LIB.contains("revoke_window_grants(&destroyed_window_label)"));
     assert!(TAURI_LIB.contains("fs_authorize_external_path,"));
     assert!(TAURI_LIB.contains("fs_revoke_external_path,"));
+    assert!(EXTERNAL_PATH_GRANTS.contains("pending_native_grants: VecDeque<RetainedGrant>"));
+    let claim = EXTERNAL_PATH_GRANTS
+        .split_once("pub(crate) fn claim")
+        .unwrap()
+        .1
+        .split_once("pub(crate) fn capability_for")
+        .unwrap()
+        .0;
+    assert!(!claim.contains("ExactPathCapability::authorize"));
+    assert!(EXTERNAL_PATH_GRANTS.contains("DEFAULT_MAX_RETAINED_GRANTS: usize = 256"));
+    assert!(EXTERNAL_PATH_GRANTS.contains("MAX_NATIVE_DROP_PATHS: usize = 256"));
+    assert!(NATIVE_FILE_DROP.contains("NATIVE_FILE_DROP_MAX_PATHS = 256"));
+    assert!(EXTERNAL_PATH_GRANTS.contains("windows: HashMap<String, WindowGrants>"));
+    assert!(FILESYSTEM_COMMANDS.contains("FsAuthorizeExternalPathResult"));
+    assert!(FILESYSTEM_COMMANDS.contains("FsExternalPathAuthorization::TrustedRoot"));
 }
 
 #[test]

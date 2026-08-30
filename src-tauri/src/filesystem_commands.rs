@@ -199,6 +199,19 @@ pub(crate) struct FsFileContent {
     file_identity: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum FsExternalPathAuthorization {
+    TrustedRoot,
+    NativeDrop,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FsAuthorizeExternalPathResult {
+    authorization: FsExternalPathAuthorization,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FilesystemCommandError {
@@ -354,7 +367,7 @@ fn claim_external_path(
     state: &NativeFilesystemState,
     window_label: &str,
     target_path: &Path,
-) -> Result<(), FilesystemCommandError> {
+) -> Result<FsExternalPathAuthorization, FilesystemCommandError> {
     let claimed = state
         .external_grants
         .claim(window_label, target_path)
@@ -368,7 +381,36 @@ fn claim_external_path(
             "path was not staged by a native drop for this window",
         ));
     }
-    Ok(())
+    Ok(FsExternalPathAuthorization::NativeDrop)
+}
+
+fn authorize_external_path(
+    state: &NativeFilesystemState,
+    window_label: &str,
+    target_path: &Path,
+) -> Result<FsAuthorizeExternalPathResult, FilesystemCommandError> {
+    state.refresh_roots_if_changed(FS_AUTHORIZE_EXTERNAL_PATH_OPERATION)?;
+    let authorization = match state.filesystem.path_exists(target_path) {
+        Ok(_) => {
+            state
+                .external_grants
+                .discard_pending_root(window_label, target_path)
+                .map_err(|error| {
+                    FilesystemCommandError::filesystem(error, FS_AUTHORIZE_EXTERNAL_PATH_OPERATION)
+                })?;
+            FsExternalPathAuthorization::TrustedRoot
+        }
+        Err(FsError::PathOutsideScope { .. } | FsError::SymlinkTraversalDenied { .. }) => {
+            claim_external_path(state, window_label, target_path)?
+        }
+        Err(error) => {
+            return Err(FilesystemCommandError::filesystem(
+                error,
+                FS_AUTHORIZE_EXTERNAL_PATH_OPERATION,
+            ));
+        }
+    };
+    Ok(FsAuthorizeExternalPathResult { authorization })
 }
 
 async fn run_filesystem_task<T: Send + 'static>(
@@ -515,12 +557,12 @@ pub(crate) async fn fs_authorize_external_path(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, NativeFilesystemState>,
     target_path: String,
-) -> Result<(), FilesystemCommandError> {
+) -> Result<FsAuthorizeExternalPathResult, FilesystemCommandError> {
     let target_path = local_path(target_path, None, FS_AUTHORIZE_EXTERNAL_PATH_OPERATION)?;
     let state = state.inner().clone();
     let window_label = window.label().to_owned();
     tauri::async_runtime::spawn_blocking(move || {
-        claim_external_path(&state, &window_label, &target_path)
+        authorize_external_path(&state, &window_label, &target_path)
     })
     .await
     .map_err(|error| {
@@ -1036,6 +1078,84 @@ mod tests {
     }
 
     #[test]
+    fn authorization_reports_trusted_root_without_a_native_stage() {
+        let fixture = fixture_path();
+        let trusted_root = fixture.join("trusted");
+        fs::create_dir_all(&trusted_root).unwrap();
+        let trusted_file = trusted_root.join("trusted.txt");
+        fs::write(&trusted_file, "trusted").unwrap();
+        let settings_path = fixture.join("mcode-data.json");
+        write_repo_root(&settings_path, "trusted", &trusted_root);
+        let state = NativeFilesystemState::new(
+            ScopedFilesystem::new(),
+            SettingsService::new(settings_path),
+        );
+
+        let result = authorize_external_path(&state, "main", &trusted_file).unwrap();
+
+        assert_eq!(
+            serde_json::to_value(result).unwrap(),
+            json!({ "authorization": "trustedRoot" })
+        );
+        drop(state);
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
+    fn trusted_root_authorization_discards_its_exact_pending_native_capture() {
+        let fixture = fixture_path();
+        let trusted_root = fixture.join("trusted");
+        fs::create_dir_all(&trusted_root).unwrap();
+        let trusted_file = trusted_root.join("trusted.txt");
+        fs::write(&trusted_file, "trusted").unwrap();
+        let settings_path = fixture.join("mcode-data.json");
+        write_repo_root(&settings_path, "trusted", &trusted_root);
+        let state = NativeFilesystemState::new(
+            ScopedFilesystem::new(),
+            SettingsService::new(settings_path),
+        );
+        state
+            .external_grants
+            .stage_native_paths("main", std::slice::from_ref(&trusted_file))
+            .unwrap();
+
+        let result = authorize_external_path(&state, "main", &trusted_file).unwrap();
+
+        assert_eq!(
+            result.authorization,
+            FsExternalPathAuthorization::TrustedRoot
+        );
+        assert!(!state.external_grants.claim("main", &trusted_file).unwrap());
+        drop(state);
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
+    fn authorization_reports_native_drop_for_a_captured_external_object() {
+        let fixture = fixture_path();
+        fs::create_dir_all(&fixture).unwrap();
+        let target = fixture.join("external.txt");
+        fs::write(&target, "external").unwrap();
+        let state = NativeFilesystemState::new(
+            ScopedFilesystem::new(),
+            SettingsService::new(fixture.join("missing-settings.json")),
+        );
+        state
+            .external_grants
+            .stage_native_paths("main", std::slice::from_ref(&target))
+            .unwrap();
+
+        let result = authorize_external_path(&state, "main", &target).unwrap();
+
+        assert_eq!(
+            serde_json::to_value(result).unwrap(),
+            json!({ "authorization": "nativeDrop" })
+        );
+        drop(state);
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
     fn exact_external_grant_supports_read_and_stat_but_denies_write_and_its_sibling() {
         let fixture = fixture_path();
         let trusted_root = fixture.join("trusted");
@@ -1094,6 +1214,49 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(denied.code, "fs_path_denied");
+        drop(state);
+        fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
+    fn external_directory_grant_is_read_only_but_trusted_root_remains_writable() {
+        let fixture = fixture_path();
+        let trusted_root = fixture.join("trusted");
+        let external_root = fixture.join("external");
+        fs::create_dir_all(&trusted_root).unwrap();
+        fs::create_dir_all(&external_root).unwrap();
+        let trusted_file = trusted_root.join("trusted.txt");
+        let external_file = external_root.join("external.txt");
+        fs::write(&trusted_file, "before").unwrap();
+        fs::write(&external_file, "before").unwrap();
+        let settings_path = fixture.join("mcode-data.json");
+        write_repo_root(&settings_path, "trusted", &trusted_root);
+        let state = NativeFilesystemState::new(
+            ScopedFilesystem::new(),
+            SettingsService::new(settings_path),
+        );
+        stage_and_claim_external(&state, "main", &external_root);
+
+        let external_denied = run_test_filesystem_task(
+            &state,
+            "main",
+            FS_WRITE_FILE_ATOMIC_OPERATION,
+            external_file.clone(),
+            |filesystem, path| filesystem.write_file_atomic(path, b"after", 64),
+        )
+        .unwrap_err();
+        assert_eq!(external_denied.code, "fs_external_write_unsupported");
+        run_test_filesystem_task(
+            &state,
+            "main",
+            FS_WRITE_FILE_ATOMIC_OPERATION,
+            trusted_file.clone(),
+            |filesystem, path| filesystem.write_file_atomic(path, b"after", 64),
+        )
+        .unwrap();
+
+        assert_eq!(fs::read_to_string(&external_file).unwrap(), "before");
+        assert_eq!(fs::read_to_string(&trusted_file).unwrap(), "after");
         drop(state);
         fs::remove_dir_all(fixture).unwrap();
     }

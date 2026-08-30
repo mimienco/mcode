@@ -13,9 +13,10 @@ use std::sync::{Arc, Mutex};
 
 /// A short-lived capability produced by a trusted native path source.
 ///
-/// Files are pinned to the handle opened during authorization and are read-only.
-/// Directories delegate to a capability-relative scoped filesystem rooted at the
-/// captured directory, which grants the complete subtree without allowing escape.
+/// Files and directories are pinned to the handle opened during authorization.
+/// Both are read-only. Directories delegate reads to a capability-relative scoped
+/// filesystem rooted at the captured directory, granting the complete subtree
+/// without allowing escape.
 #[derive(Clone, Debug)]
 pub struct ExactPathCapability {
     requested_path: PathBuf,
@@ -102,6 +103,11 @@ impl ExactPathCapability {
 
     pub fn matches(&self, target_path: &Path) -> bool {
         self.map_target(target_path).is_some()
+    }
+
+    pub fn matches_root(&self, target_path: &Path) -> bool {
+        paths_equal(target_path, &self.requested_path)
+            || paths_equal(target_path, &self.canonical_path)
     }
 
     pub fn canonical_path(&self) -> &Path {
@@ -232,16 +238,15 @@ impl ExactPathCapability {
     pub fn write_file_atomic(
         &self,
         target_path: &Path,
-        contents: &[u8],
-        max_bytes: usize,
+        _contents: &[u8],
+        _max_bytes: usize,
     ) -> Result<(), FsError> {
         match (&self.target, self.map_target(target_path)) {
-            (ExactPathTarget::Directory(filesystem), Some(mapped_path)) => {
-                filesystem.write_file_atomic(&mapped_path, contents, max_bytes)
+            (ExactPathTarget::Directory(_) | ExactPathTarget::File(_), Some(_)) => {
+                Err(FsError::ExternalWriteUnsupported {
+                    path: target_path.to_path_buf(),
+                })
             }
-            (ExactPathTarget::File(_), Some(_)) => Err(FsError::ExternalWriteUnsupported {
-                path: target_path.to_path_buf(),
-            }),
             (_, None) => Err(outside_scope(target_path)),
         }
     }

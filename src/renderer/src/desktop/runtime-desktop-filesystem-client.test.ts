@@ -15,7 +15,7 @@ it('loads the Tauri invoke route lazily and sends exact camelCase arguments', as
     .mockResolvedValueOnce(null)
     .mockResolvedValueOnce({ size: 42, isDirectory: false, mtime: 1234 })
     .mockResolvedValueOnce(true)
-    .mockResolvedValueOnce(null)
+    .mockResolvedValueOnce({ authorization: 'nativeDrop' })
     .mockResolvedValueOnce(true)
   const loadTauriInvoke = vi.fn(() => Promise.resolve(invoke))
   const electronFilesystem = {
@@ -284,7 +284,18 @@ it('validates external grant responses', async () => {
   )
 })
 
-it('treats an unstaged Tauri claim as a no-op so trusted-scope access can proceed', async () => {
+it('accepts an explicit trusted-root authorization result', async () => {
+  const client = createRuntimeDesktopFilesystemClient({
+    isTauri: () => true,
+    loadTauriInvoke: () =>
+      Promise.resolve(vi.fn(() => Promise.resolve({ authorization: 'trustedRoot' }))),
+    getElectronFilesystem: vi.fn()
+  })
+
+  await expect(client.authorizeExternalPath('/repo/report.md')).resolves.toBeUndefined()
+})
+
+it('rejects an unstaged Tauri claim instead of silently widening the renderer contract', async () => {
   const rejection = {
     code: 'fs_path_denied',
     context: { operation: 'fs_authorize_external_path' },
@@ -297,7 +308,10 @@ it('treats an unstaged Tauri claim as a no-op so trusted-scope access can procee
     getElectronFilesystem: vi.fn()
   })
 
-  await expect(client.authorizeExternalPath('/repo/file.txt')).resolves.toBeUndefined()
+  const error = await client.authorizeExternalPath('/outside/report.md').catch((reason) => reason)
+
+  expect(error).toBeInstanceOf(DesktopCommandError)
+  expect(error).toMatchObject(rejection)
 })
 
 it('normalizes non-denial external grant Tauri rejections', async () => {

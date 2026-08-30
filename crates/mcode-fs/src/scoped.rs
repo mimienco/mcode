@@ -94,6 +94,10 @@ pub enum FsError {
     ExternalWriteUnsupported {
         path: PathBuf,
     },
+    ExternalTooManyPaths {
+        count: usize,
+        limit: usize,
+    },
     Io {
         operation: FsOperation,
         path: PathBuf,
@@ -114,6 +118,7 @@ impl FsError {
             Self::FileTooLarge { .. } => "fs_file_too_large",
             Self::TargetIsDirectory { .. } => "fs_target_is_directory",
             Self::ExternalWriteUnsupported { .. } => "fs_external_write_unsupported",
+            Self::ExternalTooManyPaths { .. } => "fs_external_too_many_paths",
             Self::Io { .. } => "fs_io_failed",
         }
     }
@@ -163,6 +168,10 @@ impl fmt::Display for FsError {
                 formatter,
                 "external file capability is read-only: {}",
                 path.display()
+            ),
+            Self::ExternalTooManyPaths { count, limit } => write!(
+                formatter,
+                "native drop contains {count} paths, exceeding the {limit} path limit"
             ),
             Self::Io {
                 operation,

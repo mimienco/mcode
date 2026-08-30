@@ -66,6 +66,92 @@ it('routes a Tauri drop to the marked renderer surface using CSS coordinates', a
   })
 })
 
+it('walks from a genuine shadow root to terminal metadata on its host', async () => {
+  let tauriListener: ((event: { payload: DragDropEvent }) => void) | undefined
+  const host = document.createElement('mcode-terminal')
+  host.dataset.nativeFileDropTarget = 'terminal'
+  host.dataset.terminalTabId = 'tab-shadow'
+  host.dataset.terminalPaneLeafId = 'leaf-shadow'
+  const shadowRoot = host.attachShadow({ mode: 'open' })
+  const shadowChild = document.createElement('span')
+  shadowRoot.append(shadowChild)
+  document.body.append(host)
+  const listener = vi.fn()
+  const client = createRuntimeDesktopFileDropClient({
+    isTauri: () => true,
+    loadTauriDropSource: async () => ({
+      onDragDropEvent: async (callback) => {
+        tauriListener = callback
+        return vi.fn()
+      }
+    }),
+    onElectronFileDrop: vi.fn(),
+    resolveElementFromPoint: () => shadowChild,
+    scaleFactor: () => 1,
+    reportSubscriptionError: vi.fn()
+  })
+
+  client.onFileDrop(listener)
+  await vi.waitFor(() => expect(tauriListener).toBeTypeOf('function'))
+  tauriListener?.({
+    payload: {
+      type: 'drop',
+      paths: ['/outside/terminal.txt'],
+      position: { x: 1, y: 1 } as never
+    }
+  })
+
+  expect(listener).toHaveBeenCalledExactlyOnceWith({
+    paneLeafId: 'leaf-shadow',
+    paths: ['/outside/terminal.txt'],
+    tabId: 'tab-shadow',
+    target: 'terminal'
+  })
+  host.remove()
+})
+
+it('walks from a genuine shadow root to an explorer directory on its host', async () => {
+  let tauriListener: ((event: { payload: DragDropEvent }) => void) | undefined
+  const host = document.createElement('mcode-file-explorer')
+  host.dataset.nativeFileDropTarget = 'file-explorer'
+  host.dataset.nativeFileDropDir = '/repo/shadow-dir'
+  const shadowRoot = host.attachShadow({ mode: 'open' })
+  const shadowChild = document.createElement('span')
+  shadowRoot.append(shadowChild)
+  document.body.append(host)
+  const listener = vi.fn()
+  const client = createRuntimeDesktopFileDropClient({
+    isTauri: () => true,
+    loadTauriDropSource: async () => ({
+      onDragDropEvent: async (callback) => {
+        tauriListener = callback
+        return vi.fn()
+      }
+    }),
+    onElectronFileDrop: vi.fn(),
+    resolveElementFromPoint: () => shadowChild,
+    scaleFactor: () => 1,
+    reportSubscriptionError: vi.fn()
+  })
+
+  client.onFileDrop(listener)
+  await vi.waitFor(() => expect(tauriListener).toBeTypeOf('function'))
+  tauriListener?.({
+    payload: {
+      type: 'drop',
+      paths: ['/outside/explorer.txt'],
+      position: { x: 1, y: 1 } as never
+    }
+  })
+
+  expect(listener).toHaveBeenCalledExactlyOnceWith({
+    destinationDir: '/repo/shadow-dir',
+    paths: ['/outside/explorer.txt'],
+    target: 'file-explorer'
+  })
+  host.remove()
+})
+
 it('unlistens after an async Tauri subscription resolves when already disposed', async () => {
   type DropCallback = (event: { payload: DragDropEvent }) => void
   type DropSource = { onDragDropEvent: (callback: DropCallback) => Promise<() => void> }

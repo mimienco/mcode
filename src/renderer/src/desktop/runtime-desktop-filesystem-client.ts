@@ -3,7 +3,7 @@ import type { DirEntry } from '../../../shared/filesystem-entry-types'
 import { sortDirEntries } from '../../../shared/file-name-sort'
 import type { SshMutationExpectation } from '../../../shared/ssh-types'
 import type { DesktopInvoke } from './desktop-client'
-import { DesktopCommandError, normalizeDesktopCommandError } from './desktop-client'
+import { normalizeDesktopCommandError } from './desktop-client'
 
 export type DesktopFilesystemReadDirArgs = {
   dirPath: string
@@ -120,6 +120,15 @@ function validatePathExists(value: unknown): boolean {
   return value
 }
 
+function validateExternalPathAuthorization(value: unknown): void {
+  if (
+    !isRecord(value) ||
+    (value.authorization !== 'trustedRoot' && value.authorization !== 'nativeDrop')
+  ) {
+    throw new Error('Invalid fs_authorize_external_path response')
+  }
+}
+
 export function createRuntimeDesktopFilesystemClient(
   dependencies: RuntimeDesktopFilesystemDependencies
 ): RuntimeDesktopFilesystemClient {
@@ -174,21 +183,8 @@ export function createRuntimeDesktopFilesystemClient(
     },
     async authorizeExternalPath(targetPath) {
       if (dependencies.isTauri()) {
-        let response: unknown
-        try {
-          response = await invokeTauri('fs_authorize_external_path', { targetPath })
-        } catch (error) {
-          // Tauri claims only paths staged by a native producer. A path can
-          // already belong to a trusted root, so an unstaged claim is a no-op;
-          // the following filesystem operation still enforces the real scope.
-          if (error instanceof DesktopCommandError && error.code === 'fs_path_denied') {
-            return
-          }
-          throw error
-        }
-        if (response !== null && response !== undefined) {
-          throw new Error('Invalid fs_authorize_external_path response')
-        }
+        const response = await invokeTauri('fs_authorize_external_path', { targetPath })
+        validateExternalPathAuthorization(response)
         return
       }
       await dependencies.getElectronFilesystem().authorizeExternalPath({ targetPath })
