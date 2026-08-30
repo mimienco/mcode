@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceHead": "538aa17657b7b5d3f6418619017316249d322bef",
+  "sourceHead": "5f6d922429459f5b538c46fa17598d99a10e102d",
   "updatedAt": "2026-08-30",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
@@ -168,11 +168,11 @@
         "atomic saves use cryptographically random capability-relative same-directory temporary files, preserve target permissions, flush content, follow only contained symlinks, atomically replace the target, and clean up returned-error temporaries",
         "Tauri commands run blocking filesystem operations off the async runtime and reject SSH-owned requests",
         "the renderer routes local readDir/readFile/writeFile/stat/pathExists through a lazy typed desktop client while direct SSH and remote runtime routes retain their existing owners",
-        "native window drop events stage bounded per-window pending paths; renderer claims are same-window, generation-fenced, idempotent, LRU-bounded, and revoked on navigation, destroy, or explicit revoke without allowing arbitrary renderer-authored grants",
-        "dropped files are pinned to one read-only handle so leaf or symlink retargeting cannot expose siblings; dropped directories grant only a pinned capability-relative subtree and deny symlink escape",
+        "the first app-owned native window listener synchronously captures capabilities; claims never reopen renderer-authored paths, are same-window, globally generation-fenced, exact-root deduplicated, batch- and handle-bounded at 256, retained under one process-wide LRU, and revoked on navigation, destroy, or explicit revoke",
+        "dropped files and directories are pinned read-only capabilities so leaf, alias, or subtree retargeting cannot expose siblings or grant writes; directory reads remain capability-relative and deny symlink escape",
         "the runtime drop adapter delivers the same validated payloads through Tauri WebviewWindow drag events or the unchanged Electron subscription, including async-unmount cleanup and Shadow DOM target resolution",
         "Windows WebView2 smoke proves authorized listing/read/stat/missing behavior, file creation, existing-file replacement, live-snapshot identity, outside-root read/write denial, lifecycle ACK, and clean exit",
-        "directory listing, bounded content, atomic save, stat, existence, and native-drop external claims are migrated; native chooser/import producers, writable external-file saves, linked-worktree verification, stale crash-temp recovery, watcher/tail streaming, native SSH, Windows ACL preservation, a real OS-drop smoke, and cross-platform evidence remain open"
+        "directory listing, bounded content, atomic save, stat, existence, and native-drop external claims are migrated; Tauri's built-in raw drop event still precedes app-owned handle capture and synchronous capture can block on slow network paths, while native chooser/import producers, writable external-save authorities, linked-worktree verification, stale crash-temp recovery, watcher/tail streaming, native SSH, Windows ACL preservation, a real OS-drop smoke, and cross-platform evidence remain open"
       ]
     },
     {

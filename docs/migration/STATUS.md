@@ -6,7 +6,7 @@ Phase 3 – native updater and Windows lifecycle implemented; capability-scoped 
 
 ## Last green commit
 
-`538aa17657` (`feat(tauri): claim native dropped filesystem paths`).
+`5f6d922429` (`fix(tauri): harden native drop capabilities`).
 
 ## Completed in this session
 
@@ -173,12 +173,12 @@ Phase 3 – native updater and Windows lifecycle implemented; capability-scoped 
 
 ## Native-drop external capability slice
 
-- Added a native-origin grant registry: only paths staged by a Tauri `DragDrop::Drop` event for the same window can be claimed. Pending and active grants are bounded per-window LRUs; repeated claims are idempotent; explicit revoke removes pending and active state; navigation and destroy advance a generation and reject stale in-flight claims.
-- Added pinned external capabilities. A dropped file is opened once and remains read-only, so replacing its leaf or retargeting an alias never exposes a sibling. A dropped directory grants its complete captured subtree through the existing capability-relative filesystem while retaining symlink-containment and atomic-write protections. Individual external-file writes fail with stable `fs_external_write_unsupported`.
+- Added a native-origin grant registry: only capabilities synchronously captured by the first app-owned Tauri `DragDrop::Drop` listener for the same window can be claimed. Claims never reopen renderer-supplied paths, batches above 256 paths are rejected before capture, and exact-root deduplication preserves broader directory grants. Pending and active handles share one process-wide 256-grant LRU; trusted-root authorization discards its redundant pending capture; explicit revoke removes pending and active state; navigation and destroy remove window state; and globally unique generations reject stale captures even when a window label is reused.
+- Added pinned read-only external capabilities. A dropped file is opened once, so replacing its leaf or retargeting an alias never exposes a sibling. A dropped directory grants read/list/stat access to its complete captured subtree through the existing capability-relative filesystem while retaining symlink containment. Writes through either kind fail with stable `fs_external_write_unsupported`; trusted workspace roots retain atomic writes.
 - Added typed Tauri authorize/revoke commands and a runtime renderer drop adapter. Tauri uses `WebviewWindow.onDragDropEvent`; Electron keeps the existing preload subscription. All six production drop subscribers now share the adapter, including CSS-coordinate conversion, Shadow DOM target discovery, and race-safe asynchronous unsubscription.
-- Security evidence: 3 core unit tests plus 26 filesystem capability contracts; 27 desktop adapter/registry tests; 6 command/wiring contracts; and 8 focused renderer files/66 tests pass. Scoped clippy with `-D warnings`, changed-file oxfmt/oxlint, `git diff --check`, and the 10,652-module production Tauri renderer build pass.
+- Security evidence: 3 core unit tests plus 26 filesystem capability contracts; 36 desktop adapter/registry tests; 6 command/wiring contracts; and the 5 directly affected renderer files/45 tests pass. The full Rust workspace suite, scoped clippy with `-D warnings`, changed-file oxfmt/oxlint, `git diff --check`, and the 10,652-module production Tauri renderer build pass.
 - The existing real Windows WebView2 filesystem smoke was rebuilt through the Tauri CLI and rerun successfully: marker `passed`, atomic create/replacement exact, renderer shutdown acknowledgement present, exit 0, and no remaining process. It does not synthesize a native OS drop.
-- This is intentionally not full external-path parity. Non-drop producers still require dedicated native authorities; individually dropped files cannot yet be saved; the raw native path is pinned during the asynchronous claim rather than in the window-event callback; and a real OS-level drop smoke plus macOS/Linux evidence remain open.
+- This is intentionally not full external-path parity. Tauri emits its built-in raw renderer drop event before the later app-owned listener captures handles, so a coordinated renderer/local-process retarget race is not yet closed; eliminating it requires an app-owned post-capture event or an OS-handle-bearing drop source. Synchronous capture in that listener can also block window dispatch for an unbounded duration on a slow or offline network path. Non-drop producers, writable external saves, a real OS-level drop smoke, and macOS/Linux evidence remain open.
 
 ## Current blockers
 
