@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 3 – native updater complete at the credential-independent boundary; Windows tray and startup-window restoration implemented.
+Phase 3 – native updater and Windows lifecycle implemented; capability-scoped filesystem discovery integrated and verified.
 
 ## Last green commit
 
-`0376a93f79` (`feat(tauri): add signed native updater path`).
+`1c3d7316dc` (`feat(tauri): add capability-scoped filesystem discovery`).
 
 ## Completed in this session
 
