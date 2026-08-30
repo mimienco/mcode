@@ -7,7 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+mcode-platform = { path = "../mcode-platform" }
+mcode-settings = { path = "../mcode-settings" }
 serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+

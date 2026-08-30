@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+mod restore;
 mod shutdown;
-
+pub use restore::{
+    RestorableSession, RestorableWindow, RestoreError, RestorePlan, SkipReason, SkippedSession,
+    build_restore_plan, build_restore_plan_from_bytes, plan_from_error,
+};
 pub use shutdown::{LifecycleServiceError, ShutdownIntent, ShutdownRequest};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

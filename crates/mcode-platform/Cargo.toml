@@ -8,3 +8,7 @@ repository.workspace = true
 
 [dependencies]
 serde.workspace = true
+tauri = { workspace = true, features = ["tray-icon", "image-png"] }
+
+[dev-dependencies]
+tauri = { workspace = true, features = ["tray-icon", "image-png", "test"] }
