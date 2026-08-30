@@ -8,5 +8,6 @@ repository.workspace = true
 
 [dependencies]
 atomic-write-file.workspace = true
+mcode-platform = { path = "../mcode-platform" }
 serde.workspace = true
 serde_json.workspace = true

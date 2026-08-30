@@ -33,10 +33,12 @@ import { translate } from '@/i18n/i18n'
 import type { UiLanguage } from '../../../../shared/ui-language'
 import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
 import { usePluginLanguagePacks } from '@/store/plugin-language-packs'
+import { runtimeDesktopCloseToTrayClient } from '@/desktop/runtime-desktop-close-to-tray-client'
+import { toast } from 'sonner'
 
 type AppearanceInterfaceSectionProps = {
   settings: GlobalSettings
-  updateSettings: (updates: Partial<GlobalSettings>) => void
+  updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
   applyTheme: (theme: 'system' | 'dark' | 'light') => void
   fontSuggestions: string[]
   isDesktopMac: boolean
@@ -239,9 +241,18 @@ export function AppearanceInterfaceSection({
                     'When enabled, closing the window keeps MCode running in the system tray instead of quitting.'
                   )}
                   checked={settings.minimizeToTrayOnClose === true}
-                  onChange={() =>
-                    updateSettings({ minimizeToTrayOnClose: !settings.minimizeToTrayOnClose })
-                  }
+                  onChange={() => {
+                    const previousEnabled = settings.minimizeToTrayOnClose === true
+                    const enabled = !previousEnabled
+                    void runtimeDesktopCloseToTrayClient
+                      .updatePreference(enabled, previousEnabled, (value) =>
+                        updateSettings({ minimizeToTrayOnClose: value })
+                      )
+                      .catch((error) => {
+                        console.error('[settings] failed to apply close-to-tray preference', error)
+                        toast.error('Could not update the close-to-tray setting. Try again.')
+                      })
+                  }}
                 />
               </SearchableSetting>
             ) : null}

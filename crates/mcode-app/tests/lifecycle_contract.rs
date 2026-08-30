@@ -19,6 +19,32 @@ fn desktop_launch_context_exposes_identity_without_host_capabilities() {
 }
 
 #[test]
+fn shutdown_is_not_in_progress_while_idle() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+
+    assert!(!service.is_shutdown_in_progress().unwrap());
+}
+
+#[test]
+fn shutdown_is_in_progress_through_every_active_phase() {
+    let service = LifecycleService::new("1.4.178", BuildLane::Development);
+    let request = service.request_shutdown(ShutdownIntent::Restart).unwrap();
+
+    assert!(service.is_shutdown_in_progress().unwrap());
+
+    service.acknowledge_shutdown(&request.request_id).unwrap();
+    assert!(service.is_shutdown_in_progress().unwrap());
+
+    service.confirm_shutdown(&request.request_id).unwrap();
+    assert!(service.is_shutdown_in_progress().unwrap());
+
+    service
+        .claim_shutdown_execution(&request.request_id)
+        .unwrap();
+    assert!(service.is_shutdown_in_progress().unwrap());
+}
+
+#[test]
 fn shutdown_stays_pending_until_the_renderer_confirms_the_exact_request() {
     let service = LifecycleService::new("1.4.178", BuildLane::Development);
 

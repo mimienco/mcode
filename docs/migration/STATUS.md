@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 3 – full-renderer restarts routed through the durable lifecycle client; beginning the native Tauri updater capability.
+Phase 3 – native updater complete at the credential-independent boundary; Windows tray and startup-window restoration implemented.
 
 ## Last green commit
 
-`2834a9574e` (`refactor(tauri): route renderer restarts through lifecycle`).
+`0376a93f79` (`feat(tauri): add signed native updater path`).
 
 ## Completed in this session
 
@@ -69,6 +69,12 @@ Phase 3 – full-renderer restarts routed through the durable lifecycle client; 
 - Added the distinct `UpdateInstall` lifecycle intent so a verified update can execute only after the existing renderer acknowledgement, durable checkpoint, dirty-file/process decision, and atomic backend confirmation.
 - Enabled Tauri updater artifacts and made absent release key/endpoints fail as `updater_not_configured` rather than using the empty initialization bootstrap.
 - Ran an isolated real Windows WebView2 updater-check smoke: it recorded `updater_not_configured`, wrote the shutdown checkpoint, exited 0 in 6.74 seconds, and left zero processes.
+- Added a pure `mcode-platform` window policy with Electron-compatible minimum-size, visible-overlap, persistence, and shutdown-aware close-to-tray contracts.
+- Restored valid persisted position/inner-size and maximized state at Tauri startup; invalid/off-screen bounds fall back to an outer size fitted within the primary work area.
+- Debounced move/resize persistence by 500 ms, retained normal bounds while maximized, skipped fullscreen and near-minimum teardown bounds, and synchronized the final persistence write with the authorized-exit freeze.
+- Added immediate Windows tray installation with page-load and 12-second idempotent retries, Open/left-click restore-focus behavior, and Quit routed through the existing renderer acknowledgement protocol.
+- Added transactional live Tauri synchronization for the Windows “Minimize to Tray on Close” switch, including renderer rollback and visible failure feedback, without granting raw tray or notification permissions to the renderer.
+- Ran a real visible Windows WebView2 close-to-tray smoke: saved inner size restored, tray installation was confirmed, the preference was atomically persisted, native close hid the window, direct app-exit was renderer-acknowledged, exit code was 0, and zero processes remained. Tray Open/left-click/Quit interaction remains untested.
 
 ## Tests executed
 
@@ -133,12 +139,22 @@ Phase 3 – full-renderer restarts routed through the durable lifecycle client; 
 - Post-review `cargo test --workspace -j1`: PASS; post-review clippy `-D warnings`: PASS.
 - Post-review updater renderer lane: PASS (9 files, 134 tests).
 - Corrected staged re-review: Standards PASS and Spec PASS with no remaining native-updater findings.
+- `cargo test -p mcode-app`: PASS (18 lifecycle contracts including every shutdown phase).
+- Window policy and desktop settings contracts: PASS (10 new Rust tests).
+- Window/close-to-tray renderer contracts: PASS (5 files, 55 tests, including serialized overlapping updates, consecutive-failure rollback, and combined close/lifecycle listener behavior).
+- `cargo check -p mcode-desktop`: PASS with the Tauri `tray-icon` feature.
+- Tauri-specific renderer build: PASS (10,663 modules; inherited CSS Highlight and chunk-size warnings only).
+- Direct native debug build: PASS.
+- Visible Windows WebView2 close-to-tray/restore smoke: PASS (`1200x800` inner size restored, tray ready, setting persisted, marker `hidden`, renderer ACK, exit 0, zero remaining processes).
+- Isolated committed-worktree `cargo test --workspace -j1`: PASS; debug workspace clippy and release `mcode-desktop` clippy both PASS with `-D warnings`.
+- Final two-axis re-review: Standards PASS and Spec PASS after tray-install state separation, serialized effective-value preference transactions, release-CFG correction, and persistence-freeze deadlock prevention.
+- Post-windowing original-integrity guard: EXTERNAL DELTA remains exactly 26 hash mismatches; original HEAD, branch, and staged diff remain unchanged, and none of those files were copied into the rewrite.
 
 ## Current blockers
 
 - The copied Electron baseline is not fully green: production build is blocked by existing type errors and four terminal-performance E2E scenarios fail.
 - The Tauri shell exposes the lifecycle context command and typed custom-window controls. The rest of the renderer still depends broadly on `window.api`, so the shell is not feature-complete or parity-ready.
-- Tauri manual close, every direct full-renderer Restart/Relaunch action, and native update application now use the existing decision flow and await an atomic shutdown checkpoint. Minimize-to-tray and startup restore remain incomplete.
+- Tauri manual close, close-to-tray, every direct full-renderer Restart/Relaunch action, tray Quit, and native update application now share the existing decision flow and atomic shutdown checkpoint. Real tray Open/left-click/Quit interaction, the one-time tray notice, tray attention/activity icon states, popout restoration, and non-Windows windowing evidence remain incomplete.
 - The native updater capability has no production public key or channel endpoint values, and no workflow publishes signed Tauri artifacts/feeds yet. Real network download/install, pinned/local/performance builds, crossgrade, rollback, session survival, and non-Windows evidence remain incomplete.
 - macOS signing/notarization, Linux WebKitGTK/glibc-floor, and cross-platform installer evidence require their respective CI hosts and credentials.
 - The original repository received concurrent edits after the migration snapshot. Twenty-six files now differ while its HEAD, branch, and staged diff remain unchanged. They are preserved and were not copied into the rewrite; final integrity cannot return to the captured byte state unless the external owner resolves or accepts that delta.
@@ -146,12 +162,12 @@ Phase 3 – full-renderer restarts routed through the durable lifecycle client; 
 ## Parity summary
 
 - done: 0
-- in progress: 5
-- not started: 31
+- in progress: 6
+- not started: 30
 - blocked: 0
 
 ## Exact next actions
 
-1. Port Windows minimize-to-tray and startup restore, then expand the real WebView2 harness beyond the targeted lifecycle page.
-2. Add credential-independent signed-feed fixtures and release-workflow artifact/manifest gates before attempting production key injection or a live install.
-3. Use the correlated IPC and renderer-import ledgers to prioritize and specify scoped filesystem/process contracts.
+1. Close the remaining Windows shell/window gaps: one-time tray notice, attention/activity icon states, popout restoration, navigation containment, and focused E2E assertions.
+2. Add release-workflow artifact/manifest gates before attempting production key injection or a live updater install.
+3. Use the correlated IPC and renderer-import ledgers to implement the next scoped filesystem/process contracts.

@@ -23,7 +23,8 @@ type TauriAppLifecycleCapabilitySource = DesktopAppLifecycleCapability
 
 export function createTauriDesktopWindowCapability(
   currentWindow: TauriWindowCapabilitySource,
-  appLifecycle: TauriAppLifecycleCapabilitySource
+  appLifecycle: TauriAppLifecycleCapabilitySource,
+  hideToTrayIfEnabled: () => Promise<boolean>
 ): DesktopWindowCapability {
   let manualQuitInFlight = false
   let pendingShutdown: ShutdownRequest | undefined
@@ -71,6 +72,13 @@ export function createTauriDesktopWindowCapability(
       const stopNativeClose = await currentWindow.onCloseRequested(async (event) => {
         event.preventDefault()
         await cancelPendingShutdown()
+        try {
+          if (await hideToTrayIfEnabled()) {
+            return
+          }
+        } catch (error) {
+          console.error('[desktop-window] failed to evaluate close-to-tray policy', error)
+        }
         await listener({ isQuitting: false })
       })
       try {

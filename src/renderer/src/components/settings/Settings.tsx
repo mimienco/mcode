@@ -1729,7 +1729,7 @@ function Settings(): React.JSX.Element {
                     <Suspense fallback={<SettingsSectionSkeleton />}>
                       <AppearancePane
                         settings={settings}
-                        updateSettings={updateSettings}
+                        updateSettings={updateSettingsOrThrow}
                         applyTheme={applyTheme}
                         fontSuggestions={fontSuggestions}
                         terminalFontSuggestions={terminalFontSuggestions}

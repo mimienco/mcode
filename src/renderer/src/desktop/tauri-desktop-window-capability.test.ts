@@ -12,6 +12,8 @@ function createLifecycleCapability() {
   }
 }
 
+const doNotHideToTray = () => Promise.resolve(false)
+
 it('prevents a native close request and forwards it to the typed close coordinator', async () => {
   let onCloseRequested:
     | ((event: { preventDefault: () => void }) => void | Promise<void>)
@@ -30,7 +32,8 @@ it('prevents a native close request and forwards it to the typed close coordinat
         return Promise.resolve(() => undefined)
       }
     },
-    createLifecycleCapability()
+    createLifecycleCapability(),
+    doNotHideToTray
   )
 
   await capability.onCloseRequested(listener)
@@ -77,7 +80,7 @@ it('turns a confirmed manual close into an authorized app quit without re-enteri
       return Promise.resolve(() => undefined)
     }
   }
-  const capability = createTauriDesktopWindowCapability(source, lifecycle)
+  const capability = createTauriDesktopWindowCapability(source, lifecycle, doNotHideToTray)
   await capability.onCloseRequested(listener)
 
   await capability.confirmClose()
@@ -111,7 +114,7 @@ it('routes an app-wide restart through the same close coordinator before native 
     confirmAndExecuteShutdown: vi.fn(() => Promise.resolve()),
     cancelShutdown: vi.fn(() => Promise.resolve())
   }
-  const capability = createTauriDesktopWindowCapability(currentWindow, lifecycle)
+  const capability = createTauriDesktopWindowCapability(currentWindow, lifecycle, doNotHideToTray)
   await capability.onCloseRequested(closeListener)
 
   shutdownListener?.({ version: 1, requestId: '11', intent: 'restart' })
@@ -151,7 +154,8 @@ it('cancels a vetoed app request before routing a later native window close', as
         return () => undefined
       }
     },
-    lifecycle
+    lifecycle,
+    doNotHideToTray
   )
   await capability.onCloseRequested(closeListener)
 
@@ -184,7 +188,8 @@ it('returns the canceled restart request so the coordinator can clear renderer r
       close: () => Promise.resolve(),
       onCloseRequested: () => Promise.resolve(() => undefined)
     },
-    lifecycle
+    lifecycle,
+    doNotHideToTray
   )
   await capability.onCloseRequested(vi.fn())
   const request = { version: 1 as const, requestId: '14', intent: 'restart' as const }
@@ -192,4 +197,63 @@ it('returns the canceled restart request so the coordinator can clear renderer r
 
   await expect(capability.cancelClose()).resolves.toEqual(request)
   expect(lifecycle.cancelShutdown).toHaveBeenCalledWith('14')
+})
+
+it('hides an eligible native Windows close without entering the dirty-close coordinator', async () => {
+  let nativeCloseListener:
+    | ((event: { preventDefault: () => void }) => void | Promise<void>)
+    | undefined
+  const closeListener = vi.fn()
+  const hideToTray = vi.fn(() => Promise.resolve(true))
+  const capability = createTauriDesktopWindowCapability(
+    {
+      minimize: () => Promise.resolve(),
+      toggleMaximize: () => Promise.resolve(),
+      isMaximized: () => Promise.resolve(false),
+      onResized: () => Promise.resolve(() => undefined),
+      close: () => Promise.resolve(),
+      onCloseRequested: async (listener) => {
+        nativeCloseListener = listener
+        return () => undefined
+      }
+    },
+    createLifecycleCapability(),
+    hideToTray
+  )
+  await capability.onCloseRequested(closeListener)
+
+  await nativeCloseListener?.({ preventDefault: vi.fn() })
+
+  expect(hideToTray).toHaveBeenCalledOnce()
+  expect(closeListener).not.toHaveBeenCalled()
+})
+
+it('falls back to the dirty-close coordinator when the tray command fails', async () => {
+  let nativeCloseListener:
+    | ((event: { preventDefault: () => void }) => void | Promise<void>)
+    | undefined
+  const closeListener = vi.fn()
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  const capability = createTauriDesktopWindowCapability(
+    {
+      minimize: () => Promise.resolve(),
+      toggleMaximize: () => Promise.resolve(),
+      isMaximized: () => Promise.resolve(false),
+      onResized: () => Promise.resolve(() => undefined),
+      close: () => Promise.resolve(),
+      onCloseRequested: async (listener) => {
+        nativeCloseListener = listener
+        return () => undefined
+      }
+    },
+    createLifecycleCapability(),
+    () => Promise.reject(new Error('native bridge unavailable'))
+  )
+  await capability.onCloseRequested(closeListener)
+
+  await nativeCloseListener?.({ preventDefault: vi.fn() })
+
+  expect(consoleError).toHaveBeenCalled()
+  expect(closeListener).toHaveBeenCalledWith({ isQuitting: false })
+  consoleError.mockRestore()
 })

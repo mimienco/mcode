@@ -1,4 +1,5 @@
 use atomic_write_file::AtomicWriteFile;
+use mcode_platform::{DesktopWindowPreferences, WindowBounds};
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Map, Value};
 use std::fmt;
@@ -155,6 +156,7 @@ pub enum SettingsServiceError {
     Read(String),
     SettingsTooLarge(u64),
     Parse(String),
+    PersistedSectionMustBeObject(&'static str),
     Checkpoint(CheckpointError),
     Serialize(String),
     OpenAtomicFile(String),
@@ -171,6 +173,7 @@ impl SettingsServiceError {
             Self::Read(_) => "settings_read_failed",
             Self::SettingsTooLarge(_) => "settings_too_large",
             Self::Parse(_) => "settings_parse_failed",
+            Self::PersistedSectionMustBeObject(_) => "settings_shape_invalid",
             Self::Checkpoint(_) => "shutdown_checkpoint_invalid",
             Self::Serialize(_) => "settings_serialize_failed",
             Self::OpenAtomicFile(_) => "settings_atomic_open_failed",
@@ -194,6 +197,9 @@ impl fmt::Display for SettingsServiceError {
                 "settings payload is {size} bytes, exceeding the {MAX_SETTINGS_BYTES}-byte limit"
             ),
             Self::Parse(message) => write!(formatter, "failed to parse settings: {message}"),
+            Self::PersistedSectionMustBeObject(section) => {
+                write!(formatter, "persisted {section} settings must be an object")
+            }
             Self::Checkpoint(error) => write!(formatter, "invalid shutdown checkpoint: {error}"),
             Self::Serialize(message) => {
                 write!(formatter, "failed to serialize settings: {message}")
@@ -235,6 +241,60 @@ impl SettingsService {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn desktop_window_preferences(
+        &self,
+    ) -> Result<DesktopWindowPreferences, SettingsServiceError> {
+        let _read_guard = self
+            .write_lock
+            .lock()
+            .map_err(|_| SettingsServiceError::LockPoisoned)?;
+        let persisted = self.read_persisted()?;
+        let ui = persisted.get("ui").and_then(Value::as_object);
+        let settings = persisted.get("settings").and_then(Value::as_object);
+
+        Ok(DesktopWindowPreferences {
+            bounds: ui
+                .and_then(|ui| ui.get("windowBounds"))
+                .cloned()
+                .and_then(|value| serde_json::from_value(value).ok()),
+            maximized: ui
+                .and_then(|ui| ui.get("windowMaximized"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            minimize_to_tray_on_close: settings
+                .and_then(|settings| settings.get("minimizeToTrayOnClose"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        })
+    }
+
+    pub fn persist_window_placement(
+        &self,
+        bounds: Option<WindowBounds>,
+        maximized: bool,
+    ) -> Result<(), SettingsServiceError> {
+        self.update_persisted(|root| {
+            let ui = object_section(root, "ui")?;
+            if let Some(bounds) = bounds {
+                ui.insert(
+                    "windowBounds".into(),
+                    serde_json::to_value(bounds)
+                        .map_err(|error| SettingsServiceError::Serialize(error.to_string()))?,
+                );
+            }
+            ui.insert("windowMaximized".into(), Value::Bool(maximized));
+            Ok(())
+        })
+    }
+
+    pub fn set_minimize_to_tray_on_close(&self, enabled: bool) -> Result<(), SettingsServiceError> {
+        self.update_persisted(|root| {
+            object_section(root, "settings")?
+                .insert("minimizeToTrayOnClose".into(), Value::Bool(enabled));
+            Ok(())
+        })
     }
 
     pub fn stage_shutdown_checkpoint(
@@ -282,6 +342,69 @@ impl SettingsService {
             .commit()
             .map_err(|error| SettingsServiceError::CommitAtomicFile(error.to_string()))
     }
+
+    fn update_persisted(
+        &self,
+        update: impl FnOnce(&mut Map<String, Value>) -> Result<(), SettingsServiceError>,
+    ) -> Result<(), SettingsServiceError> {
+        let _write_guard = self
+            .write_lock
+            .lock()
+            .map_err(|_| SettingsServiceError::LockPoisoned)?;
+        let mut persisted = self.read_persisted()?;
+        let root = persisted
+            .as_object_mut()
+            .ok_or(SettingsServiceError::PersistedSectionMustBeObject("root"))?;
+        update(root)?;
+        self.write_persisted(&persisted)
+    }
+
+    fn read_persisted(&self) -> Result<Value, SettingsServiceError> {
+        match fs::metadata(&self.path) {
+            Ok(metadata) => enforce_size_limit(metadata.len())?,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(Value::Object(Map::new()));
+            }
+            Err(error) => return Err(SettingsServiceError::Read(error.to_string())),
+        }
+        let bytes =
+            fs::read(&self.path).map_err(|error| SettingsServiceError::Read(error.to_string()))?;
+        enforce_size_limit(bytes.len() as u64)?;
+        serde_json::from_slice(&bytes)
+            .map_err(|error| SettingsServiceError::Parse(error.to_string()))
+    }
+
+    fn write_persisted(&self, persisted: &Value) -> Result<(), SettingsServiceError> {
+        let parent = self.path.parent().ok_or_else(|| {
+            SettingsServiceError::CreateDirectory("settings path has no parent".into())
+        })?;
+        fs::create_dir_all(parent)
+            .map_err(|error| SettingsServiceError::CreateDirectory(error.to_string()))?;
+        let serialized = serde_json::to_vec_pretty(persisted)
+            .map_err(|error| SettingsServiceError::Serialize(error.to_string()))?;
+        enforce_size_limit(serialized.len() as u64)?;
+        let mut atomic_file = AtomicWriteFile::open(&self.path)
+            .map_err(|error| SettingsServiceError::OpenAtomicFile(error.to_string()))?;
+        atomic_file
+            .write_all(&serialized)
+            .map_err(|error| SettingsServiceError::WriteAtomicFile(error.to_string()))?;
+        atomic_file
+            .sync_all()
+            .map_err(|error| SettingsServiceError::SyncAtomicFile(error.to_string()))?;
+        atomic_file
+            .commit()
+            .map_err(|error| SettingsServiceError::CommitAtomicFile(error.to_string()))
+    }
+}
+
+fn object_section<'a>(
+    root: &'a mut Map<String, Value>,
+    section: &'static str,
+) -> Result<&'a mut Map<String, Value>, SettingsServiceError> {
+    root.entry(section)
+        .or_insert_with(|| Value::Object(Map::new()))
+        .as_object_mut()
+        .ok_or(SettingsServiceError::PersistedSectionMustBeObject(section))
 }
 
 fn enforce_size_limit(size: u64) -> Result<(), SettingsServiceError> {

@@ -1,13 +1,16 @@
 use mcode_app::{
     BuildLane, LaunchContext, LifecycleService, LifecycleServiceError, ShutdownIntent,
 };
+use mcode_platform::{DesktopWindowPreferences, restorable_window_bounds};
 use mcode_settings::{SettingsService, SettingsServiceError, ShutdownCheckpoint};
 use serde::Serialize;
 use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_shutdown_commands;
+mod desktop_window;
 mod updater_commands;
+mod windows_tray;
 
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
@@ -20,6 +23,12 @@ pub use app_shutdown_commands::{
 use app_shutdown_commands::{
     app_acknowledge_shutdown, app_cancel_shutdown, app_confirm_and_execute_shutdown,
     app_request_shutdown, handle_exit_requested,
+};
+use desktop_window::logical_inner_size;
+use desktop_window::{
+    NativeWindowState, attach_placement_persistence, fit_inner_size_to_work_area,
+    monitor_work_areas, primary_work_area, window_hide_to_tray_if_enabled,
+    window_set_minimize_to_tray_on_close,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -131,11 +140,13 @@ async fn app_stage_shutdown_checkpoint(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
 enum SmokeTestMode {
     Quit,
     RestartParent,
     RestartChild,
     Updater,
+    Windowing,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -153,12 +164,22 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
         if intent.eq_ignore_ascii_case("updater") {
             return Some(SmokeTestMode::Updater);
         }
+        if intent.eq_ignore_ascii_case("windowing") {
+            std::env::var_os("MCODE_TAURI_SMOKE_WINDOWING_MARKER")?;
+            return Some(SmokeTestMode::Windowing);
+        }
         Some(SmokeTestMode::Quit)
     }
     #[cfg(not(debug_assertions))]
     {
         None
     }
+}
+
+fn expected_windowing_inner_size() -> Option<(u32, u32)> {
+    let value = std::env::var("MCODE_TAURI_SMOKE_EXPECTED_INNER_SIZE").ok()?;
+    let (width, height) = value.split_once('x')?;
+    Some((width.parse().ok()?, height.parse().ok()?))
 }
 
 fn settings_path(app: &tauri::App) -> tauri::Result<std::path::PathBuf> {
@@ -169,26 +190,93 @@ fn settings_path(app: &tauri::App) -> tauri::Result<std::path::PathBuf> {
     Ok(app.path().app_data_dir()?.join("mcode-data.json"))
 }
 
-fn build_main_window(app: &tauri::App, smoke_mode: Option<SmokeTestMode>) -> tauri::Result<()> {
+const WINDOWS_TRAY_FALLBACK_DELAY: Duration = Duration::from_secs(12);
+
+fn install_windows_tray(app: &tauri::AppHandle, state: &NativeWindowState) {
+    match windows_tray::install(app) {
+        Ok(windows_tray::TrayInstallStatus::Installed) => state.mark_tray_available(),
+        Ok(windows_tray::TrayInstallStatus::InProgress) => {}
+        Err(error) => eprintln!("[tray] failed to install Windows tray: {error}"),
+    }
+}
+
+fn build_main_window(
+    app: &tauri::App,
+    smoke_mode: Option<SmokeTestMode>,
+    preferences: DesktopWindowPreferences,
+    native_window_state: NativeWindowState,
+) -> tauri::Result<()> {
     let entrypoint = match smoke_mode {
         Some(SmokeTestMode::RestartParent) => "lifecycle-smoke.html?intent=restart",
         Some(SmokeTestMode::Quit) => "lifecycle-smoke.html?intent=quit",
         Some(SmokeTestMode::RestartChild) | None => "index.html",
         Some(SmokeTestMode::Updater) => "lifecycle-smoke.html?intent=quit&updater=true",
+        Some(SmokeTestMode::Windowing) => "lifecycle-smoke.html?intent=quit&windowing=true",
     };
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(entrypoint.into()))
         .title("MCode")
-        .inner_size(1440.0, 900.0)
-        .min_inner_size(800.0, 600.0)
+        .min_inner_size(600.0, 400.0)
         .resizable(true)
-        .visible(smoke_mode.is_none());
+        .visible(smoke_mode.is_none() || smoke_mode == Some(SmokeTestMode::Windowing));
+
+    let monitor_bounds = monitor_work_areas(app).unwrap_or_else(|error| {
+        eprintln!("[window] failed to enumerate monitors: {error}");
+        Vec::new()
+    });
+    let restored_bounds = restorable_window_bounds(preferences.bounds, &monitor_bounds);
+    let mut default_work_area = None;
+    if let Some(bounds) = restored_bounds {
+        builder = builder
+            .position(f64::from(bounds.x), f64::from(bounds.y))
+            .inner_size(f64::from(bounds.width), f64::from(bounds.height));
+    } else {
+        if preferences.bounds.is_some() {
+            eprintln!("[window] discarded persisted off-screen or near-minimum bounds");
+        }
+        default_work_area = primary_work_area(app).unwrap_or_else(|error| {
+            eprintln!("[window] failed to inspect primary monitor: {error}");
+            None
+        });
+        builder = match default_work_area {
+            Some(bounds) => builder.inner_size(f64::from(bounds.width), f64::from(bounds.height)),
+            None => builder.inner_size(1200.0, 800.0),
+        };
+    }
+
+    let install_tray = smoke_mode.is_none() || smoke_mode == Some(SmokeTestMode::Windowing);
+    if install_tray {
+        let page_load_window_state = native_window_state.clone();
+        builder = builder.on_page_load(move |window, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                install_windows_tray(window.app_handle(), &page_load_window_state);
+            }
+        });
+    }
 
     #[cfg(debug_assertions)]
     if let Some(data_directory) = std::env::var_os("MCODE_TAURI_WEBVIEW_DATA_DIR") {
         builder = builder.data_directory(data_directory.into());
     }
 
-    builder.build()?;
+    let window = builder.build()?;
+    if install_tray {
+        install_windows_tray(window.app_handle(), &native_window_state);
+    }
+    if let Some(work_area) = default_work_area {
+        fit_inner_size_to_work_area(&window, work_area)?;
+    }
+    attach_placement_persistence(&window, native_window_state);
+    if install_tray {
+        let fallback_app = window.app_handle().clone();
+        let fallback_window_state = fallback_app.state::<NativeWindowState>().inner().clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(WINDOWS_TRAY_FALLBACK_DELAY);
+            install_windows_tray(&fallback_app, &fallback_window_state);
+        });
+    }
+    if preferences.maximized {
+        window.maximize()?;
+    }
     Ok(())
 }
 
@@ -205,7 +293,18 @@ pub fn run() {
         .manage(NativeUpdaterState::from_compile_time())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            app.manage(SettingsService::new(settings_path(app)?));
+            let settings = SettingsService::new(settings_path(app)?);
+            let preferences = settings
+                .desktop_window_preferences()
+                .unwrap_or_else(|error| {
+                    eprintln!(
+                        "[window] failed to read persisted desktop preferences; using safe defaults: {error}"
+                    );
+                    DesktopWindowPreferences::default()
+                });
+            let native_window_state = NativeWindowState::new(settings.clone(), preferences);
+            app.manage(settings);
+            app.manage(native_window_state.clone());
             let smoke_mode = smoke_test_mode();
             if smoke_mode == Some(SmokeTestMode::RestartParent) {
                 let marker = std::env::var_os("MCODE_TAURI_SMOKE_RESTART_MARKER")
@@ -213,7 +312,7 @@ pub fn run() {
                 std::fs::write(marker, b"restart-requested")?;
             }
             if smoke_mode != Some(SmokeTestMode::RestartChild) {
-                build_main_window(app, smoke_mode)?;
+                build_main_window(app, smoke_mode, preferences, native_window_state)?;
             }
             match smoke_mode {
                 Some(SmokeTestMode::Quit) | Some(SmokeTestMode::Updater) => {
@@ -223,6 +322,59 @@ pub fn run() {
                         eprintln!(
                             "[smoke] requesting app-wide quit through the renderer acknowledgement path"
                         );
+                        app_handle.exit(0);
+                    });
+                }
+                Some(SmokeTestMode::Windowing) => {
+                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_WINDOWING_MARKER")
+                        .expect("windowing smoke marker must be configured");
+                    let expected_inner_size = expected_windowing_inner_size();
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        let renderer_ready = (0..300).any(|_| {
+                            let ready = app_handle
+                                .state::<NativeWindowState>()
+                                .close_to_tray_revision()
+                                > 0;
+                            if !ready {
+                                std::thread::sleep(Duration::from_millis(100));
+                            }
+                            ready
+                        });
+                        if renderer_ready {
+                            if let Some(window) = app_handle.get_webview_window("main")
+                                && let Err(error) = window.close()
+                            {
+                                eprintln!("[smoke] failed to send native window close: {error}");
+                            }
+                        } else {
+                            eprintln!("[smoke] renderer did not signal windowing readiness");
+                        }
+                        std::thread::sleep(Duration::from_secs(2));
+                        let window = app_handle.get_webview_window("main");
+                        let hidden = window
+                            .as_ref()
+                            .and_then(|window| window.is_visible().ok())
+                            .is_some_and(|visible| !visible);
+                        let actual_inner_size = window
+                            .as_ref()
+                            .and_then(|window| logical_inner_size(window).ok());
+                        let restored_size = expected_inner_size
+                            .is_none_or(|expected| actual_inner_size == Some(expected));
+                        let tray_available = app_handle
+                            .state::<NativeWindowState>()
+                            .tray_available();
+                        let result = hidden && tray_available && restored_size;
+                        if !result {
+                            eprintln!(
+                                "[smoke] windowing evidence failed: hidden={hidden}, tray_available={tray_available}, expected_inner_size={expected_inner_size:?}, actual_inner_size={actual_inner_size:?}"
+                            );
+                        }
+                        let marker_value: &[u8] =
+                            if result { b"hidden" } else { b"not-hidden" };
+                        if let Err(error) = std::fs::write(marker, marker_value) {
+                            eprintln!("[smoke] failed to write windowing marker: {error}");
+                        }
                         app_handle.exit(0);
                     });
                 }
@@ -253,6 +405,8 @@ pub fn run() {
             app_acknowledge_shutdown,
             app_cancel_shutdown,
             app_confirm_and_execute_shutdown,
+            window_hide_to_tray_if_enabled,
+            window_set_minimize_to_tray_on_close,
             update_get_status,
             update_check,
             update_download,
@@ -269,6 +423,7 @@ pub fn run() {
                 false
             });
             if allow_exit {
+                app_handle.state::<NativeWindowState>().freeze_persistence();
                 return;
             }
             api.prevent_exit();

@@ -13,9 +13,21 @@ const appLifecycle = createTauriDesktopAppLifecycleCapability(desktopInvoke, (ev
   listen(event, listener)
 )
 
+export const tauriCloseToTrayClient = {
+  async setEnabled(enabled: boolean): Promise<void> {
+    await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled })
+  }
+}
+
 export const desktopClient = createDesktopClient(
   desktopInvoke,
-  createTauriDesktopWindowCapability(currentWindow, appLifecycle),
+  createTauriDesktopWindowCapability(currentWindow, appLifecycle, async () => {
+    const hidden = await desktopInvoke('window_hide_to_tray_if_enabled')
+    if (typeof hidden !== 'boolean') {
+      throw new Error('window_hide_to_tray_if_enabled returned a non-boolean value')
+    }
+    return hidden
+  }),
   appLifecycle
 )
 

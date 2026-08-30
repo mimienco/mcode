@@ -44,7 +44,7 @@ export { getAppearancePaneSearchEntries }
 
 type AppearancePaneProps = {
   settings: GlobalSettings
-  updateSettings: (updates: Partial<GlobalSettings>) => void
+  updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
   applyTheme: (theme: 'system' | 'dark' | 'light') => void
   fontSuggestions: string[]
   terminalFontSuggestions: string[]

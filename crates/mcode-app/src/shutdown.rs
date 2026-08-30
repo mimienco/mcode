@@ -342,6 +342,11 @@ impl ShutdownCoordinator {
         ))
     }
 
+    pub(crate) fn is_in_progress(&self) -> Result<bool, LifecycleServiceError> {
+        let state = self.lock()?;
+        Ok(!matches!(&state.phase, ShutdownPhase::Idle))
+    }
+
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, ShutdownState>, LifecycleServiceError> {
         self.state
             .lock()

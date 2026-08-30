@@ -107,4 +107,8 @@ impl LifecycleService {
     ) -> Result<bool, LifecycleServiceError> {
         self.shutdown.is_executing(intent)
     }
+
+    pub fn is_shutdown_in_progress(&self) -> Result<bool, LifecycleServiceError> {
+        self.shutdown.is_in_progress()
+    }
 }

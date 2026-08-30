@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
-  "updatedAt": "2026-08-29",
+  "updatedAt": "2026-08-30",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
     {
@@ -15,7 +15,8 @@
         "app_request_shutdown",
         "app_acknowledge_shutdown",
         "app_cancel_shutdown",
-        "app_confirm_and_execute_shutdown"
+        "app_confirm_and_execute_shutdown",
+        "window_hide_to_tray_if_enabled"
       ],
       "tests": [
         "crates/mcode-app/tests/lifecycle_contract.rs",
@@ -45,19 +46,22 @@
         "typed TypeScript command errors preserve validated code, context, and safe userMessage",
         "shared v1 fixture guards every workspace-session field and mirrored enum set",
         "local and runtime-host checkpoints retain host-owned topology, apply retirement tombstones, and do not revive terminated SSH leases",
-        "all production renderer restart and relaunch callers route through the runtime lifecycle client"
+        "all production renderer restart and relaunch callers route through the runtime lifecycle client",
+        "Windows close-to-tray is suppressed whenever any shutdown phase is active"
       ]
     },
     {
       "id": "desktop.windows",
       "currentFiles": ["src/main/index.ts", "src/main/windows"],
       "currentBehavior": "Main/popout window creation, restoration, focus, bounds, navigation, and lifecycle events.",
-      "targetRustModule": "src-tauri/src/lib.rs",
+      "targetRustModule": "src-tauri/src/desktop_window.rs",
       "targetCommand": [
         "core:window|minimize",
         "core:window|toggle_maximize",
         "core:window|is_maximized",
-        "core:window|close"
+        "core:window|close",
+        "window_hide_to_tray_if_enabled",
+        "window_set_minimize_to_tray_on_close"
       ],
       "tests": [
         "src/renderer/src/desktop/desktop-client.test.ts",
@@ -65,7 +69,10 @@
         "src/renderer/src/desktop/tauri-desktop-window-capability.test.ts",
         "src/renderer/src/components/window-close-request-coordinator.test.ts",
         "src/renderer/src/app-shell/WindowControls.test.tsx",
-        "src-tauri/tests/window_capability_contract.rs"
+        "src-tauri/tests/window_capability_contract.rs",
+        "src/renderer/src/desktop/runtime-desktop-close-to-tray-client.test.ts",
+        "crates/mcode-platform/src/lib.rs",
+        "crates/mcode-settings/tests/desktop_window_preferences.rs"
       ],
       "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
       "status": "in_progress",
@@ -78,19 +85,29 @@
         "tauri build --debug --no-bundle --ci passed",
         "debug smoke launch exited 0 using isolated WebView2 data",
         "manual close routes through existing renderer decisions and the app-wide shutdown protocol",
-        "real Windows WebView2 Quit and Restart lifecycle smoke exited cleanly with no remaining process"
+        "real Windows WebView2 Quit and Restart lifecycle smoke exited cleanly with no remaining process",
+        "startup restores only inner bounds larger than 600x400 with at least 300x200 visible on an attached monitor",
+        "first launch fits the decorated outer window within the primary work area and saved maximized state is restored",
+        "move/resize placement persistence is debounced 500 ms, skips fullscreen/maximized/near-min bounds, and synchronizes its final write with the authorized-shutdown freeze",
+        "real Windows WebView2 close-to-tray smoke restored the saved inner size, confirmed tray availability, persisted the live setting, hid the visible native window, exited through the renderer handshake, and left zero processes"
       ]
     },
     {
       "id": "desktop.shell-ui",
       "currentFiles": ["src/main/index.ts", "src/main/menu", "src/main/tray"],
       "currentBehavior": "Menus, tray, shortcuts, dialogs, clipboard, deep links, file associations, and external URLs.",
-      "targetRustModule": "crates/mcode-platform/src/shell_ui",
+      "targetRustModule": "src-tauri/src/windows_tray.rs",
       "targetCommand": ["dialog_open", "dialog_save", "open_external"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
-      "evidence": []
+      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "status": "in_progress",
+      "evidence": [
+        "Windows tray installation is attempted immediately after native window creation, after the first renderer page finishes loading, and by a 12-second fallback",
+        "left click and Open restore, show, and focus the main window",
+        "Quit restores the renderer first and enters the existing app-wide shutdown acknowledgement path",
+        "tray menu contains Open MCode, separator, and Quit with the packaged default icon and MCode tooltip",
+        "real Open, left-click, and Quit menu interaction evidence remains pending"
+      ]
     },
     {
       "id": "workspace.session",

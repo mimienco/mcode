@@ -25,6 +25,9 @@ The toolchain is selected by `rust-toolchain.toml`. This host requires `%USERPRO
 - Prior and incoming terminal-retirement tombstones are applied before local binding preservation. Terminated matching SSH leases are not restored while live local/app-scoped bindings, missing buffers, scrollback references, titles, and newer host topology survive a stale renderer checkpoint.
 - The Rust boundary validates nested session records and uses a typed execution-host identifier; a shared v1 fixture guards Rust/TypeScript field and mirrored nested-enum parity.
 - The native shell creates one constrained main WebView window and embeds the real React build.
+- Windows startup restores only meaningful on-screen inner bounds, restores maximized state, fits first-launch outer dimensions within the primary work area, and persists normal placement through a 500 ms debounced atomic merge.
+- Windows attempts tray installation immediately after native window creation, again after the first page finishes loading, and through a 12-second fallback. Left click/Open restores and focuses the main window; Quit restores it before entering the app-wide acknowledgement path.
+- The live close-to-tray preference is owned by a narrow Rust command and native state. The renderer update is rolled back if native synchronization fails; native close hides only on Windows while the lifecycle is idle and a tray is confirmed available.
 - A debug-only smoke mode uses isolated WebView data, hides the test window, and exits normally after startup. Release builds ignore both smoke environment variables.
 - The capability file grants Tauri's core default plus only `close`, `minimize`, and renderer-callable `toggle_maximize` mutations to the main window; a Rust contract locks that exact set. No shell or broad filesystem plugin is enabled.
 
@@ -44,6 +47,7 @@ The toolchain is selected by `rust-toolchain.toml`. This host requires `%USERPRO
 | `tauri info` with explicit Cargo path | PASS; all required Windows components detected |
 | `tauri build --debug --no-bundle --ci` | PASS after custom-window migration; `target/debug/mcode-tauri.exe` produced |
 | post-permission-review isolated WebView2 smoke | PASS, exit 0 in 8.9s without forced stop |
+| visible Windows close-to-tray WebView2 smoke | PASS, saved inner size restored, tray installation confirmed, setting persisted, marker `hidden`, renderer-acknowledged direct exit 0, zero processes; tray menu interactions remain untested |
 
 Known non-fatal build warnings are the inherited CSS minifier warning for the CSS Custom Highlight API, chunks over 500 kB, and Node 22 running below the repository's declared Node 24 engine. The migration will not relax production gates to hide those warnings.
 
@@ -51,4 +55,4 @@ The current lifecycle checkpoint could not reproduce the full renderer/package s
 
 ## Next acceptance boundary
 
-The custom titlebar and confirmed manual-close checkpoint are the first renderer-used `window.api` paths moved end to end. They remain `in_progress`: app-wide quit/restart acknowledgement, tray behavior, startup restore, bounds restore, focus/navigation, popouts, real WebView2 interaction assertions, and macOS/Linux evidence are still required. The next slice closes the app-wide quit and tray gaps rather than treating manual close as lifecycle parity.
+The custom titlebar, confirmed close checkpoint, Windows startup restore, and core tray path are now moved end to end. Windowing remains `in_progress`: the one-time hidden-window notice, attention/activity state, navigation containment, popouts, broader real-renderer interaction assertions, and macOS/Linux evidence are still required.
