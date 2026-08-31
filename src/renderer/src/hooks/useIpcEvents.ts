@@ -620,6 +620,15 @@ function getWorktreeRuntimeEnvironmentId(worktreeId: string | null | undefined):
   return getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), worktreeId)
 }
 
+async function invokeUiConsumePendingOpenSettings(): Promise<boolean> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return (await invoke('ui_consumePendingOpenSettings')) === true
+  } catch {
+    return false
+  }
+}
+
 async function invokeUiConsumePendingSkillShare(): Promise<string | null> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -1245,6 +1254,38 @@ export function useIpcEvents(): void {
       void invokeUiConsumePendingSkillShare().then((shareId) => {
         if (shareId) {
           useAppStore.getState().openSkillShare(shareId)
+        }
+      })
+    }
+
+    if (isTauri()) {
+      // Rust menu/tray commands emit the same channel names Electron's
+      // preload bridges; consumePendingOpenSettings mirrors the one-shot
+      // pull so a tray click before mount is never lost.
+      void invokeUiConsumePendingOpenSettings().then((open) => {
+        if (open) {
+          useAppStore.getState().openSettingsPage()
+        }
+      })
+      let unlistenMenu: (() => void)[] = []
+      void import('@tauri-apps/api/event')
+        .then(({ listen }) =>
+          Promise.all([
+            listen('ui:openSettings', () => {
+              useAppStore.getState().openSettingsPage()
+            }),
+            listen('ui:openSetupGuide', () => {
+              useAppStore.getState().openModal('setup-guide', { telemetrySource: 'help_menu' })
+            })
+          ])
+        )
+        .then((unlistens) => {
+          unlistenMenu = unlistens
+        })
+        .catch((error) => console.error('[menu-events] listen failed', error))
+      unsubs.push(() => {
+        for (const unlisten of unlistenMenu) {
+          unlisten()
         }
       })
     }

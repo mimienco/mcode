@@ -7,11 +7,12 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod app_menu_events;
 mod app_shutdown_commands;
-mod skill_share_deep_link;
 mod desktop_window;
 mod filesystem_commands;
 mod pty_commands;
+mod skill_share_deep_link;
 mod updater_commands;
 mod windows_tray;
 
@@ -54,6 +55,32 @@ use updater_commands::{
 #[tauri::command(rename_as = "ui_consumePendingSkillShare")]
 fn ui_consume_pending_skill_share(app: tauri::AppHandle) -> Option<String> {
     skill_share_deep_link::consume(&app)
+}
+
+#[tauri::command(rename_as = "ui_openSettings")]
+fn ui_open_settings(app: tauri::AppHandle) -> bool {
+    app_menu_events::open_settings(&app)
+}
+
+/// One-shot pending open-settings consume (mirrors `ui:consumePendingOpenSettings`).
+#[tauri::command(rename_as = "ui_consumePendingOpenSettings")]
+fn ui_consume_pending_open_settings(app: tauri::AppHandle) -> bool {
+    app_menu_events::consume_pending_open_settings(&app)
+}
+
+#[tauri::command(rename_as = "ui_openSetupGuide")]
+fn ui_open_setup_guide(app: tauri::AppHandle) -> bool {
+    app_menu_events::open_setup_guide(&app)
+}
+
+#[tauri::command(rename_as = "ui_openFeatureTour")]
+fn ui_open_feature_tour(app: tauri::AppHandle) -> bool {
+    app_menu_events::open_feature_tour(&app)
+}
+
+#[tauri::command(rename_as = "ui_openCrashReport")]
+fn ui_open_crash_report(app: tauri::AppHandle) -> bool {
+    app_menu_events::open_crash_report(&app)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -371,8 +398,10 @@ pub fn run() {
         .manage(NativeUpdaterState::from_compile_time())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             skill_share_deep_link::register(app.handle().clone());
+            app_menu_events::register(app.handle());
             let pty_state = NativePtyState::new();
             let settings = SettingsService::new(settings_path(app)?);
             let (filesystem_state, watch_batches) = NativeFilesystemState::new(settings.clone());
@@ -555,6 +584,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ui_consume_pending_skill_share,
+            ui_open_settings,
+            ui_consume_pending_open_settings,
+            ui_open_setup_guide,
+            ui_open_feature_tour,
+            ui_open_crash_report,
             app_get_launch_context,
             app_stage_shutdown_checkpoint,
             app_request_shutdown,

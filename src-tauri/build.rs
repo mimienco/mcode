@@ -20,6 +20,11 @@ fn main() {
         Attributes::default().app_manifest(tauri_build::AppManifest::new().commands(&[
             "app_get_launch_context",
             "ui_consume_pending_skill_share",
+            "ui_open_settings",
+            "ui_consume_pending_open_settings",
+            "ui_open_setup_guide",
+            "ui_open_feature_tour",
+            "ui_open_crash_report",
             "app_stage_shutdown_checkpoint",
             "app_request_shutdown",
             "app_acknowledge_shutdown",
