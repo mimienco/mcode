@@ -2598,6 +2598,7 @@ dependencies = [
  "mcode-settings",
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2608,6 +2609,8 @@ dependencies = [
  "mcode-app",
  "mcode-fs",
  "mcode-platform",
+ "mcode-process",
+ "mcode-pty",
  "mcode-settings",
  "mcode-updater",
  "serde",

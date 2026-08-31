@@ -10,6 +10,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 mod app_shutdown_commands;
 mod desktop_window;
 mod filesystem_commands;
+mod pty_commands;
 mod updater_commands;
 mod windows_tray;
 
@@ -36,6 +37,10 @@ use filesystem_commands::{
     fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path, fs_path_exists, fs_read_dir,
     fs_read_file, fs_rename_path, fs_search, fs_search_replace, fs_stat, fs_unwatch_worktree,
     fs_watch_worktree, fs_write_file, fs_write_file_atomic, spawn_watch_forwarder,
+};
+use pty_commands::{
+    NativePtyState, kill_all_sessions_for_shutdown, pty_has_pty, pty_kill, pty_resize, pty_spawn,
+    pty_write,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -339,10 +344,12 @@ pub fn run() {
         .manage(NativeUpdaterState::from_compile_time())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            let pty_state = NativePtyState::new();
             let settings = SettingsService::new(settings_path(app)?);
             let (filesystem_state, watch_batches) = NativeFilesystemState::new(settings.clone());
             spawn_watch_forwarder(app.handle().clone(), watch_batches);
             app.manage(filesystem_state);
+            app.manage(pty_state);
             let preferences = settings
                 .desktop_window_preferences()
                 .unwrap_or_else(|error| {
@@ -514,7 +521,12 @@ pub fn run() {
             fs_cancel_list_files,
             fs_cancel_search_replace,
             fs_watch_worktree,
-            fs_unwatch_worktree
+            fs_unwatch_worktree,
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill,
+            pty_has_pty
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");
@@ -527,6 +539,9 @@ pub fn run() {
                 false
             });
             if allow_exit {
+                // Every session dies before the process does: bounded
+                // flush-wait then force, so no shell outlives the app.
+                kill_all_sessions_for_shutdown(app_handle.state::<NativePtyState>().inner());
                 app_handle.state::<NativeWindowState>().freeze_persistence();
                 return;
             }

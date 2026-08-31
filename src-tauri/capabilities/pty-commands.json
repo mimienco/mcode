@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pty-commands",
+  "description": "Explicit PTY command permissions for the primary local MCode window; no default grants.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-pty-spawn",
+    "allow-pty-write",
+    "allow-pty-resize",
+    "allow-pty-kill",
+    "allow-pty-has-pty"
+  ]
+}

@@ -47,6 +47,11 @@ fn main() {
             "fs_cancel_search_replace",
             "fs_watch_worktree",
             "fs_unwatch_worktree",
+            "pty_spawn",
+            "pty_write",
+            "pty_resize",
+            "pty_kill",
+            "pty_has_pty",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         println!("{error:#}");

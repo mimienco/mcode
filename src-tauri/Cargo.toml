@@ -21,6 +21,8 @@ tauri-build.workspace = true
 mcode-app = { path = "../crates/mcode-app" }
 crossbeam-channel = "0.5"
 mcode-fs = { path = "../crates/mcode-fs" }
+mcode-pty = { path = "../crates/mcode-pty" }
+mcode-process = { path = "../crates/mcode-process" }
 mcode-platform = { path = "../crates/mcode-platform" }
 mcode-settings = { path = "../crates/mcode-settings" }
 mcode-updater = { path = "../crates/mcode-updater" }
