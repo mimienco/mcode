@@ -825,6 +825,8 @@ export type UISlice = {
   featureInteractions: FeatureInteractionState
   recordFeatureInteraction: (id: FeatureInteractionId) => Promise<void>
   contextualToursSeenIds: ContextualTourId[]
+  /** Session-scoped: Help-menu replay ignores persisted seen ids until restart. */
+  contextualToursReplayActive: boolean
   contextualToursAutoEligible: boolean | null
   activeContextualTourId: ContextualTourId | null
   activeContextualTourStepIndex: number
@@ -854,6 +856,7 @@ export type UISlice = {
   completeContextualTour: (id?: ContextualTourId) => void
   cancelContextualTour: (id?: ContextualTourId) => void
   markContextualToursSeen: (ids: ContextualTourId[]) => void
+  resetContextualTours: () => void
   trustedMCodeHooks: PersistedTrustedMCodeHooks
   markMCodeHookScriptConfirmed: (
     repoId: string,
@@ -1681,10 +1684,14 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
                   current.featureInteractions,
                   ui.featureInteractions
                 ),
-                contextualToursSeenIds: mergeContextualTourSeenIds(
-                  current.contextualToursSeenIds,
-                  ui.contextualToursSeenIds
-                )
+                // Why: during a session replay the persisted seen list is stale by
+                // design; merging it back would cancel the replay.
+                contextualToursSeenIds: current.contextualToursReplayActive
+                  ? current.contextualToursSeenIds
+                  : mergeContextualTourSeenIds(
+                      current.contextualToursSeenIds,
+                      ui.contextualToursSeenIds
+                    )
               }))
             })
           : window.api.ui.set({ featureInteractions: next })
@@ -1708,6 +1715,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
     return persistPromise
   },
   contextualToursSeenIds: [],
+  contextualToursReplayActive: false,
   contextualToursAutoEligible: null,
   activeContextualTourId: null,
   activeContextualTourStepIndex: 0,
@@ -1930,6 +1938,21 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
       }
       return { contextualToursSeenIds: next }
     }),
+  resetContextualTours: () => {
+    // Why: persisted seen ids are union-merged in main so paired clients can't
+    // erase each other's progress, which makes writing [] a no-op after the next
+    // hydrate. The replay flag keeps them cleared in-session instead; a restart
+    // restores the persisted record.
+    if (typeof window !== 'undefined') {
+      window.api.ui.set({ contextualToursAutoEligible: true }).catch(console.error)
+    }
+    set({
+      contextualToursReplayActive: true,
+      contextualToursSeenIds: [],
+      contextualToursAutoEligible: true,
+      contextualTourShownThisSession: false
+    })
+  },
   trustedMCodeHooks: {},
   markMCodeHookScriptConfirmed: (repoId, kind, contentHash) =>
     set((s) => {
@@ -2595,7 +2618,11 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
         taskResumeState: sanitizeTaskResumeState(ui.taskResumeState),
         featureTipsSeenIds: normalizeFeatureTipIds(ui.featureTipsSeenIds),
         featureInteractions: normalizeFeatureInteractions(ui.featureInteractions),
-        contextualToursSeenIds: normalizeContextualTourIds(ui.contextualToursSeenIds),
+        // Why: a session replay deliberately ignores the persisted seen list;
+        // re-hydrating it would cancel the replay on the next UI sync.
+        contextualToursSeenIds: s.contextualToursReplayActive
+          ? s.contextualToursSeenIds
+          : normalizeContextualTourIds(ui.contextualToursSeenIds),
         contextualToursAutoEligible:
           typeof ui.contextualToursAutoEligible === 'boolean'
             ? ui.contextualToursAutoEligible

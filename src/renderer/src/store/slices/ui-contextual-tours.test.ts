@@ -138,6 +138,43 @@ describe('createUISlice contextual tours', () => {
     expect(setMock).toHaveBeenCalledWith({ contextualToursSeenIds: ['tasks'] })
   })
 
+  it('replays tours for the session and keeps them cleared across UI sync', () => {
+    const setMock = vi.fn(() => Promise.resolve())
+    vi.stubGlobal('window', {
+      api: {
+        ui: {
+          set: setMock
+        }
+      }
+    })
+    const store = createUIStore()
+    store.getState().hydratePersistedUI(
+      makePersistedUI({
+        contextualToursSeenIds: ['tasks', 'browser'],
+        contextualToursAutoEligible: false
+      })
+    )
+    setMock.mockClear()
+
+    store.getState().resetContextualTours()
+
+    expect(store.getState().contextualToursReplayActive).toBe(true)
+    expect(store.getState().contextualToursSeenIds).toEqual([])
+    expect(store.getState().contextualToursAutoEligible).toBe(true)
+    expect(store.getState().contextualTourShownThisSession).toBe(false)
+    // Why: seen ids are union-merged in main, so only eligibility is persisted.
+    expect(setMock).toHaveBeenCalledWith({ contextualToursAutoEligible: true })
+
+    // Regression: a later sync must not resurrect the persisted seen list.
+    store.getState().hydratePersistedUI(
+      makePersistedUI({
+        contextualToursSeenIds: ['tasks', 'browser'],
+        contextualToursAutoEligible: true
+      })
+    )
+    expect(store.getState().contextualToursSeenIds).toEqual([])
+  })
+
   it('starts a tour only after persisted UI and required first target are ready', () => {
     const store = createUIStore()
     const tasksFirstSelector = '[data-contextual-tour-target="tasks-source-filters"]'

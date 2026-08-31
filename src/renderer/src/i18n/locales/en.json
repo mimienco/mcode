@@ -5094,7 +5094,9 @@
           "d396773ef0": "checking",
           "f8a2c91d4e": "Milestones",
           "b7e4d2a19c": "Onboarding",
-          "c4f8e1b72a": "X"
+          "c4f8e1b72a": "X",
+          "f4f1198c16": "Replay guided tours",
+          "fda15be623": "Guided tours reset. Open a screen to see its tour."
         },
         "SidebarToolbar": {
           "87d0064026": "Workspace board moved to the bottom bar",
