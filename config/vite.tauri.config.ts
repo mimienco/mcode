@@ -32,6 +32,7 @@ export default defineConfig({
       input: {
         index: resolve('src/renderer/index.html'),
         lifecycleSmoke: resolve('src/renderer/lifecycle-smoke.html'),
+        ptySmoke: resolve('src/renderer/pty-smoke.html'),
         popout: resolve('src/renderer/popout.html'),
         web: resolve('src/renderer/web-index.html')
       }
