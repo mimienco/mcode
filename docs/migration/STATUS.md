@@ -56,6 +56,12 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session end handoff (2026-08-31, wave 2)
+
+- `1ccdfbdf7f` @ workspace: 38 suites / 308 tests green, clippy 0 warnings, fmt clean.
+- New: mcode-wire `pairing` (deep-link encode/decode + schema validation, 8 tests), mcode-wire `server` (headless relay accept: sentinel → pre-dispatch handshake → framed dispatch; handshake decoder capped at 1 frame/turn so the post-handshake tail stays buffered for drain — the borrow-safe equivalent of the TS callback drain), `mcode-settings::crossgrade_discovery` (Electron %APPDATA%/MCode location via marker files, read-only, 4 tests), PTY smoke harness (pty-smoke.html + renderer driver; Rust only polls the renderer-written verdict marker).
+- Next agent: (1) run the PTY smoke for real (`MCODE_TAURI_SMOKE_PTY_MARKER`/`_ECHO` env + tauri debug build) and record evidence; (2) wire runtime-metadata advertising into mcode-wire/server (mcode-runtime.json contract in shared/runtime-bootstrap.ts); (3) terminal UI seq-dedupe consume pass per TERMINAL_UI_INTEGRATION.md.
+
 ## Session end handoff (2026-08-31)
 
 - Branch `rewrite/tauri-full` @ `a256b6f643`: workspace 294 tests / 0 failed across 38 suites, clippy 0 warnings, fmt clean, web typecheck = original baseline superset (21 vs 33).
