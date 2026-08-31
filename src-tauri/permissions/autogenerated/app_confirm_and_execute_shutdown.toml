@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-confirm-and-execute-shutdown"
+description = "Enables the app_confirm_and_execute_shutdown command without any pre-configured scope."
+commands.allow = ["app_confirm_and_execute_shutdown"]
+
+[[permission]]
+identifier = "deny-app-confirm-and-execute-shutdown"
+description = "Denies the app_confirm_and_execute_shutdown command without any pre-configured scope."
+commands.deny = ["app_confirm_and_execute_shutdown"]

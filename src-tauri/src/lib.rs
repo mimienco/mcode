@@ -160,6 +160,7 @@ enum SmokeTestMode {
     Updater,
     Windowing,
     Filesystem,
+    Pty,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -185,6 +186,11 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
             std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_MARKER")?;
             std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")?;
             return Some(SmokeTestMode::Filesystem);
+        }
+        if intent.eq_ignore_ascii_case("pty") {
+            std::env::var_os("MCODE_TAURI_SMOKE_PTY_MARKER")?;
+            std::env::var_os("MCODE_TAURI_SMOKE_PTY_ECHO")?;
+            return Some(SmokeTestMode::Pty);
         }
         Some(SmokeTestMode::Quit)
     }
@@ -250,6 +256,17 @@ fn build_main_window(
             format!(
                 "lifecycle-smoke.html?intent=quit&filesystem=true&root={}",
                 encode_query_component(&root)
+            )
+        }
+        Some(SmokeTestMode::Pty) => {
+            let echo = std::env::var("MCODE_TAURI_SMOKE_PTY_ECHO")
+                .expect("pty smoke echo must be configured");
+            let marker = std::env::var("MCODE_TAURI_SMOKE_PTY_MARKER")
+                .expect("pty smoke marker must be configured");
+            format!(
+                "pty-smoke.html?intent=pty&echo={}&marker={}",
+                encode_query_component(&echo),
+                encode_query_component(&marker)
             )
         }
     });
@@ -486,6 +503,50 @@ pub fn run() {
                             eprintln!("[smoke] failed to write filesystem marker: {error}");
                         }
                         app_handle.exit(i32::from(!probe_passed));
+                    });
+                }
+                Some(SmokeTestMode::Pty) => {
+                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_PTY_MARKER")
+                        .expect("pty smoke marker must be configured");
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        // Wait for the renderer to install its listeners (the
+                        // tray-revision handshake), then poll the marker file
+                        // the renderer writes with its own verdict. Rust never
+                        // writes the marker in this mode.
+                        let renderer_ready = (0..300).any(|_| {
+                            let ready = app_handle
+                                .state::<NativeWindowState>()
+                                .close_to_tray_revision()
+                                > 0;
+                            if !ready {
+                                std::thread::sleep(Duration::from_millis(100));
+                            }
+                            ready
+                        });
+                        if !renderer_ready {
+                            eprintln!("[smoke] pty smoke renderer never became ready");
+                            app_handle.exit(1);
+                            return;
+                        }
+                        let mut verdict: Option<String> = None;
+                        for _ in 0..120 {
+                            if let Ok(value) = std::fs::read_to_string(&marker) {
+                                let value = value.trim();
+                                if value == "passed" || value == "renderer-failed" {
+                                    verdict = Some(value.to_owned());
+                                    break;
+                                }
+                            }
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        let passed = verdict.as_deref() == Some("passed");
+                        if let Some(value) = verdict {
+                            eprintln!("[smoke] pty smoke renderer verdict: {value}");
+                        } else {
+                            eprintln!("[smoke] pty smoke marker never reached a verdict");
+                        }
+                        app_handle.exit(i32::from(!passed));
                     });
                 }
                 Some(SmokeTestMode::RestartParent) | None => {}

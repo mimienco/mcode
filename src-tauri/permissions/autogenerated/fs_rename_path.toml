@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fs-rename-path"
+description = "Enables the fs_rename_path command without any pre-configured scope."
+commands.allow = ["fs_rename_path"]
+
+[[permission]]
+identifier = "deny-fs-rename-path"
+description = "Denies the fs_rename_path command without any pre-configured scope."
+commands.deny = ["fs_rename_path"]
