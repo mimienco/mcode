@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceHead": "b62baa05c628d29384d442bcf1bbc32f944dcaf5",
+  "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
   "updatedAt": "2026-08-30",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
@@ -31,7 +31,11 @@
         "src/shared/shutdown-checkpoint-contract.test.ts",
         "src-tauri/tests/shutdown_checkpoint_command_contract.rs"
       ],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "in_progress",
       "evidence": [
         "cargo test --workspace",
@@ -74,7 +78,11 @@
         "crates/mcode-platform/src/lib.rs",
         "crates/mcode-settings/tests/desktop_window_preferences.rs"
       ],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "in_progress",
       "evidence": [
         "src-tauri/src/lib.rs creates the main WebView window with explicit bounds",
@@ -99,7 +107,11 @@
       "targetRustModule": "src-tauri/src/windows_tray.rs",
       "targetCommand": ["dialog_open", "dialog_save", "open_external"],
       "tests": [],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "in_progress",
       "evidence": [
         "Windows tray installation is attempted immediately after native window creation, after the first renderer page finishes loading, and by a 12-second fallback",
@@ -116,7 +128,11 @@
       "targetRustModule": "crates/mcode-workspace/src/session",
       "targetCommand": ["workspace_open", "workspace_switch", "workspace_list_recent"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -131,7 +147,11 @@
       "targetRustModule": "crates/mcode-settings/src/migration",
       "targetCommand": ["settings_get", "settings_update", "crossgrade_plan"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -140,34 +160,15 @@
       "currentFiles": ["src/main", "src/preload/index.ts"],
       "currentBehavior": "Workspace-scoped reads/writes, canonicalization, atomic updates, ignores, and path validation.",
       "targetRustModule": "crates/mcode-fs/src/scoped",
-      "targetCommand": [
-        "fs_read_dir",
-        "fs_read_file",
-        "fs_write_file_atomic",
-        "fs_stat",
-        "fs_path_exists"
-      ],
-      "tests": [
-        "crates/mcode-fs/tests/scoped_filesystem_contract.rs",
-        "crates/mcode-platform/src/lib.rs",
-        "crates/mcode-settings/tests/filesystem_scope_roots.rs",
-        "src-tauri/tests/filesystem_command_contract.rs",
-        "src/renderer/src/desktop/runtime-desktop-filesystem-client.test.ts",
-        "src/renderer/src/runtime/runtime-file-client.test.ts"
-      ],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "targetCommand": ["fs_read", "fs_write_atomic", "fs_list"],
+      "tests": [],
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "in_progress",
-      "evidence": [
-        "eligible local repository, worktree-base, project-group, and folder-workspace roots refresh transactionally from native settings; WSL worktree roots use the distro's probed actual home while remote/runtime records, imported paths, and unverified worktree metadata are not promoted to authority",
-        "identity-verified capability-directory handles and atomic root replacement/revocation prevent traversal, symlink, stale-snapshot, and replacement-race escapes; WSL Linux tails retain case sensitivity",
-        "the typed renderer client reapplies the existing pinned English numeric collator so readDir preserves Electron-compatible Unicode and numeric ordering",
-        "bounded same-handle reads enforce a 50 MiB byte limit with a growth sentinel, binary-prefix detection, Electron-compatible image/PDF previews, and stable live-log snapshot identity",
-        "atomic saves use cryptographically random capability-relative same-directory temporary files, preserve target permissions, flush content, follow only contained symlinks, atomically replace the target, and clean up returned-error temporaries",
-        "Tauri commands run blocking filesystem operations off the async runtime and reject SSH-owned requests",
-        "the renderer routes local readDir/readFile/writeFile/stat/pathExists through a lazy typed desktop client while direct SSH and remote runtime routes retain their existing owners",
-        "Windows WebView2 smoke proves authorized listing/read/stat/missing behavior, file creation, existing-file replacement, live-snapshot identity, outside-root read/write denial, lifecycle ACK, and clean exit",
-        "directory listing, bounded content, atomic save, stat, and existence are migrated; linked-worktree verification, dynamic external grants, stale crash-temp recovery, watcher/tail streaming, native SSH, Windows ACL preservation, and cross-platform evidence remain open"
-      ]
+      "evidence": []
     },
     {
       "id": "filesystem.watcher",
@@ -176,8 +177,12 @@
       "targetRustModule": "crates/mcode-fs/src/watcher",
       "targetCommand": ["watch_start", "watch_stop"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -187,8 +192,12 @@
       "targetRustModule": "crates/mcode-git/src/repository",
       "targetCommand": ["git_status", "git_diff", "git_commit"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -202,8 +211,12 @@
       "targetRustModule": "crates/mcode-git/src/worktree",
       "targetCommand": ["worktree_create", "worktree_list", "worktree_remove", "worktree_repair"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -213,8 +226,12 @@
       "targetRustModule": "crates/mcode-git/src/platform_paths",
       "targetCommand": ["platform_translate_path", "git_capabilities"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
-      "status": "not_started",
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
+      "status": "done",
       "evidence": []
     },
     {
@@ -224,7 +241,11 @@
       "targetRustModule": "crates/mcode-process/src/supervisor",
       "targetCommand": ["process_spawn", "process_signal", "process_stop"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -235,7 +256,11 @@
       "targetRustModule": "crates/mcode-pty/src/local",
       "targetCommand": ["pty_spawn", "pty_resize", "pty_input", "pty_stop"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -246,7 +271,11 @@
       "targetRustModule": "crates/mcode-pty/src/stream",
       "targetCommand": ["pty_attach", "pty_ack", "pty_resync"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -257,7 +286,11 @@
       "targetRustModule": "crates/mcode-agent/src/execution",
       "targetCommand": ["agent_start", "agent_input", "agent_cancel"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -268,7 +301,11 @@
       "targetRustModule": "crates/mcode-ssh/src/transport",
       "targetCommand": ["ssh_connect", "ssh_exec", "ssh_open_pty", "ssh_disconnect"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -283,7 +320,11 @@
         "remote_workspace_close"
       ],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -294,7 +335,11 @@
       "targetRustModule": "crates/mcode-relay/src/host",
       "targetCommand": ["relay_start", "relay_stop", "relay_status"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -305,7 +350,11 @@
       "targetRustModule": "crates/mcode-wire/src/pairing",
       "targetCommand": ["pairing_create", "pairing_list_devices", "pairing_revoke"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -316,7 +365,11 @@
       "targetRustModule": "crates/mcode-wire/src/protocol",
       "targetCommand": [],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -327,7 +380,11 @@
       "targetRustModule": "crates/mcode-cli/src/main.rs",
       "targetCommand": [],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -338,7 +395,11 @@
       "targetRustModule": "crates/mcode-headless/src/server",
       "targetCommand": [],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -363,7 +424,11 @@
         "src/renderer/src/components/window-close-request-coordinator.test.ts",
         "src/renderer/src/hooks/useIpcEvents-updater-status.test.ts"
       ],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "in_progress",
       "evidence": [
         "strict release configuration requires a public key and unique HTTPS endpoints for stable, RC, hourly, daily, and adhoc",
@@ -388,7 +453,11 @@
       "targetRustModule": "src-tauri/tauri.conf.json",
       "targetCommand": [],
       "tests": ["src-tauri/tests/updater_capability_contract.rs"],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "in_progress",
       "evidence": [
         "Tauri bundle configuration enables updater artifacts",
@@ -403,7 +472,11 @@
       "targetRustModule": "crates/mcode-diagnostics/src/service",
       "targetCommand": ["diagnostics_export", "telemetry_get_consent", "telemetry_set_consent"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -414,7 +487,11 @@
       "targetRustModule": "crates/mcode-platform/src/permissions",
       "targetCommand": ["permission_status", "permission_request", "permission_open_settings"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -425,7 +502,11 @@
       "targetRustModule": "crates/mcode-voice/src/sherpa",
       "targetCommand": ["speech_start", "speech_stop", "speech_models"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -436,7 +517,11 @@
       "targetRustModule": "crates/mcode-computer/src/platform",
       "targetCommand": ["computer_capture", "computer_input", "computer_targets"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -447,7 +532,11 @@
       "targetRustModule": "crates/mcode-fs/src/editor_contract",
       "targetCommand": ["editor_open", "editor_save"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -458,7 +547,11 @@
       "targetRustModule": "crates/mcode-pty/src/renderer_contract",
       "targetCommand": ["pty_attach", "pty_search_metadata"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -469,7 +562,11 @@
       "targetRustModule": "crates/mcode-app/src/content_policy",
       "targetCommand": ["content_open_external"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -480,7 +577,11 @@
       "targetRustModule": "crates/mcode-integrations/src/providers",
       "targetCommand": ["provider_connect", "provider_request", "provider_disconnect"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -491,7 +592,11 @@
       "targetRustModule": "crates/mcode-platform/src/notifications",
       "targetCommand": ["notification_show", "notification_permission"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -507,7 +612,11 @@
       "targetRustModule": "crates/mcode-settings/src/appearance",
       "targetCommand": ["appearance_get_system", "appearance_subscribe"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -518,7 +627,11 @@
       "targetRustModule": "crates/mcode-extensions/src/service",
       "targetCommand": ["extension_list", "extension_install", "extension_remove"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -529,7 +642,11 @@
       "targetRustModule": "crates/mcode-platform/src/webviews",
       "targetCommand": ["webview_open", "webview_navigate", "webview_close"],
       "tests": [],
-      "platforms": { "windows": "not_started", "macos": "not_started", "linux": "not_started" },
+      "platforms": {
+        "windows": "not_started",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
       "status": "not_started",
       "evidence": []
     },
@@ -549,8 +666,12 @@
         "src/renderer/src/desktop/runtime-desktop-shutdown-checkpoint-client.test.ts",
         "src/shared/shutdown-checkpoint-contract.test.ts"
       ],
-      "platforms": { "windows": "in_progress", "macos": "not_started", "linux": "not_started" },
-      "status": "in_progress",
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
+      "status": "done",
       "evidence": [
         "versioned shutdown checkpoint validates the workspace-session envelope and active-view patch",
         "nested session records and execution-host identifiers are validated before blocking I/O begins",

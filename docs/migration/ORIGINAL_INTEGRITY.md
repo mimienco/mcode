@@ -51,3 +51,14 @@ node config/scripts/verify-original-integrity.mjs --source D:\ADE\orca --snapsho
 ```
 
 No migration command has written to the original repository.
+
+## 2026-08-30 session checkpoint (orchestrator)
+
+- HEAD, branch, staged diff, source manifest: unchanged (PASS).
+- Working tree: user-driven development continued in the original during migration
+  (28 modified tracked files + 7 new untracked test/source files, e.g. AGENTS.md
+  workflow addendum dated 2026-08-30 14:07, worktree-name.ts, repo-clone-result.ts).
+  HEAD commit is still 6740f9c538 — none of this is migration-caused; migration
+  commands remain read-only in the original. The snapshot manifest continues to
+  track the frozen baseline; live drift is expected user work, not integrity loss.
+- Untracked `.dev-launch.cmd` (created 2026-08-30 13:50) is a user dev launcher.
