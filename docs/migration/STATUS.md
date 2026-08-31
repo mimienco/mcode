@@ -44,9 +44,9 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 ## Parity summary
 
 - done: 2 (session.recovery, git.wsl-paths)
-- in progress: 10 (lifecycle, windows, fs.scoped, fs.watcher, git.repositories, git.worktrees, ssh.transport, wire.protocol, updater.channels, packaging.release)
-- not started: 25
-- terminal.ui: in_progress (design + inventory in TERMINAL_UI_INTEGRATION.md; implementation pending)
+- in progress: 15 (lifecycle, windows, shell-ui, fs.scoped, fs.watcher, git.repositories, git.worktrees, process.supervisor, pty.local, pty.streaming, ssh.transport, wire.protocol, updater.channels, packaging.release, terminal.ui)
+- not started: 19
+- terminal.ui moved to in_progress this wave: design + full window.api.pty.* inventory in TERMINAL_UI_INTEGRATION.md; implementation pending
 - blocked: 0
 
 ## Exact next actions
@@ -55,15 +55,10 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 2. SSH command exposure: wire ssh_connect/ssh_exec/ssh_open_pty/ssh_disconnect commands over mcode-ssh, then the pty://replay channel and `remote:`-prefix guards (PTY_CONTRACT_SPEC §9.3).
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
-1. Wire pty_spawn/pty_write/pty_resize/pty://data commands + typed terminal client into src-tauri (byte-owner and batcher are ready in mcode-pty).
-2. Port SSH transport (ssh2 -> russh decision per ADR) and remote worktrees.
-3. Port relay host + wire protocol with golden test vectors.
-4. Connect terminal UI (xterm.js) to pty://data with seq-based dedupe.
-5. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
 ## Session end handoff (2026-08-31)
 
-- Branch `rewrite/tauri-full` @ `a256b6f643`: workspace 38 suites / 290+ tests green, clippy 0 warnings, fmt clean, web typecheck = original baseline superset (21 vs 33).
-- New this session: `mcode-wire` (frame codec, E2EE crypto_box/secretbox, v2 framing, handshake, 29 golden vectors), `mcode-ssh` (russh transport, host-key verifier/store/known_hosts, 29 tests), `mcode-app::single_instance` (named-mutex guard, 4 tests), typed `pty-client.ts` + 5 `pty_*` commands + capability file, fs-client routing consolidation, inherited typecheck repairs.
+- Branch `rewrite/tauri-full` @ `a256b6f643`: workspace 294 tests / 0 failed across 38 suites, clippy 0 warnings, fmt clean, web typecheck = original baseline superset (21 vs 33).
+- New this session: `mcode-wire` (frame codec, E2EE crypto_box/secretbox, v2 framing, handshake, golden vectors, 21 tests), `mcode-ssh` (russh transport, host-key verifier/store/known_hosts, 29 tests), `mcode-app::single_instance` (named-mutex guard, 4 tests), typed `pty-client.ts` + 5 `pty_*` commands + capability file, fs-client routing consolidation, inherited typecheck repairs, TERMINAL_UI_INTEGRATION.md (terminal.ui seam design + full window.api.pty.* inventory).
 - Original `D:/ADE/orca` integrity re-verified: HEAD moved externally (user work) but all migration work stayed in the rewrite; manifest/snapshot preserved under `docs/migration/source-snapshot/`.
-- Next agent: start at **Terminal UI wiring** — attach xterm.js to `pty://data` with seq-based dedupe (PTY_CONTRACT_SPEC §5), then route the 42 `window.api.pty.*` renderer call sites through `createTauriPtyClient`. Menus/deep-links and settings-crossgrade follow.
+- Next agent: execute the **transport seam pass** per TERMINAL_UI_INTEGRATION.md — factory + Tauri transport + unit tests, wire `pty-connection.ts:4026`, (b) command exposures, pty smoke E2E. Pane serializers/delivery stay deferred (doc §3). SSH command exposure and relay host follow.
