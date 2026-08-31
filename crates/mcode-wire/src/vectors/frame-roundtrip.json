@@ -1,0 +1,46 @@
+{
+  "header_length": 13,
+  "derived_from": "orca/src/relay/protocol.ts:140-153 encodeFrame (type[0], id u32BE@1, ack u32BE@5, length u32BE@9) + concat payload",
+  "cases": [
+    {
+      "name": "case-0",
+      "id": 0,
+      "ack": 0,
+      "payload_hex": "",
+      "frame_hex": "01000000000000000000000000",
+      "frame_type": 1
+    },
+    {
+      "name": "case-1",
+      "id": 7,
+      "ack": 3,
+      "payload_hex": "68656c6c6f",
+      "frame_hex": "0100000007000000030000000568656c6c6f",
+      "frame_type": 1
+    },
+    {
+      "name": "case-2",
+      "id": 0,
+      "ack": 0,
+      "payload_hex": "7b226a736f6e727063223a22322e30227d",
+      "frame_hex": "020000000000000000000000117b226a736f6e727063223a22322e30227d",
+      "frame_type": 2
+    },
+    {
+      "name": "case-3",
+      "id": 42,
+      "ack": 41,
+      "payload_hex": "",
+      "frame_hex": "090000002a0000002900000000",
+      "frame_type": 9
+    },
+    {
+      "name": "case-4",
+      "id": 4294967295,
+      "ack": 4294967295,
+      "payload_hex": "000102ff",
+      "frame_hex": "01ffffffffffffffff00000004000102ff",
+      "frame_type": 1
+    }
+  ]
+}

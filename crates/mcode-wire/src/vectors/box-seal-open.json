@@ -1,0 +1,28 @@
+{
+  "comment": "Box golden vector. shared_key = crypto_box_beforenm(bob_public, alice_secret) from the documented hex inputs; bundle layout per e2ee-crypto.ts:55-59 = nonce(24) || MAC(16) || ciphertext. The sealed vector is computed by the Rust test from these inputs and cross-checked against tweetnacl box.after semantics (XSalsa20-Poly1305, MAC-prefixed).",
+  "alice_secret_hex": "0badcafe0badcafe0badcafe0badcafe0badcafe0badcafe0badcafe0badcafe",
+  "bob_public_hex": "5ea1ce5ea1ce5ea1ce5ea1ce5ea1ce5ea1ce5ea1ce5ea1ce5ea1ce5ea1ce5ea1",
+  "nonce_hex": "070707070707070707070707070707070707070707070707",
+  "plaintext_utf8": "hello",
+  "bundle_len": 45,
+  "max_e2ee_text_plaintext_bytes": 4194304,
+  "legacy_frame_overhead_bytes": 40,
+  "max_e2ee_encrypted_base64_characters": 5592460,
+  "tamper_expectations": {
+    "short_bundle_len": 39,
+    "short_bundle_opens": false,
+    "tampered_mac_opens": false
+  },
+  "public_key_cases": [
+    {
+      "input_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "valid": true,
+      "reason": "43 unpadded base64 chars decode to exactly 32 bytes (Buffer tolerance)"
+    },
+    {
+      "input_base64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "valid": false,
+      "reason": "base64 longer than 44"
+    }
+  ]
+}

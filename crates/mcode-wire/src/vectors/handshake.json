@@ -1,0 +1,58 @@
+{
+  "comment": "Handshake vectors per relay/relay-handshake.ts:100-155 and relay/protocol.ts:40-64. Frames are full encodeFrame(HANDSHAKE=2,0,0,JSON) bytes.",
+  "relay_version": "0.1.0",
+  "sentinel": "MCODE-RELAY v0.1.0 READY\n",
+  "sentinel_len": 25,
+  "exit_code_version_mismatch": 42,
+  "message_types": {
+    "Regular": 1,
+    "Handshake": 2,
+    "KeepAlive": 9
+  },
+  "accept": {
+    "client_json": "{\"type\":\"mcode-relay-handshake\",\"version\":\"0.1.0\"}",
+    "decision": "accept",
+    "reply_json": "{\"type\":\"mcode-relay-handshake-ok\",\"version\":\"0.1.0\"}"
+  },
+  "accept_with_credential": {
+    "client_json": "{\"type\":\"mcode-relay-handshake\",\"version\":\"0.1.0\",\"endpointCredential\":\"s3cret\"}",
+    "expected_credential": "s3cret",
+    "decision": "accept"
+  },
+  "version_mismatch": {
+    "client_json": "{\"type\":\"mcode-relay-handshake\",\"version\":\"9.9.9\"}",
+    "decision": "mismatch",
+    "expected": "0.1.0",
+    "got": "9.9.9",
+    "reply_json": "{\"type\":\"mcode-relay-handshake-mismatch\",\"expected\":\"0.1.0\",\"got\":\"9.9.9\"}"
+  },
+  "wrong_frame_type": {
+    "frame_type": 1,
+    "decision": "wrong_frame_type"
+  },
+  "unknown_type": {
+    "client_json": "{\"type\":\"totally-unknown\"}",
+    "decision": "bad_handshake",
+    "error_contains": "Unknown handshake type: totally-unknown"
+  },
+  "credential_mismatch": {
+    "client_json": "{\"type\":\"mcode-relay-handshake\",\"version\":\"0.1.0\",\"endpointCredential\":\"wrong\"}",
+    "expected_credential": "s3cret",
+    "decision": "credential_mismatch"
+  },
+  "credential_absent_vs_expected": {
+    "client_json": "{\"type\":\"mcode-relay-handshake\",\"version\":\"0.1.0\"}",
+    "expected_credential": "s3cret",
+    "decision": "credential_mismatch"
+  },
+  "client_reply_ok": {
+    "reply_json": "{\"type\":\"mcode-relay-handshake-ok\",\"version\":\"0.1.0\"}",
+    "decision": "accepted"
+  },
+  "client_reply_mismatch": {
+    "reply_json": "{\"type\":\"mcode-relay-handshake-mismatch\",\"expected\":\"0.1.0\",\"got\":\"0.0.1\"}",
+    "decision": "mismatch",
+    "expected": "0.1.0",
+    "got": "0.0.1"
+  }
+}

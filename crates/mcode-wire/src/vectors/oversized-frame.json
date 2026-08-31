@@ -1,0 +1,36 @@
+{
+  "comment": "Oversized-frame rejection vectors per shared/relay-frame-decoder.ts:126-134 (publish error), 167-179 (discardOversizedPayload), 66-74 (retained limit). No oversized payload is ever allocated: declared length MAX_MESSAGE_SIZE+1 with fewer real bytes.",
+  "max_message_size": 16777216,
+  "max_retained_bytes": 17825805,
+  "cases": [
+    {
+      "name": "oversized header then next valid frame survives",
+      "oversized_length": 16777217,
+      "oversized_frame_prefix_hex": "01000000010000000001000001",
+      "trailing_valid_frame_hex": "010000000500000004000000087375727669766f72",
+      "expected_error_contains": "Frame payload too large: 16777217 bytes \u2014 discarded",
+      "expected_final_frames": [],
+      "comment": "Case 1 per relay-frame-decoder.ts:127-133 + 167-179: the oversized header is discarded, then the declared payload byte count is dropped from the buffer across turns \u2014 any trailing bytes are consumed as the oversized payload. A trailing frame survives only if more than oversized_length bytes follow, so with a small trailer none survives (0 final frames)."
+    },
+    {
+      "name": "oversized payload bytes consumed across turns",
+      "oversized_length": 16777217,
+      "oversized_frame_prefix_hex": "02000000020000000001000001",
+      "chunk_size": 65536,
+      "expected_error_contains": "Frame payload too large: 16777217 bytes \u2014 discarded",
+      "expected_error_count": 1
+    },
+    {
+      "name": "retained-input limit exceeded resets decoder",
+      "chunk_hex_of_zeros_len": 17825806,
+      "expected_error_contains": "Frame decoder retained-input limit exceeded: 17825806",
+      "expected_buffer_empty_after": true
+    },
+    {
+      "name": "boundary: exactly MAX_MESSAGE_SIZE payload is NOT oversized",
+      "declared_length": 16777216,
+      "expect_oversized_error": false,
+      "comment": "decoder.ts:126 uses strict >; a full 16MiB-1 frame in the fixture would be too large to embed, the test asserts the boundary on the header path only"
+    }
+  ]
+}

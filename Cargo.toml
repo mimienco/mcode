@@ -5,6 +5,7 @@ members = [
   "crates/mcode-process",
   "crates/mcode-platform",
   "crates/mcode-pty",
+  "crates/mcode-wire",
   "crates/mcode-settings",
   "crates/mcode-updater",
   "src-tauri",

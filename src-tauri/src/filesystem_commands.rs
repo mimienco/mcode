@@ -605,6 +605,9 @@ pub(crate) async fn fs_search(
     .await
 }
 
+// Tauri commands flatten the request DTO into parameters by design; eight is
+// the contract shape here, not a design smell.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn fs_search_replace(
     state: tauri::State<'_, NativeFilesystemState>,

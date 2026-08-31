@@ -1,0 +1,56 @@
+{
+  "comment": "v2 framing golden vector per mobile-e2ee-v2-framing.ts:12-26. Frame = nonce(24) || secretbox(header(42)||payload, nonce, key). Nonce per framing.ts:76-92. Header per framing.ts:62-74. Expectations computed by the Rust test from documented inputs, cross-checked against TS layout.",
+  "key_hex": "0101010101010101010101010101010101010101010101010101010101010101",
+  "session_id_hex": "0202020202020202020202020202020202020202020202020202020202020202",
+  "cases": [
+    {
+      "name": "desktop-to-mobile binary counter 7",
+      "direction": "desktop-to-mobile",
+      "payload_kind": "binary",
+      "counter": 7,
+      "payload_utf8": "mcode-v2",
+      "expected_nonce_hex": "020202020202020202020202020101000000000000000007"
+    },
+    {
+      "name": "mobile-to-desktop text counter 0",
+      "direction": "mobile-to-desktop",
+      "payload_kind": "text",
+      "counter": 0,
+      "payload_utf8": "hi",
+      "expected_nonce_hex": "020202020202020202020202020000000000000000000000"
+    }
+  ],
+  "minimum_frame_len": 82,
+  "rejections": [
+    {
+      "case": "short_frame_len_81",
+      "opens": false
+    },
+    {
+      "case": "wrong_direction",
+      "opens": false
+    },
+    {
+      "case": "wrong_kind",
+      "opens": false
+    },
+    {
+      "case": "wrong_counter",
+      "opens": false
+    },
+    {
+      "case": "tampered_ciphertext",
+      "opens": false
+    }
+  ],
+  "validation_errors": [
+    {
+      "key_len": 31,
+      "expected_message": "Invalid E2EE v2 key length: 31"
+    },
+    {
+      "session_id_len": 31,
+      "expected_message": "Invalid E2EE v2 session ID length: 31"
+    }
+  ]
+}
