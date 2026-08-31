@@ -13,6 +13,7 @@ pub use frame::FrameDecoderError;
 pub mod handshake;
 pub mod pairing;
 pub mod protocol;
+pub mod server;
 pub mod v2;
 #[cfg(test)]
 pub mod vectors;

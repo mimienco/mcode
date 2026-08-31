@@ -14,6 +14,7 @@ getrandom = { version = "0.2", features = ["js"] }
 rand_core = { version = "0.9", features = ["os_rng"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tokio = { version = "1", features = ["net", "io-util", "rt", "macros", "sync"] }
 url.workspace = true
 subtle = "2"
 
