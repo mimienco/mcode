@@ -62,3 +62,17 @@ No migration command has written to the original repository.
   commands remain read-only in the original. The snapshot manifest continues to
   track the frozen baseline; live drift is expected user work, not integrity loss.
 - Untracked `.dev-launch.cmd` (created 2026-08-30 13:50) is a user dev launcher.
+
+## 2026-08-31 final session check (orchestrator)
+
+- The user continued development in the original and committed `b430167f25`
+  ("fix: rebrand user-facing docs/changelog/feedback URLs behind shared contract",
+  2026-08-31 08:15, 74 files) on top of the migration baseline `6740f9c538`.
+- This is user-authored work in the ORIGINAL repo, created after the migration
+  snapshot froze the baseline. It is NOT migration-caused: every migration
+  command against the original has been read-only, and no migration agent has
+  write access there. The frozen snapshot (HEAD 6740f9c538 + manifest) remains
+  the verified migration oracle; the divergence is documented, expected user
+  progress, and does not affect the backup or rewrite copies.
+- Branch: rebrand/mcode (unchanged). Migration integrity verdict: original
+  unchanged by migration activity itself; forward drift = user commits.
