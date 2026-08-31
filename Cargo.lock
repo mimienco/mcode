@@ -2671,6 +2671,7 @@ dependencies = [
  "mcode-platform",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
