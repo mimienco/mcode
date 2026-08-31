@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod restore;
+pub mod runtime_metadata;
 pub mod shutdown;
 pub mod single_instance;
 pub mod telemetry_consent;
