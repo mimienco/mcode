@@ -60,26 +60,26 @@ impl core::fmt::Display for MetadataError {
 impl std::error::Error for MetadataError {}
 
 /// runtime-bootstrap.ts:47-49.
-pub fn get_runtime_metadata_path(userData_path: &Path) -> PathBuf {
-    userData_path.join(PRIMARY_RUNTIME_METADATA_FILE)
+pub fn get_runtime_metadata_path(user_data_path: &Path) -> PathBuf {
+    user_data_path.join(PRIMARY_RUNTIME_METADATA_FILE)
 }
 
 /// Atomic write of the metadata file (the TS write is a temp-file rename; the
 /// Rust side uses the same shape via write-then-rename semantics in
 /// `write_atomic`).
 pub fn write_runtime_metadata(
-    userData_path: &Path,
+    user_data_path: &Path,
     metadata: &RuntimeMetadata,
 ) -> Result<(), MetadataError> {
-    let path = get_runtime_metadata_path(userData_path);
+    let path = get_runtime_metadata_path(user_data_path);
     write_atomic(&path, metadata)
 }
 
 /// Remove on exit — the remove-on-exit discipline above. Missing file is
 /// fine (idempotent); errors surface so the CLI's `stale_bootstrap` window
 /// is not silently widened.
-pub fn remove_runtime_metadata(userData_path: &Path) -> Result<(), MetadataError> {
-    let path = get_runtime_metadata_path(userData_path);
+pub fn remove_runtime_metadata(user_data_path: &Path) -> Result<(), MetadataError> {
+    let path = get_runtime_metadata_path(user_data_path);
     match std::fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
