@@ -2756,6 +2756,14 @@ function WorktreeJumpPaletteContent({
         selectionMovedByUser: selectionMovedByUserRef.current
       })
     ) {
+      // Why: a silent no-op is invisible — the user pressed Enter on the advertised
+      // Create row and nothing happened. Point at the gesture that arms it.
+      toast.info(
+        translate(
+          'auto.components.WorktreeJumpPalette.5fa79c450a',
+          'Press ↓ or click the Create row to start a new workspace'
+        )
+      )
       return
     }
     const ghLink = parseGitHubIssueOrPRLink(trimmed)
@@ -3061,12 +3069,12 @@ function WorktreeJumpPaletteContent({
     }
     return {
       title: translate(
-        'auto.components.WorktreeJumpPalette.1628fd7dfa',
-        'No active worktrees, settings, actions, or open tabs'
+        'auto.components.WorktreeJumpPalette.56f851aa2c',
+        'No worktrees or tabs open yet'
       ),
       subtitle: translate(
-        'auto.components.WorktreeJumpPalette.f7fda8d562',
-        'Create a worktree or open a tab in MCode to get started.'
+        'auto.components.WorktreeJumpPalette.886ddd990e',
+        'Search settings, actions, and more — or type a name to create a workspace.'
       )
     }
   })()

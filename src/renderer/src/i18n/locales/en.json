@@ -2171,6 +2171,9 @@
         "37d45c9ec1": "Choose Another Build"
       },
       "WorktreeJumpPalette": {
+        "5fa79c450a": "Press ↓ or click the Create row to start a new workspace",
+        "56f851aa2c": "No worktrees or tabs open yet",
+        "886ddd990e": "Search settings, actions, and more — or type a name to create a workspace.",
         "ac037cfac2": "Move",
         "75499e01d9": "Close",
         "66b5a67bee": "Esc",
