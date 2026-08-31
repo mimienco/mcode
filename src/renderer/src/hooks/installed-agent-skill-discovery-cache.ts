@@ -10,7 +10,7 @@ export const INSTALLED_AGENT_SKILL_DISCOVERY_CACHE_MAX = 256
 // see a skill installed outside MCode. Matches the focus-rescan cooldown the
 // freshness inventory already applies to its own scan (`useSkillFreshness`), so
 // the two disk-reading surfaces answer a burst of alt-tabs the same way.
-export const INSTALLED_AGENT_SKILL_DISCOVERY_FRESH_MS = 15_000
+export const INSTALLED_AGENT_SKILL_DISCOVERY_FRESH_MS = 60_000
 
 type CachedDiscovery = { result: SkillDiscoveryResult; expiresAt: number }
 

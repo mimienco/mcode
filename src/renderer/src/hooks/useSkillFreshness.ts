@@ -4,7 +4,7 @@ import { INSTALLED_AGENT_SKILLS_CHANGED_EVENT } from './installed-agent-skills-c
 
 // Why: window focus fires on every alt-tab, and each scan re-reads and re-hashes
 // every installed package; a just-completed scan stays authoritative briefly.
-const FOCUS_RESCAN_COOLDOWN_MS = 15_000
+const FOCUS_RESCAN_COOLDOWN_MS = 60_000
 let cachedInventory: SkillFreshnessInventory | null = null
 let pendingInventory: Promise<SkillFreshnessInventory> | null = null
 let invalidationRevision = 0
