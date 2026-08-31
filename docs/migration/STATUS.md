@@ -56,6 +56,12 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session end handoff (2026-08-31, wave 3 — final for this session)
+
+- HEAD `8d3807880a`: workspace 38 suites / 308 tests green, clippy 0 warnings, fmt clean, zero non-inherited working-tree deltas. Working tree is fully committed.
+- Wave-3 additions: mcode-wire `server` (headless relay accept path), mcode-wire `pairing` (deep-link port), mcode-settings `crossgrade_discovery`, PTY smoke harness + vite entry.
+- Terminal-UI, menus/deep-links, relay/agent-exec, and the release/cutover phases are specified and ready for follow-on sessions: each has its contract doc (PTY_CONTRACT_SPEC.md, TERMINAL_UI_INTEGRATION.md, DATA_AND_SETTINGS_MIGRATION.md) and the handoff notes above name the exact next commands and environment variables.
+
 ## Session end handoff (2026-08-31, wave 2)
 
 - `1ccdfbdf7f` @ workspace: 38 suites / 308 tests green, clippy 0 warnings, fmt clean.
