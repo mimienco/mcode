@@ -7,6 +7,7 @@ fn main() {
         "MCODE_TAURI_UPDATER_RC_ENDPOINT",
         "MCODE_TAURI_UPDATER_HOURLY_ENDPOINT",
         "MCODE_TAURI_UPDATER_DAILY_ENDPOINT",
+        "MCODE_TAURI_UPDATER_ADHOC_ENDPOINT",
     ] {
         println!("cargo:rerun-if-env-changed={variable}");
     }
