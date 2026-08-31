@@ -5,7 +5,7 @@ import { createDesktopInvoke, DesktopCommandError, type ShutdownIntent } from '.
 import { createTauriDesktopAppLifecycleCapability } from './tauri-desktop-app-lifecycle-capability'
 import { runLifecycleSmoke } from './lifecycle-smoke-client'
 import { createTauriDesktopWindowCapability } from './tauri-desktop-window-capability'
-import { runtimeDesktopFilesystemClient } from './runtime-desktop-filesystem-client'
+import { createTauriFsClient } from './fs-client'
 
 const smokeParameters = new URLSearchParams(window.location.search)
 const intent: ShutdownIntent = smokeParameters.get('intent') === 'restart' ? 'restart' : 'quit'
@@ -15,6 +15,10 @@ const shouldCheckFilesystem = smokeParameters.get('filesystem') === 'true'
 const desktopInvoke = createDesktopInvoke((command, args) => invoke(command, args))
 const lifecycle = createTauriDesktopAppLifecycleCapability(desktopInvoke, (event, listener) =>
   listen(event, listener)
+)
+const fs = createTauriFsClient(
+  (command, args) => invoke(command, args),
+  (event, listener) => listen(event, listener)
 )
 
 void runLifecycleSmoke({
@@ -67,47 +71,41 @@ void runLifecycleSmoke({
       const childPath = `${root}${separator}visible.txt`
       const savedPath = `${root}${separator}saved.txt`
       const missingPath = `${root}${separator}missing.txt`
-      const entries = await runtimeDesktopFilesystemClient.readDir({ dirPath: root })
-      const initialContent = await runtimeDesktopFilesystemClient.readFile({ filePath: childPath })
-      const logSnapshot = await runtimeDesktopFilesystemClient.readFile({
-        filePath: childPath,
-        includeLocalLogMetadata: true
-      })
-      const metadata = await runtimeDesktopFilesystemClient.stat({ filePath: childPath })
-      const missingExists = await runtimeDesktopFilesystemClient.pathExists({
+      const entries = await fs.readDir({ dirPath: root })
+      const initialContent = await fs.readFile({ filePath: childPath })
+      const metadata = await fs.stat({ filePath: childPath })
+      const missingExists = await fs.pathExists({
         filePath: missingPath
       })
       let outsideDenied = false
       let outsideWriteDenied = false
       try {
-        await runtimeDesktopFilesystemClient.pathExists({ filePath: `${root}-outside` })
+        await fs.pathExists({ filePath: `${root}-outside` })
       } catch (error) {
         outsideDenied = error instanceof DesktopCommandError && error.code === 'fs_path_denied'
       }
       try {
-        await runtimeDesktopFilesystemClient.writeFileAtomic({
+        await fs.writeFileAtomic({
           filePath: `${root}-outside${separator}denied.txt`,
           content: 'denied'
         })
       } catch (error) {
         outsideWriteDenied = error instanceof DesktopCommandError && error.code === 'fs_path_denied'
       }
-      await runtimeDesktopFilesystemClient.writeFileAtomic({
+      await fs.writeFileAtomic({
         filePath: savedPath,
         content: 'atomic save'
       })
-      await runtimeDesktopFilesystemClient.writeFileAtomic({
+      await fs.writeFileAtomic({
         filePath: childPath,
         content: 'atomic replacement'
       })
-      const savedContent = await runtimeDesktopFilesystemClient.readFile({ filePath: savedPath })
-      const replacedContent = await runtimeDesktopFilesystemClient.readFile({ filePath: childPath })
+      const savedContent = await fs.readFile({ filePath: savedPath })
+      const replacedContent = await fs.readFile({ filePath: childPath })
       if (
         !entries.some((entry) => entry.name === 'visible.txt' && !entry.isDirectory) ||
         initialContent.content !== 'visible' ||
         initialContent.isBinary ||
-        typeof logSnapshot.fileIdentity !== 'string' ||
-        logSnapshot.fileIdentity.length === 0 ||
         metadata.size !== 7 ||
         metadata.isDirectory ||
         missingExists ||
@@ -145,7 +143,7 @@ void runLifecycleSmoke({
       if (root) {
         const separator = root.includes('\\') ? '\\' : '/'
         const message = error instanceof Error ? error.message : String(error)
-        void runtimeDesktopFilesystemClient
+        void fs
           .writeFileAtomic({
             filePath: `${root}${separator}.mcode-filesystem-smoke-error.txt`,
             content: message
