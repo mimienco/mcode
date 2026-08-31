@@ -1,4 +1,5 @@
 import { net } from 'electron'
+import { NUDGE_FEED_URL } from '../shared/docs-urls'
 import { compareVersions, isValidVersion } from './updater-fallback'
 
 export type NudgeConfig = {
@@ -9,7 +10,7 @@ export type NudgeConfig = {
 
 export async function fetchNudge(): Promise<NudgeConfig | null> {
   try {
-    const res = await net.fetch('https://mcode.dev/whats-new/nudge.json', {
+    const res = await net.fetch(NUDGE_FEED_URL, {
       signal: AbortSignal.timeout(5000)
     })
     if (!res.ok) {

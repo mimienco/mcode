@@ -93,6 +93,8 @@ docs/**
 !docs/assets/**
 !docs/readme/
 !docs/readme/**
+!docs/user/
+!docs/user/**
 !docs/STYLEGUIDE.md
 !docs/agent-skill-sharing-implementation-checklist.md
 !docs/agent-skill-sharing-installation-plan.md

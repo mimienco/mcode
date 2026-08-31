@@ -1,5 +1,6 @@
 import { net } from 'electron'
 import type { ChangelogData } from '../shared/update-status-types'
+import { CHANGELOG_FEED_URL, CHANGELOG_URL } from '../shared/docs-urls'
 import { compareVersions } from './updater-fallback'
 
 type ChangelogEntry = {
@@ -9,8 +10,6 @@ type ChangelogEntry = {
   mediaUrl?: string
   releaseNotesUrl: string
 }
-
-const CHANGELOG_URL = 'https://mcode.dev/changelog'
 
 function isValidEntry(entry: ChangelogEntry): boolean {
   return (
@@ -42,7 +41,7 @@ export async function fetchChangelog(
   incomingVersion: string,
   localVersion: string
 ): Promise<ChangelogData | null> {
-  const res = await net.fetch('https://mcode.dev/whats-new/changelog.json', {
+  const res = await net.fetch(CHANGELOG_FEED_URL, {
     signal: AbortSignal.timeout(5000)
   })
   if (!res.ok) {

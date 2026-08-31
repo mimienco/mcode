@@ -29,6 +29,7 @@ import {
   loadPendingHostCredentialCleanup,
   subscribePendingHostCredentialCleanup
 } from '../src/transport/host-credential-cleanup'
+import { PRIVACY_URL } from '../../src/shared/docs-urls'
 import { retryPendingHostCredentialCleanup } from '../src/transport/host-store'
 
 export default function SettingsScreen() {
@@ -212,7 +213,7 @@ export default function SettingsScreen() {
         <View style={[styles.section, styles.sectionSpacer]}>
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            onPress={() => void Linking.openURL('https://www.mcode.dev/privacy')}
+            onPress={() => void Linking.openURL(PRIVACY_URL)}
           >
             <Shield size={16} color={colors.textSecondary} />
             <Text style={styles.rowLabel}>Privacy Policy</Text>

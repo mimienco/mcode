@@ -1,3 +1,5 @@
+import { docsPageUrl } from '../../../../shared/docs-urls'
+
 import type { Platform } from './MobileHero'
 import { translate } from '@/i18n/i18n'
 
@@ -7,7 +9,7 @@ export type IosChannel = 'stable' | 'preview'
 
 export type InstallCopy = { ctaLabel: string; url: string }
 
-export const ANDROID_INSTALL_GUIDE_URL = 'https://www.mcode.dev/docs/android-apk'
+export const ANDROID_INSTALL_GUIDE_URL = docsPageUrl('android-apk')
 
 const IOS_CHANNEL_COPY: Record<IosChannel, InstallCopy> = {
   stable: {

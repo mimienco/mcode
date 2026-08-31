@@ -16,6 +16,7 @@ vi.mock('electron', () => ({
   net: { fetch: (...args: unknown[]) => fetchMock(...args) }
 }))
 
+import { FEEDBACK_API_URL } from '../../shared/docs-urls'
 import { MAX_FEEDBACK_IMAGE_RESPONSE_BYTES } from './feedback-image-attachments'
 import { registerFeedbackHandlers, submitFeedback } from './feedback'
 
@@ -174,9 +175,9 @@ describe('submitFeedback', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(FEEDBACK_API_URL)
     expect(requestInit(0).body).toBeInstanceOf(FormData)
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(FEEDBACK_API_URL)
     expect(requestInit(1).headers).toEqual({
       'Content-Type': 'application/json'
     })
@@ -196,7 +197,7 @@ describe('submitFeedback', () => {
       diagnosticBundleFailure: { status: 502, error: 'status 502' }
     })
 
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(FEEDBACK_API_URL)
     expect(requestInit(1).headers).toEqual({ 'Content-Type': 'application/json' })
     expect(postedBody(1)).not.toHaveProperty('diagnosticBundle')
   })
@@ -211,7 +212,7 @@ describe('submitFeedback', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(FEEDBACK_API_URL)
     expect(requestInit(1).body).not.toBeInstanceOf(FormData)
     expect(postedBody(1)).not.toHaveProperty('diagnosticBundle')
   })
@@ -235,7 +236,7 @@ describe('submitFeedback', () => {
       diagnosticBundleFailure: { status: null, error: 'request timed out after 60 seconds' }
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(FEEDBACK_API_URL)
     expect(postedBody(1)).not.toHaveProperty('diagnosticBundle')
   })
 
@@ -246,7 +247,7 @@ describe('submitFeedback', () => {
       ok: true,
       diagnosticBundleFailure: { status: 403, error: 'status 403' }
     })
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(FEEDBACK_API_URL)
     expect(requestInit(1).body).not.toBeInstanceOf(FormData)
   })
 
@@ -297,8 +298,8 @@ describe('submitFeedback', () => {
     await expect(Promise.race([result, Promise.resolve('pending')])).resolves.toEqual({ ok: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      'https://www.mcode.dev/v1/feedback',
-      'https://www.mcode.dev/v1/feedback'
+      FEEDBACK_API_URL,
+      FEEDBACK_API_URL
     ])
   })
 
@@ -314,7 +315,7 @@ describe('submitFeedback', () => {
       })
     ).resolves.toEqual({ ok: false, status: 404, error: 'status 404' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(FEEDBACK_API_URL)
   })
 
   it('does not retry again when the website retry stalls after a primary server error', async () => {
@@ -341,8 +342,8 @@ describe('submitFeedback', () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      'https://www.mcode.dev/v1/feedback',
-      'https://www.mcode.dev/v1/feedback'
+      FEEDBACK_API_URL,
+      FEEDBACK_API_URL
     ])
   })
 
@@ -373,7 +374,7 @@ describe('submitFeedback', () => {
       githubEmail: null
     } as Parameters<typeof submitFeedback>[0])
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://www.mcode.dev/v1/feedback')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(FEEDBACK_API_URL)
   })
 
   it('forces renderer IPC submissions onto the feedback lane', async () => {

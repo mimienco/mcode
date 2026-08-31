@@ -6,6 +6,7 @@ vi.mock('electron', () => ({
   net: { fetch: (...args: unknown[]) => fetchMock(...args) }
 }))
 
+import { CHANGELOG_URL } from '../shared/docs-urls'
 import { fetchChangelog } from './updater-changelog'
 
 function jsonResponse(body: unknown): Response {
@@ -76,7 +77,7 @@ describe('fetchChangelog', () => {
     expect(result!.release.title).toBe('Release 1.1.17')
     expect(result!.release.description).toBe('Cool feature')
     // Why: fallback entries link to the generic changelog, not a version-specific page.
-    expect(result!.release.releaseNotesUrl).toBe('https://mcode.dev/changelog')
+    expect(result!.release.releaseNotesUrl).toBe(CHANGELOG_URL)
     expect(result!.releasesBehind).toBe(2)
   })
 
@@ -98,7 +99,7 @@ describe('fetchChangelog', () => {
 
     expect(result).not.toBeNull()
     expect(result!.release.title).toBe('Release 1.1.17')
-    expect(result!.release.releaseNotesUrl).toBe('https://mcode.dev/changelog')
+    expect(result!.release.releaseNotesUrl).toBe(CHANGELOG_URL)
     // releasesBehind is from local (index 2) to incoming (index 0) = 2
     expect(result!.releasesBehind).toBe(2)
   })
@@ -168,7 +169,7 @@ describe('fetchChangelog', () => {
 
     expect(result).not.toBeNull()
     expect(result!.release.title).toBe('Release 1.1.18')
-    expect(result!.release.releaseNotesUrl).toBe('https://mcode.dev/changelog')
+    expect(result!.release.releaseNotesUrl).toBe(CHANGELOG_URL)
   })
 
   it('shows rich entry when local version is not in JSON (very old user)', async () => {
@@ -186,7 +187,7 @@ describe('fetchChangelog', () => {
 
     expect(result).not.toBeNull()
     expect(result!.release.title).toBe('Release 1.1.17')
-    expect(result!.release.releaseNotesUrl).toBe('https://mcode.dev/changelog')
+    expect(result!.release.releaseNotesUrl).toBe(CHANGELOG_URL)
     // releasesBehind is null because the local version isn't in the JSON.
     expect(result!.releasesBehind).toBeNull()
   })
