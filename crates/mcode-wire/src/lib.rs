@@ -10,6 +10,7 @@
 pub mod crypto;
 pub mod frame;
 pub use frame::FrameDecoderError;
+pub mod agent_exec;
 pub mod handshake;
 pub mod pairing;
 pub mod protocol;
