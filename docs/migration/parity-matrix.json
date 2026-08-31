@@ -607,8 +607,10 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "telemetry consent resolver ported (mcode-app::telemetry_consent, 5 tests) + agent-exec ported (mcode-wire::agent_exec, 5 tests); provider REST clients pending"
+      ]
     },
     {
       "id": "notifications.status",
