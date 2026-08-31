@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-open-settings"
+description = "Enables the ui_open_settings command without any pre-configured scope."
+commands.allow = ["ui_open_settings"]
+
+[[permission]]
+identifier = "deny-ui-open-settings"
+description = "Denies the ui_open_settings command without any pre-configured scope."
+commands.deny = ["ui_open_settings"]

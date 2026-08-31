@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-open-setup-guide"
+description = "Enables the ui_open_setup_guide command without any pre-configured scope."
+commands.allow = ["ui_open_setup_guide"]
+
+[[permission]]
+identifier = "deny-ui-open-setup-guide"
+description = "Denies the ui_open_setup_guide command without any pre-configured scope."
+commands.deny = ["ui_open_setup_guide"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-consume-pending-skill-share"
+description = "Enables the ui_consume_pending_skill_share command without any pre-configured scope."
+commands.allow = ["ui_consume_pending_skill_share"]
+
+[[permission]]
+identifier = "deny-ui-consume-pending-skill-share"
+description = "Denies the ui_consume_pending_skill_share command without any pre-configured scope."
+commands.deny = ["ui_consume_pending_skill_share"]

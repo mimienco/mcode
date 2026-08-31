@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pty-get-size"
+description = "Enables the pty_get_size command without any pre-configured scope."
+commands.allow = ["pty_get_size"]
+
+[[permission]]
+identifier = "deny-pty-get-size"
+description = "Denies the pty_get_size command without any pre-configured scope."
+commands.deny = ["pty_get_size"]

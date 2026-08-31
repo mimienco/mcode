@@ -8,6 +8,8 @@
     "allow-pty-write",
     "allow-pty-resize",
     "allow-pty-kill",
-    "allow-pty-has-pty"
+    "allow-pty-has-pty",
+    "allow-pty-ack-data",
+    "allow-pty-get-size"
   ]
 }
