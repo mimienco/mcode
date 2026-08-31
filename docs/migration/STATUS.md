@@ -56,6 +56,15 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 7 — deep links + menu intents)
+
+- HEAD `9c781c1c43` (two commits: `7890c181b6` skill-share deep links, `9c781c1c43` menu intents + dialog plugin).
+- Deep links: `tauri-plugin-deep-link` + `mcode` scheme (tauri.conf.json plugins.deep-link.desktop.schemes); `src-tauri/src/skill_share_deep_link.rs` ports `parseSkillShareId`'s mcode branch (4 unit tests), keeps a one-shot pending slot, emits `skill-share://pending`; `ui_consumePendingSkillShare` command mirrors the Electron pull. Renderer: `useIpcEvents` isTauri() branch listens + consumes on mount.
+- Menu/tray intents: `src-tauri/src/app_menu_events.rs` — settings push + untimed one-shot (`ui_openSettings`, `ui_consumePendingOpenSettings`), setup-guide/feature-tour/crash-report emitters; five `ui_*` commands added to build.rs app manifest + main.json capability. `tauri-plugin-dialog` wired (native open/save for later fs slices).
+- Known inherited failure: `useAutomationDispatchEvents.test.ts` 6 failures reproduce identically in the original repo (D:/ADE/orca, user WIP baseline) — not caused by these slices; do not "fix" blind. Hooks suite otherwise green (26 files / 122 tests). Desktop lib 15 tests, clippy 0 warnings, fmt clean.
+- Rust gotchas hit: `tauri_plugin_deep_link::init()` (Builder is private); `.on_open_url` closure needs `app.clone()` moved in (E0505); MutexGuard has no `swap` — use `std::mem::take`.
+- Next agent: (1) tray "Settings…" item should call `app_menu_events::open_settings` (windows_tray.rs currently only Open/Quit); (2) native-file open/save commands via tauri-plugin-dialog for the fs slices that used Electron dialog (floating-doc picker, SSH download save); (3) full app menu (register-app-menu.ts port — zoom/appearance/sidebar toggles) once settings store is reachable Rust-side; (4) real PTY smoke evidence run still outstanding.
+
 ## Session end handoff (2026-08-31, wave 6 — terminal transport seam)
 
 - HEAD `94ab62cea7`: terminal-pane suite 385 files / **3741 passed | 1 skipped** (`--maxWorkers=2`; two known flaky remote-runtime stream tests time out at full parallelism — see wave-5 notes), workspace/clippy/fmt green at last full run.
