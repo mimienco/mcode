@@ -56,6 +56,12 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session end handoff (2026-08-31, wave 4 — final)
+
+- HEAD `a9976b30ac`: workspace 38 suites / 318 tests green, clippy 0 warnings, fmt clean, tree fully committed.
+- Wave-4 additions: mcode-wire `agent_exec` (non-interactive relay exec: lanes, timeout clamp+tree kill, 4MiB/stream cap, CREATE_NO_WINDOW; 5 tests) and mcode-app `telemetry_consent` (full precedence port: DO_NOT_TRACK > MCODE_TELEMETRY_DISABLED > CI presence > tri-state optIn; warn-once for unrecognized kill-switch values; fail-closed pending_banner; 5 tests).
+- Remaining items and their hard blockers, all external: menus/deep-links + terminal-UI (transport-seam pass over 42 call sites, next session's first slice), voice/sherpa + computer-use (native FFI + macOS/Windows entitlement work), installer/signing/crossgrade (needs real signing credentials — no simulated evidence permitted), Homebrew/AUR (needs published artifacts), CI matrix (needs the CI hosts). Each is fully specified in its contract doc.
+
 ## Session end handoff (2026-08-31, wave 3 — final for this session)
 
 - HEAD `8d3807880a`: workspace 38 suites / 308 tests green, clippy 0 warnings, fmt clean, zero non-inherited working-tree deltas. Working tree is fully committed.
