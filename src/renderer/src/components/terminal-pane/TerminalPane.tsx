@@ -87,6 +87,10 @@ import {
 import { useSystemPrefersDark } from './use-system-prefers-dark'
 import { useTerminalPaneGlobalEffects } from './use-terminal-pane-global-effects'
 import { useTerminalPaneLifecycle } from './use-terminal-pane-lifecycle'
+import {
+  setMaximizedTabGroupId,
+  useMaximizedTabGroupId
+} from '../tab-group/tab-group-maximize-state'
 import { TerminalLinkActionPopover } from './TerminalLinkActionPopover'
 import {
   closeTerminalLinkActionRequest,
@@ -847,13 +851,15 @@ function TerminalPane(
     : quickCommandRepoId
       ? 'This Repo'
       : null
-  const quickCommandGroupId =
+  const terminalGroupId =
     useAppStore(
       (s) =>
         getCachedTerminalGroupIdForWorktree(s.unifiedTabsByWorktree, worktreeId, tabId) ??
         s.activeGroupIdByWorktree[worktreeId] ??
         null
     ) ?? null
+  const hasSplitTabGroups = useAppStore((s) => s.layoutByWorktree[worktreeId]?.type === 'split')
+  const maximizedTabGroupId = useMaximizedTabGroupId(worktreeId)
 
   const openQuickCommandEditor = useCallback(
     (scope: TerminalQuickCommandScope, hostId: ExecutionHostId): void => {
@@ -1213,6 +1219,35 @@ function TerminalPane(
     tabId,
     persistLayoutSnapshot
   })
+
+  const togglePaneMaximize = useCallback(
+    (pane: ManagedPane): void => {
+      const manager = managerRef.current
+      if (!manager || terminalGroupId === null) {
+        return
+      }
+      const groupIsMaximized = maximizedTabGroupId === terminalGroupId
+      const paneIsExpanded = expandedPaneIdRef.current === pane.id
+      if (groupIsMaximized || paneIsExpanded) {
+        if (groupIsMaximized) {
+          setMaximizedTabGroupId(worktreeId, null)
+        }
+        if (paneIsExpanded) {
+          toggleExpandPane(pane.id)
+        }
+        return
+      }
+
+      manager.setActivePane(pane.id, { focus: false })
+      if (manager.getPanes().length > 1) {
+        toggleExpandPane(pane.id)
+      }
+      if (hasSplitTabGroups) {
+        setMaximizedTabGroupId(worktreeId, terminalGroupId)
+      }
+    },
+    [hasSplitTabGroups, maximizedTabGroupId, terminalGroupId, toggleExpandPane, worktreeId]
+  )
 
   const executeClosePane = useCallback(
     (paneId: number) => {
@@ -2594,11 +2629,6 @@ function TerminalPane(
     })
   }, [handleRenameSubmit, renamingPaneId])
 
-  const handleRemoveTitle = useCallback(
-    (paneId: number) => removePaneTitle(paneId),
-    [removePaneTitle]
-  )
-
   // Auto-focus/select-all the rename input on open and reset the submit guard for the new session.
   useEffect(() => {
     if (renamingPaneId === null) {
@@ -2640,7 +2670,7 @@ function TerminalPane(
     paneCwdRef,
     containerRef,
     worktreeId,
-    groupId: quickCommandGroupId,
+    groupId: terminalGroupId,
     fallbackCwd: cwd ?? '',
     toggleExpandPane,
     onRequestClosePane: handleRequestClosePane,
@@ -3516,6 +3546,11 @@ function TerminalPane(
         showSplitButton={showSplitButton}
         paneCount={paneCount}
         activePaneId={activePane?.id}
+        canMaximizePane={hasSplitTabGroups || paneCount > 1}
+        maximizedPaneId={
+          expandedPaneId ??
+          (maximizedTabGroupId === terminalGroupId ? (activePane?.id ?? null) : null)
+        }
         panes={managedPanes}
         paneTitles={paneTitles}
         paneTitleOverlayRects={paneTitleOverlayRects}
@@ -3533,11 +3568,11 @@ function TerminalPane(
           contextMenu.runForPane(pane.id, contextMenu.onContinueAgentSessionInNewSession)
         }
         onSplitPane={splitTerminalPaneFromHeader}
+        onToggleMaximize={togglePaneMaximize}
         onBeginPaneDrag={beginPaneDragFromHeader}
         onActivatePaneTitleInteraction={activatePaneTitleInteraction}
         onPaneTitleContextMenu={contextMenu.onPaneTitleContextMenu}
         onStartRename={handleStartRename}
-        onRemoveTitle={handleRemoveTitle}
         onClosePane={handleRequestClosePane}
         onRenameValueChange={setRenameValue}
         onRenameSubmit={handleRenameSubmit}

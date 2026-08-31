@@ -2,7 +2,8 @@ import type {
   DashboardRevealAgentArgs,
   DashboardSleepWorkspaceArgs,
   DashboardSnapshot,
-  DashboardSpawnAgentArgs
+  DashboardSpawnAgentArgs,
+  DashboardView
 } from '../../shared/dashboard-snapshot'
 import type {
   TerminalPreviewConnectResult,
@@ -10,7 +11,7 @@ import type {
 } from '../../shared/terminal-preview'
 
 export type DashboardApi = {
-  openPopout: (view?: 'board' | 'map') => Promise<void>
+  openPopout: (view?: DashboardView) => Promise<void>
   publishSnapshot: (snapshot: DashboardSnapshot) => Promise<void>
   getPopoutOpen: () => Promise<boolean>
   onPopoutOpenChanged: (callback: (open: boolean) => void) => () => void

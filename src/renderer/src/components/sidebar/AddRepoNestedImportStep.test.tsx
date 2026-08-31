@@ -50,6 +50,12 @@ function renderStepMarkup(
   )
 }
 
+function findButton(container: HTMLElement, label: string): HTMLButtonElement
+function findButton(
+  container: HTMLElement,
+  label: string,
+  options?: { optional?: true }
+): HTMLButtonElement | null
 function findButton(
   container: HTMLElement,
   label: string,

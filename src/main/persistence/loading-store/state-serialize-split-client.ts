@@ -73,7 +73,9 @@ export function createSerializeSplitClient(
  *  dev, packaged out/main otherwise. Injectable existsSync keeps tests pure. */
 export function resolveStateSerializeWorkerPath(
   appPath: string,
-  isPackaged: boolean,
+  // Kept: callers (store.ts) pass electronApp.isPackaged; resolution no
+  // longer branches on it but the two-arg call shape is the public seam.
+  _isPackaged: boolean,
   pathExists: (candidate: string) => boolean = existsSync
 ): string | null {
   // Why: rolldown nests entries by their input-key directory

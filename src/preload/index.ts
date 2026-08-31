@@ -1,6 +1,5 @@
 /* eslint-disable max-lines -- Why: preload is the audited renderer/Electron IPC contract; co-locating the surface eases security and type-drift review. */
 import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 import { preloadE2EConfig } from './e2e-config'
 import { glApi } from './gitlab'
 import type { AppIdentity } from '../shared/app-identity'
@@ -15,7 +14,8 @@ import type {
   DashboardRevealAgentArgs,
   DashboardSleepWorkspaceArgs,
   DashboardSnapshot,
-  DashboardSpawnAgentArgs
+  DashboardSpawnAgentArgs,
+  DashboardView
 } from '../shared/dashboard-snapshot'
 import type {
   TerminalPreviewConnectResult,
@@ -101,6 +101,7 @@ import type {
   NotificationDispatchResult,
   NotificationPermissionStatusResult,
   NotificationSoundDataResult,
+  NotificationSoundPlaybackOptions,
   NotificationSoundPathResult,
   NotificationSoundResult
 } from '../shared/notification-settings-types'
@@ -571,6 +572,7 @@ const api = {
         () => ipcRenderer.invoke('app:reload'),
         awaitBeforeUnloadCheckpoint
       ),
+    awaitBeforeUnloadCheckpoint,
     stageBeforeUnloadSync: (args: Parameters<PreloadApi['app']['stageBeforeUnloadSync']>[0]) => {
       const result = ipcRenderer.sendSync('app:stage-before-unload-sync', args) as {
         ok?: unknown
@@ -615,7 +617,7 @@ const api = {
       ipcRenderer.invoke('app:pickFloatingWorkspaceDirectory'),
     writeTerminalRenderDesyncEvidence: (args: WriteTerminalRenderDesyncEvidenceArgs) =>
       ipcRenderer.invoke('terminal:writeRenderDesyncEvidence', args)
-  },
+  } satisfies PreloadApi['app'],
 
   mcodeProfiles: {
     list: () => ipcRenderer.invoke('mcodeProfiles:list'),
@@ -2352,19 +2354,18 @@ const api = {
       ipcRenderer.invoke('notifications:getPermissionStatus'),
     probeDelivery: (args?: { force?: boolean }): Promise<NotificationDeliveryProbeResult> =>
       ipcRenderer.invoke('notifications:probeDelivery', args),
-    playSound: async (options?: {
-      force?: boolean
-      volume?: number
-    }): Promise<NotificationSoundResult> => {
+    playSound: async (
+      options?: NotificationSoundPlaybackOptions
+    ): Promise<NotificationSoundResult> => {
       try {
         // Why: drop replays while still ringing; the test button passes force to always confirm.
         if (!options?.force && isNotificationSoundPlaying) {
           return { played: false, reason: 'deduped' }
         }
 
-        const resolved = (await ipcRenderer.invoke(
-          'notifications:resolveSoundPath'
-        )) as NotificationSoundPathResult
+        const resolved = (await ipcRenderer.invoke('notifications:resolveSoundPath', {
+          systemFallback: options?.systemFallback === true
+        })) as NotificationSoundPathResult
         if (!resolved.ok) {
           if (cachedNotificationSound) {
             disposeCachedNotificationSound()
@@ -2374,9 +2375,9 @@ const api = {
 
         let entry = cachedNotificationSound
         if (!entry || entry.path !== resolved.path) {
-          const sound = (await ipcRenderer.invoke(
-            'notifications:loadSound'
-          )) as NotificationSoundDataResult
+          const sound = (await ipcRenderer.invoke('notifications:loadSound', {
+            systemFallback: options?.systemFallback === true
+          })) as NotificationSoundDataResult
           if (!sound.ok) {
             disposeCachedNotificationSound()
             return { played: false, reason: sound.reason }
@@ -2437,7 +2438,7 @@ const api = {
 
   dashboard: {
     // Open the pop-out dashboard window, or focus it if already open.
-    openPopout: (view?: 'board' | 'map'): Promise<void> =>
+    openPopout: (view?: DashboardView): Promise<void> =>
       ipcRenderer.invoke('dashboardPopout:open', view),
 
     // ── Producer side (main window) ──────────────────────────────────────
@@ -5159,16 +5160,14 @@ const api = {
   }
 }
 
-// Expose Electron APIs via contextBridge when context-isolated, otherwise attach to the DOM global.
+// Expose the audited preload API via contextBridge when context-isolated, otherwise attach to the DOM global.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
-  window.electron = electronAPI
   // @ts-expect-error (define in dts)
   window.api = api
 }

@@ -35,7 +35,11 @@ export async function jiraLookupIssueSummary(
   }
   signal?.addEventListener('abort', handleAbort, { once: true })
   try {
-    return await window.api.jira.lookupIssueSummary({ ...args, requestId })
+    const summary = await window.api.jira.lookupIssueSummary({ ...args, requestId })
+    if (signal?.aborted) {
+      throw createSummaryAbortError()
+    }
+    return summary
   } finally {
     signal?.removeEventListener('abort', handleAbort)
   }
