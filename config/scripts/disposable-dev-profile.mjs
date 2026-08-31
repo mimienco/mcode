@@ -30,7 +30,9 @@ export function createDisposableDevProfile() {
         return
       }
       try {
-        rmSync(profilePath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
+        // Why: on Windows the Electron child tree (pty host, watcher, crashpad)
+        // can hold handles well past child exit; 150ms of retries is not enough.
+        rmSync(profilePath, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
       } catch (error) {
         console.warn(
           `[mcode-dev] Could not remove disposable profile ${profilePath}: ${error?.message ?? error}`
