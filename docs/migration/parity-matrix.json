@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
-  "updatedAt": "2026-08-30",
+  "updatedAt": "2026-08-31",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
     {
@@ -246,7 +246,7 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -261,7 +261,7 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -276,7 +276,7 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -306,8 +306,10 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "mcode-wire/mcode-ssh crates: unit+golden-vector suites green on Windows (cargo test --workspace 290 passed, 2026-08-31)"
+      ]
     },
     {
       "id": "ssh.workspaces",
@@ -370,8 +372,10 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "mcode-wire/mcode-ssh crates: unit+golden-vector suites green on Windows (cargo test --workspace 290 passed, 2026-08-31)"
+      ]
     },
     {
       "id": "cli",

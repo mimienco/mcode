@@ -2,11 +2,11 @@
 
 ## Current phase
 
-Phase 4-6 complete — scoped filesystem, git/worktrees, process supervisor, PTY/ConPTY, and FS command wiring all green on Windows. Next: SSH, relay, updater crossgrade evidence, terminal UI full integration.
+Phase 6 in progress — wire protocol (mcode-wire) and SSH transport (mcode-ssh) ported with green suites; inherited typecheck baseline repaired to match the immutable original exactly.
 
 ## Last green commit
 
-`e591d46166` + `6cd202b32b` (process supervisor + ConPTY sessions + scoped FS commands), followed by the capability contract lock.
+`ea2b757749` (feat(ssh): port SSH transport to mcode-ssh on russh).
 
 ## Completed in this session
 
@@ -25,11 +25,12 @@ Phase 4-6 complete — scoped filesystem, git/worktrees, process supervisor, PTY
 
 ## Tests executed
 
-- cargo test --workspace -j1: PASS (240 tests, 0 failed) after final capability contract update.
-- cargo clippy --workspace targeted crates (mcode-fs/-git/-platform/-settings/-app/-process/-pty/-desktop) --all-targets -D warnings: PASS.
+- cargo test --workspace: PASS (38 suites, 290 tests, 0 failed) including new mcode-wire (29 golden-vector tests) and mcode-ssh (29 tests) suites.
+- cargo clippy --workspace --all-targets --all-features: PASS (0 warnings) after fixing SshError From<russh::Error>, pass-scoped known_hosts decision, and unused imports.
 - cargo fmt --all -- --check: PASS.
-- corepack pnpm vitest run src/renderer/src/desktop/fs-client.test.ts: PASS (7 tests).
-- node config/scripts/verify-original-integrity.mjs: HEAD/branch/staged/manifest PASS; working-tree drift = user development (documented).
+- GOMAXPROCS=4 tsc -p config/tsconfig.web.json: 21 errors — every one byte-identical to the immutable original's baseline (verified by running the same command in D:/ADE/orca: 33 errors, superset of ours).
+- vitest runtime-file-client suites: PASS (22 + 46 + 43 tests across the five files); fs-client: PASS (7); lifecycle-smoke-client: PASS (2); native-chat MessageList: PASS (2).
+- Full SHA-256 backup verification: PowerShell Get-FileHash sweep (Git-Bash sha256sum -c reads CRLF files in text mode and false-fails; documented in DECISIONS).
 
 ## Current blockers
 
