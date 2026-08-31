@@ -56,6 +56,19 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session end handoff (2026-08-31, wave 6 — terminal transport seam)
+
+- HEAD `94ab62cea7`: terminal-pane suite 385 files / **3741 passed | 1 skipped** (`--maxWorkers=2`; two known flaky remote-runtime stream tests time out at full parallelism — see wave-5 notes), workspace/clippy/fmt green at last full run.
+- Wave-6 slice: **Tauri PTY transport seam committed** —
+  - `pty-transport-factory.ts`: runtime-conditional selection (§2.1);
+  - `pty-transport-tauri.ts`: Tauri command/event transport (a-row; capability optionals absent = not negotiated; `getConnectionId` returns null);
+  - `pty-transport-tauri-dedupe.ts`: §2.3 seq-dedupe with restore-marker window;
+  - `pty-transport-tauri-owned.ts`: owned-handler registry (ownership rule) + `unregisterPtyDataAndStatusHandlers`;
+  - `pty-dispatcher.ts` split: eager pre-attach buffering extracted to `pty-dispatcher-eager-buffer.ts` (max-lines 300 gate; dispatcher re-exports the surface);
+  - transport tests green (selection/dedupe/capability absence); full pane suite green.
+- Gotcha for future sessions: oxlint `max-lines` is configured `skipBlankLines+skipComments` (`.oxlintrc.json:141`) — `wc -l` overcounts; check `oxlint` directly. `curly` requires braces on all ifs (one-liners rejected).
+- Next agent: (1) real PTY smoke evidence run (unchanged from wave 5); (2) bind mcode-wire server to runtime id + write `mcode-runtime.json` at startup; (3) menus/tray/dialogs/deep-links slice; (4) editor content parity (Monaco/TextMate/xterm specials).
+
 ## Session end handoff (2026-08-31, wave 5)
 
 - HEAD: workspace green (38 suites / 321+ tests), clippy 0 warnings, fmt clean, tree committed.
