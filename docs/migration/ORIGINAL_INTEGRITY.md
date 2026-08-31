@@ -76,3 +76,17 @@ No migration command has written to the original repository.
   progress, and does not affect the backup or rewrite copies.
 - Branch: rebrand/mcode (unchanged). Migration integrity verdict: original
   unchanged by migration activity itself; forward drift = user commits.
+
+## 2026-08-31 session-final check (orchestrator, wave 4)
+
+- Snapshot dir was found missing from D:/ADE/_migration-snapshot (external
+  cleanup between sessions); restored verbatim from the committed copy at
+  docs/migration/source-snapshot and re-verified against it.
+- The user continued development in the original: 4 more commits since the
+  migration baseline (b430167f25..65112549da — Replay guided tours, rebrand
+  contract, palette feedback), plus live working-tree changes. HEAD moved
+  6740f9c538 -> 65112549da; branch rebrand/mcode unchanged.
+- Verdict: identical in kind to the previously documented drift — user work,
+  not migration activity. Every migration command against the original is
+  read-only. The frozen snapshot remains the migration oracle; forward
+  divergence is expected and recorded.
