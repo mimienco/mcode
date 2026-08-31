@@ -56,6 +56,12 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session end handoff (2026-08-31, wave 5)
+
+- HEAD: workspace green (38 suites / 321+ tests), clippy 0 warnings, fmt clean, tree committed.
+- Wave-5 addition: mcode-app `runtime_metadata` — the `mcode-runtime.json` CLI discovery contract (atomic write at startup, idempotent remove on exit, camelCase disk shape, authToken host-local only; 3 tests). This unblocks `mcode status`/serve wiring: the headless host writes this file, the CLI reads it.
+- Next agent: (1) real PTY smoke evidence run; (2) bind mcode-wire `server` to a runtime id + write runtime metadata at startup (contract now available in mcode-app::runtime_metadata); (3) terminal-UI transport seam; (4) menus/deep-links.
+
 ## Session end handoff (2026-08-31, wave 4 — final)
 
 - HEAD `a9976b30ac`: workspace 38 suites / 318 tests green, clippy 0 warnings, fmt clean, tree fully committed.
