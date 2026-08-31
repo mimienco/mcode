@@ -11,6 +11,7 @@ pub mod crypto;
 pub mod frame;
 pub use frame::FrameDecoderError;
 pub mod handshake;
+pub mod pairing;
 pub mod protocol;
 pub mod v2;
 #[cfg(test)]
