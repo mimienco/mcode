@@ -620,6 +620,15 @@ function getWorktreeRuntimeEnvironmentId(worktreeId: string | null | undefined):
   return getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), worktreeId)
 }
 
+async function invokeUiConsumePendingSkillShare(): Promise<string | null> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return (await invoke('ui_consumePendingSkillShare')) ?? null
+  } catch {
+    return null
+  }
+}
+
 export function useIpcEvents(): void {
   useEffect(() => {
     const unsubs: (() => void)[] = []
@@ -1210,6 +1219,34 @@ export function useIpcEvents(): void {
     })
     if (unsubscribeOpenSkillShare) {
       unsubs.push(unsubscribeOpenSkillShare)
+    }
+
+    if (isTauri()) {
+      // Tauri path: the Rust deep-link handler emits `skill-share://pending`
+      // and keeps a one-shot pending slot (`ui_consumePendingSkillShare`),
+      // mirroring the Electron push + pull pair above.
+      let unlistenSkillShare: (() => void) | undefined
+      void import('@tauri-apps/api/event')
+        .then(({ listen }) =>
+          listen<string>('skill-share://pending', (event) => {
+            const shareId = typeof event.payload === 'string' ? event.payload : null
+            if (shareId) {
+              useAppStore.getState().openSkillShare(shareId)
+            }
+          })
+        )
+        .then((unlisten) => {
+          if (unlisten) {
+            unlistenSkillShare = unlisten
+          }
+        })
+        .catch((error) => console.error('[skill-share] listen failed', error))
+      unsubs.push(() => unlistenSkillShare?.())
+      void invokeUiConsumePendingSkillShare().then((shareId) => {
+        if (shareId) {
+          useAppStore.getState().openSkillShare(shareId)
+        }
+      })
     }
 
     // Why: a tray "Settings…" click can fire before this attaches; consume any queued intent (?. guards stale preload).

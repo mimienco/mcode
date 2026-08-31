@@ -19,6 +19,7 @@ fn main() {
     let attributes =
         Attributes::default().app_manifest(tauri_build::AppManifest::new().commands(&[
             "app_get_launch_context",
+            "ui_consume_pending_skill_share",
             "app_stage_shutdown_checkpoint",
             "app_request_shutdown",
             "app_acknowledge_shutdown",
@@ -52,6 +53,8 @@ fn main() {
             "pty_resize",
             "pty_kill",
             "pty_has_pty",
+            "pty_ack_data",
+            "pty_get_size",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         println!("{error:#}");

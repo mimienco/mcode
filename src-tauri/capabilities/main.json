@@ -9,6 +9,7 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "allow-app-get-launch-context",
+    "allow-ui-consume-pending-skill-share",
     "allow-app-stage-shutdown-checkpoint",
     "allow-app-request-shutdown",
     "allow-app-acknowledge-shutdown",

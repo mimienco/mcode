@@ -8,6 +8,7 @@ use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_shutdown_commands;
+mod skill_share_deep_link;
 mod desktop_window;
 mod filesystem_commands;
 mod pty_commands;
@@ -38,17 +39,26 @@ use filesystem_commands::{
     fs_read_file, fs_rename_path, fs_search, fs_search_replace, fs_stat, fs_unwatch_worktree,
     fs_watch_worktree, fs_write_file, fs_write_file_atomic, spawn_watch_forwarder,
 };
+pub use pty_commands::{
+    NativePtyState, PtyAppliedSize, pty_ack_data_for, pty_get_size_for, pty_register_session_for,
+};
 use pty_commands::{
-    NativePtyState, kill_all_sessions_for_shutdown, pty_has_pty, pty_kill, pty_resize, pty_spawn,
-    pty_write,
+    kill_all_sessions_for_shutdown, pty_ack_data, pty_get_size, pty_has_pty, pty_kill, pty_resize,
+    pty_spawn, pty_write,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
 };
 
+/// One-shot pending skill-share consume (mirrors `ui:consumePendingSkillShare`).
+#[tauri::command(rename_as = "ui_consumePendingSkillShare")]
+fn ui_consume_pending_skill_share(app: tauri::AppHandle) -> Option<String> {
+    skill_share_deep_link::consume(&app)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DesktopCommandError {
+pub struct DesktopCommandError {
     code: &'static str,
     context: DesktopCommandErrorContext,
     message: String,
@@ -360,7 +370,9 @@ pub fn run() {
         .manage(lifecycle)
         .manage(NativeUpdaterState::from_compile_time())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            skill_share_deep_link::register(app.handle().clone());
             let pty_state = NativePtyState::new();
             let settings = SettingsService::new(settings_path(app)?);
             let (filesystem_state, watch_batches) = NativeFilesystemState::new(settings.clone());
@@ -510,25 +522,9 @@ pub fn run() {
                         .expect("pty smoke marker must be configured");
                     let app_handle = app.handle().clone();
                     std::thread::spawn(move || {
-                        // Wait for the renderer to install its listeners (the
-                        // tray-revision handshake), then poll the marker file
-                        // the renderer writes with its own verdict. Rust never
-                        // writes the marker in this mode.
-                        let renderer_ready = (0..300).any(|_| {
-                            let ready = app_handle
-                                .state::<NativeWindowState>()
-                                .close_to_tray_revision()
-                                > 0;
-                            if !ready {
-                                std::thread::sleep(Duration::from_millis(100));
-                            }
-                            ready
-                        });
-                        if !renderer_ready {
-                            eprintln!("[smoke] pty smoke renderer never became ready");
-                            app_handle.exit(1);
-                            return;
-                        }
+                        // Poll the marker file the renderer writes with its
+                        // own verdict; readiness waits in the renderer. Rust
+                        // never writes the marker in this mode.
                         let mut verdict: Option<String> = None;
                         for _ in 0..120 {
                             if let Ok(value) = std::fs::read_to_string(&marker) {
@@ -539,6 +535,10 @@ pub fn run() {
                                 }
                             }
                             std::thread::sleep(Duration::from_millis(500));
+                        }
+                        #[cfg(debug_assertions)]
+                        if let Some(pty_state) = app_handle.try_state::<NativePtyState>() {
+                            eprintln!("[smoke] pty sessions live at timeout: {pty_state:?}");
                         }
                         let passed = verdict.as_deref() == Some("passed");
                         if let Some(value) = verdict {
@@ -554,6 +554,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ui_consume_pending_skill_share,
             app_get_launch_context,
             app_stage_shutdown_checkpoint,
             app_request_shutdown,
@@ -587,7 +588,9 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
-            pty_has_pty
+            pty_has_pty,
+            pty_ack_data,
+            pty_get_size
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");
