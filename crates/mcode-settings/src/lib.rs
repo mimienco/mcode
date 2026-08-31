@@ -9,6 +9,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+pub mod crossgrade_discovery;
 mod workspace_session_bindings;
 mod workspace_session_contract;
 mod workspace_session_reconciliation;
