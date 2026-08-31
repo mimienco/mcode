@@ -21,7 +21,6 @@ import { McpMissingConfigList } from './McpMissingConfigList'
 import { loadMcpConfigInspections } from './mcp-config-inspection'
 import { translate } from '@/i18n/i18n'
 import { captureDirectSshMutationExpectation } from '@/lib/ssh-mutation-expectation'
-import { runtimeDesktopFilesystemClient } from '@/desktop/runtime-desktop-filesystem-client'
 
 type McpConfigSectionProps = {
   repo: Repo
@@ -200,7 +199,7 @@ export function McpConfigSection({ repo }: McpConfigSectionProps): React.JSX.Ele
         : {}
       // Why: v1 only creates the root workspace config so we do not need to
       // guess per-agent directory layouts or mutate agent-specific files.
-      await runtimeDesktopFilesystemClient.writeFileAtomic({
+      await window.api.fs.writeFile({
         filePath: target,
         content: MCP_STARTER_CONFIG,
         connectionId,

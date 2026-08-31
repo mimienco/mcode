@@ -33,7 +33,6 @@ export type RuntimeSubscribeStub = Mock<
 >
 
 export const fsReadFile: PreloadStub = vi.fn()
-export const fsReadDir: PreloadStub = vi.fn()
 export const fsWriteFile: PreloadStub = vi.fn()
 export const fsOnChanged: PreloadStub = vi.fn()
 export const fsCopy: PreloadStub = vi.fn()
@@ -67,7 +66,6 @@ export function installRuntimeFileClientEnvironment(): void {
     clearLegacyQuickOpenInventoryCacheForTests()
     replaceRuntimeEnvironmentRevisions([])
     fsReadFile.mockReset()
-    fsReadDir.mockReset()
     fsWriteFile.mockReset()
     fsOnChanged.mockReset()
     fsCopy.mockReset()
@@ -112,7 +110,6 @@ export function installRuntimeFileClientEnvironment(): void {
       api: {
         fs: {
           readFile: fsReadFile,
-          readDir: fsReadDir,
           writeFile: fsWriteFile,
           onFsChanged: fsOnChanged,
           copy: fsCopy,

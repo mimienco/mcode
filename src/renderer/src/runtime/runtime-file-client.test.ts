@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   deleteRuntimePath,
   getRuntimeFileReadScope,
@@ -6,16 +6,11 @@ import {
   readRuntimeFileContent,
   readRuntimeFilePreview,
   renameRuntimePath,
-  runtimePathExists,
-  statRuntimePath,
   writeRuntimeFile,
   type RuntimeReadableFileContent
 } from './runtime-file-client'
 import {
-  fsPathExists,
-  fsReadDir,
   fsReadFile,
-  fsStat,
   fsWriteFile,
   fsRename,
   fsDeletePath,
@@ -23,127 +18,24 @@ import {
   installRuntimeFileClientEnvironment
 } from './runtime-file-client-test-harness'
 
-const { desktopPathExists, desktopReadDir, desktopReadFile, desktopStat, desktopWriteFileAtomic } =
-  vi.hoisted(() => ({
-    desktopPathExists: vi.fn(),
-    desktopReadDir: vi.fn(),
-    desktopReadFile: vi.fn(),
-    desktopStat: vi.fn(),
-    desktopWriteFileAtomic: vi.fn()
-  }))
-
-vi.mock('../desktop/runtime-desktop-filesystem-client', () => ({
-  runtimeDesktopFilesystemClient: {
-    pathExists: desktopPathExists,
-    readDir: desktopReadDir,
-    readFile: desktopReadFile,
-    stat: desktopStat,
-    writeFileAtomic: desktopWriteFileAtomic
-  }
-}))
-
 installRuntimeFileClientEnvironment()
 
-beforeEach(() => {
-  desktopPathExists.mockReset()
-  desktopReadDir.mockReset()
-  desktopReadFile.mockReset()
-  desktopStat.mockReset()
-  desktopWriteFileAtomic.mockReset()
-})
-
 describe('runtime file client', () => {
-  it('routes local discovery calls through the typed desktop filesystem client', async () => {
-    const context = {
-      settings: { activeRuntimeEnvironmentId: null },
-      worktreeId: 'wt-1',
-      worktreePath: '/repo'
-    }
-    desktopReadDir.mockResolvedValue([{ name: 'src', isDirectory: true, isSymlink: false }])
-    desktopStat.mockResolvedValue({ size: 7, isDirectory: false, mtime: 1 })
-    desktopPathExists.mockResolvedValue(true)
-
-    await expect(readRuntimeDirectory(context, '/repo/src')).resolves.toEqual([
-      { name: 'src', isDirectory: true, isSymlink: false }
-    ])
-    await expect(statRuntimePath(context, '/repo/readme.md')).resolves.toEqual({
-      size: 7,
-      isDirectory: false,
-      mtime: 1
-    })
-    await expect(runtimePathExists(context, '/repo/readme.md')).resolves.toBe(true)
-
-    expect(desktopReadDir).toHaveBeenCalledWith({ dirPath: '/repo/src' })
-    expect(desktopStat).toHaveBeenCalledWith({ filePath: '/repo/readme.md' })
-    expect(desktopPathExists).toHaveBeenCalledWith({ filePath: '/repo/readme.md' })
-    expect(fsReadDir).not.toHaveBeenCalled()
-    expect(fsStat).not.toHaveBeenCalled()
-    expect(fsPathExists).not.toHaveBeenCalled()
-    expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
-  })
-
-  it('keeps direct SSH discovery calls on the existing preload filesystem provider', async () => {
-    const context = {
-      settings: { activeRuntimeEnvironmentId: null },
-      worktreeId: 'wt-1',
-      worktreePath: '/repo',
-      connectionId: 'ssh-1'
-    }
-    fsReadDir.mockResolvedValue([{ name: 'src', isDirectory: true, isSymlink: false }])
-    fsStat.mockResolvedValue({ size: 7, isDirectory: false, mtime: 1 })
-    fsPathExists.mockResolvedValue(true)
-
-    await readRuntimeDirectory(context, '/repo/src')
-    await statRuntimePath(context, '/repo/readme.md')
-    await runtimePathExists(context, '/repo/readme.md')
-
-    expect(fsReadDir).toHaveBeenCalledWith({ dirPath: '/repo/src', connectionId: 'ssh-1' })
-    expect(fsStat).toHaveBeenCalledWith({ filePath: '/repo/readme.md', connectionId: 'ssh-1' })
-    expect(fsPathExists).toHaveBeenCalledWith({
-      filePath: '/repo/readme.md',
-      connectionId: 'ssh-1'
-    })
-    expect(desktopReadDir).not.toHaveBeenCalled()
-    expect(desktopStat).not.toHaveBeenCalled()
-    expect(desktopPathExists).not.toHaveBeenCalled()
-    expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
-  })
-
   it('uses local filesystem reads when no remote runtime is active', async () => {
     const localResult: RuntimeReadableFileContent = { content: 'hello', isBinary: false }
-    desktopReadFile.mockResolvedValue(localResult)
+    fsReadFile.mockResolvedValue(localResult)
 
     await expect(
       readRuntimeFileContent({
         settings: { activeRuntimeEnvironmentId: null },
         filePath: '/repo/readme.md',
         relativePath: 'readme.md',
-        worktreeId: 'wt-1'
+        worktreeId: 'wt-1',
+        connectionId: 'ssh-1'
       })
     ).resolves.toBe(localResult)
 
-    expect(desktopReadFile).toHaveBeenCalledWith({
-      filePath: '/repo/readme.md',
-      includeLocalLogMetadata: undefined
-    })
-    expect(fsReadFile).not.toHaveBeenCalled()
-    expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
-  })
-
-  it('routes local writes through the typed desktop atomic writer', async () => {
-    const context = {
-      settings: { activeRuntimeEnvironmentId: null },
-      worktreeId: 'wt-1',
-      worktreePath: '/repo'
-    }
-
-    await writeRuntimeFile(context, '/repo/a.ts', 'changed')
-
-    expect(desktopWriteFileAtomic).toHaveBeenCalledWith({
-      filePath: '/repo/a.ts',
-      content: 'changed'
-    })
-    expect(fsWriteFile).not.toHaveBeenCalled()
+    expect(fsReadFile).toHaveBeenCalledWith({ filePath: '/repo/readme.md', connectionId: 'ssh-1' })
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 
@@ -239,7 +131,6 @@ describe('runtime file client', () => {
       expectedSshTargetId: 'ssh-1',
       expectedSshConnectionGeneration: 5
     })
-    expect(desktopWriteFileAtomic).not.toHaveBeenCalled()
   })
 
   it('routes worktree-relative text reads through the selected runtime environment', async () => {
@@ -276,7 +167,7 @@ describe('runtime file client', () => {
 
   it('keeps external absolute-path files on the local filesystem path', async () => {
     const localResult: RuntimeReadableFileContent = { content: 'scratch', isBinary: false }
-    desktopReadFile.mockResolvedValue(localResult)
+    fsReadFile.mockResolvedValue(localResult)
 
     await expect(
       readRuntimeFileContent({
@@ -286,11 +177,10 @@ describe('runtime file client', () => {
       })
     ).resolves.toBe(localResult)
 
-    expect(desktopReadFile).toHaveBeenCalledWith({
+    expect(fsReadFile).toHaveBeenCalledWith({
       filePath: '/Users/me/scratch.md',
-      includeLocalLogMetadata: undefined
+      connectionId: undefined
     })
-    expect(fsReadFile).not.toHaveBeenCalled()
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 

@@ -47,7 +47,6 @@ import {
   searchLegacyQuickOpenInventory
 } from './runtime-legacy-quick-open-inventory'
 import type { QuickOpenMatchMode } from '../../../shared/quick-open-path-search'
-import { runtimeDesktopFilesystemClient } from '../desktop/runtime-desktop-filesystem-client'
 
 export type RuntimeReadableFileContent = {
   content: string
@@ -263,16 +262,10 @@ export async function readRuntimeFileContent({
   assertExternalSshReadOwnership(settings, connectionId, expectedExternalSshTargetId)
   const target = getActiveRuntimeTarget(settings)
   if (target.kind !== 'environment') {
-    if (connectionId) {
-      return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
-    }
-    return runtimeDesktopFilesystemClient.readFile({ filePath, includeLocalLogMetadata })
+    return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
   }
   if (!worktreeId) {
-    if (connectionId) {
-      return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
-    }
-    return runtimeDesktopFilesystemClient.readFile({ filePath, includeLocalLogMetadata })
+    return window.api.fs.readFile({ filePath, connectionId, includeLocalLogMetadata })
   }
   if (!canReadRelativeRuntimeFile(relativePath)) {
     throw new Error('Remote file is outside the owning runtime worktree')
@@ -323,10 +316,7 @@ export async function readRuntimeFilePreview(
     if (hasRemoteRuntimeOwner(context)) {
       throw new Error('Remote file is outside the owning runtime worktree')
     }
-    if (context.connectionId) {
-      return window.api.fs.readFile({ filePath, connectionId: context.connectionId })
-    }
-    return runtimeDesktopFilesystemClient.readFile({ filePath })
+    return window.api.fs.readFile({ filePath, connectionId: context.connectionId })
   }
   return callRuntimeRpc<RuntimeFilePreviewResult>(
     remoteArgs.target,
@@ -490,12 +480,7 @@ export async function readRuntimeDirectory(
   const remoteArgs = getRemoteFileArgs(context, dirPath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    if (context.connectionId) {
-      return window.api.fs.readDir({ dirPath, connectionId: context.connectionId })
-    }
-    return runtimeDesktopFilesystemClient.readDir({
-      dirPath
-    })
+    return window.api.fs.readDir({ dirPath, connectionId: context.connectionId })
   }
   return callRuntimeRpc<DirEntry[]>(
     remoteArgs.target,
@@ -513,15 +498,9 @@ export async function writeRuntimeFile(
   const remoteArgs = getRemoteFileArgs(context, filePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    await (context.connectionId
-      ? window.api.fs.writeFile(
-          withSshMutationExpectation(context, {
-            filePath,
-            content,
-            connectionId: context.connectionId
-          })
-        )
-      : runtimeDesktopFilesystemClient.writeFileAtomic({ filePath, content }))
+    await window.api.fs.writeFile(
+      withSshMutationExpectation(context, { filePath, content, connectionId: context.connectionId })
+    )
     return
   }
   await callRuntimeFileMutation(
@@ -1222,14 +1201,9 @@ export async function statRuntimePath(
   const remoteArgs = getRemoteFileArgs(context, absolutePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    if (context.connectionId) {
-      return window.api.fs.stat({
-        filePath: absolutePath,
-        connectionId: context.connectionId
-      })
-    }
-    return runtimeDesktopFilesystemClient.stat({
-      filePath: absolutePath
+    return window.api.fs.stat({
+      filePath: absolutePath,
+      connectionId: context.connectionId
     })
   }
   return callRuntimeRpc<{ size: number; isDirectory: boolean; mtime: number }>(
@@ -1447,14 +1421,9 @@ export async function runtimePathExists(
   const remoteArgs = getRemoteFileArgs(context, absolutePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
-    if (context.connectionId) {
-      return window.api.fs.pathExists({
-        filePath: absolutePath,
-        connectionId: context.connectionId
-      })
-    }
-    return runtimeDesktopFilesystemClient.pathExists({
-      filePath: absolutePath
+    return window.api.fs.pathExists({
+      filePath: absolutePath,
+      connectionId: context.connectionId
     })
   }
 
