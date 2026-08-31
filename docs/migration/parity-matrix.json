@@ -410,8 +410,10 @@
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "mcode-wire/src/server.rs: TCP accept + sentinel + pre-dispatch handshake + framed dispatch; 31 wire tests green (2026-08-31). Runtime-metadata advertising and pipe transport pending."
+      ]
     },
     {
       "id": "updater.channels",
