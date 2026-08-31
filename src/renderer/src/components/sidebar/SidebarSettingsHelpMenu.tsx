@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import {
   BookOpen,
   CircleHelp,
+  Compass,
   ExternalLink,
   Github,
   Keyboard,
@@ -86,6 +87,7 @@ function ExternalMenuItem({
 
 export function SidebarSettingsHelpMenu(): React.JSX.Element {
   const openModal = useAppStore((s) => s.openModal)
+  const resetContextualTours = useAppStore((s) => s.resetContextualTours)
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
   const updateStatus = useAppStore((s) => s.updateStatus)
@@ -115,6 +117,16 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
     }
     lastShowOnboardingAtRef.current = now
     void showOnboardingFromRenderer()
+  }
+
+  const handleReplayGuidedTours = (): void => {
+    resetContextualTours()
+    toast.success(
+      translate(
+        'auto.components.sidebar.SidebarSettingsHelpMenu.fda15be623',
+        'Guided tours reset. Open a screen to see its tour.'
+      )
+    )
   }
 
   const handleRestartMCode = (): void => {
@@ -265,6 +277,15 @@ export function SidebarSettingsHelpMenu(): React.JSX.Element {
                 'auto.components.sidebar.SidebarSettingsHelpMenu.b7e4d2a19c',
                 'Onboarding'
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleReplayGuidedTours}>
+              <Compass className="size-3.5" />
+              {
+                translate(
+                  'auto.components.sidebar.SidebarSettingsHelpMenu.f4f1198c16',
+                  'Replay guided tours'
+                )
+              }
             </DropdownMenuItem>
             <ExternalMenuItem
               label={translate(
