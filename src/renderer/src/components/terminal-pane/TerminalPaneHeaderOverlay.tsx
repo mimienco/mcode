@@ -1,5 +1,5 @@
 import type { CSSProperties, RefObject } from 'react'
-import { MessageSquarePlus, SquareSplitVertical, X } from 'lucide-react'
+import { Maximize2, MessageSquarePlus, Minimize2, SquareSplitVertical, X } from 'lucide-react'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -24,6 +24,8 @@ type TerminalPaneHeaderOverlayProps = {
   showSplitButton?: boolean
   paneCount: number
   activePaneId: number | null | undefined
+  canMaximizePane: boolean
+  maximizedPaneId: number | null
   panes: readonly ManagedPane[]
   paneTitles: Readonly<Record<number, string>>
   paneTitleOverlayRects: Readonly<Record<number, PaneTitleOverlayRect>>
@@ -39,11 +41,11 @@ type TerminalPaneHeaderOverlayProps = {
   canContinueAgentSessionInNewSession?: boolean
   onContinueAgentSessionInNewSession?: (pane: ManagedPane) => void
   onSplitPane: (pane: ManagedPane, direction: 'vertical' | 'horizontal') => void
+  onToggleMaximize: (pane: ManagedPane) => void
   onBeginPaneDrag: (paneId: number, handle: HTMLElement, event: PointerEvent) => void
   onActivatePaneTitleInteraction: (paneId: number) => void
   onPaneTitleContextMenu: (event: React.MouseEvent<HTMLElement>, paneId: number) => void
   onStartRename: (paneId: number) => void
-  onRemoveTitle: (paneId: number) => void
   onClosePane: (paneId: number) => void
   onRenameValueChange: (value: string) => void
   onRenameSubmit: () => void
@@ -59,6 +61,8 @@ export default function TerminalPaneHeaderOverlay({
   showSplitButton = true,
   paneCount,
   activePaneId,
+  canMaximizePane,
+  maximizedPaneId,
   panes,
   paneTitles,
   paneTitleOverlayRects,
@@ -74,11 +78,11 @@ export default function TerminalPaneHeaderOverlay({
   canContinueAgentSessionInNewSession,
   onContinueAgentSessionInNewSession,
   onSplitPane,
+  onToggleMaximize,
   onBeginPaneDrag,
   onActivatePaneTitleInteraction,
   onPaneTitleContextMenu,
   onStartRename,
-  onRemoveTitle,
   onClosePane,
   onRenameValueChange,
   onRenameSubmit,
@@ -107,6 +111,14 @@ export default function TerminalPaneHeaderOverlay({
         const isActivePane = activePaneId === pane.id
         const isChromeless = showAlwaysOnHeaders && !title && !isEditing
         const showHeader = overlayRect && (showAlwaysOnHeaders || Boolean(title) || isEditing)
+        const isPaneMaximized = maximizedPaneId === pane.id
+        const maximizeLabel = isPaneMaximized
+          ? translate('components.terminalPane.header.restoreLayout', 'Restore pane layout')
+          : translate('components.terminalPane.header.maximize', 'Maximize pane')
+        const closeLabel =
+          paneCount > 1
+            ? translate('components.terminalPane.header.closePane', 'Close pane')
+            : translate('components.terminalPane.header.closeTab', 'Close tab')
         if (!showHeader || !overlayRect) {
           return null
         }
@@ -234,7 +246,7 @@ export default function TerminalPaneHeaderOverlay({
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          className="pane-title-split-trigger"
+                          className="pane-title-action-trigger"
                           aria-label={translate(
                             'components.agentSessionContinuation.continueInNewSession',
                             'Continue in New Session…'
@@ -244,7 +256,7 @@ export default function TerminalPaneHeaderOverlay({
                             onContinueAgentSessionInNewSession?.(pane)
                           }}
                         >
-                          <MessageSquarePlus className="size-3" />
+                          <MessageSquarePlus className="size-3.5" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={4}>
@@ -262,7 +274,7 @@ export default function TerminalPaneHeaderOverlay({
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          className="pane-title-split-trigger"
+                          className="pane-title-action-trigger"
                           data-contextual-tour-target={
                             isActivePane ? 'terminal-pane-split-target' : undefined
                           }
@@ -272,7 +284,7 @@ export default function TerminalPaneHeaderOverlay({
                             onSplitPane(pane, 'vertical')
                           }}
                         >
-                          <SquareSplitVertical className="size-3" />
+                          <SquareSplitVertical className="size-3.5" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={4}>
@@ -280,62 +292,53 @@ export default function TerminalPaneHeaderOverlay({
                       </TooltipContent>
                     </Tooltip>
                   ) : null}
-                  {title ? (
+                  {canMaximizePane ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon-xs"
-                          className="pane-title-close"
+                          className="pane-title-action-trigger"
+                          data-maximized={isPaneMaximized ? 'true' : 'false'}
+                          aria-label={maximizeLabel}
                           onClick={(event) => {
                             event.stopPropagation()
-                            onRemoveTitle(pane.id)
+                            onToggleMaximize(pane)
                           }}
-                          aria-label={translate(
-                            'auto.components.terminal.pane.TerminalPane.f984ab2a30',
-                            'Remove pane title: {{value0}}',
-                            { value0: title }
-                          )}
                         >
-                          <X className="size-3" />
+                          {isPaneMaximized ? (
+                            <Minimize2 className="size-3.5" />
+                          ) : (
+                            <Maximize2 className="size-3.5" />
+                          )}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={4}>
-                        {translate(
-                          'auto.components.terminal.pane.TerminalPane.ac112e9036',
-                          'Remove title'
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : paneCount > 1 && showAlwaysOnHeaders ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          className="pane-title-close"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onClosePane(pane.id)
-                          }}
-                          aria-label={translate(
-                            'auto.components.terminal.pane.TerminalContextMenu.8c17d6786d',
-                            'Close Pane'
-                          )}
-                        >
-                          <X className="size-3" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={4}>
-                        {translate(
-                          'auto.components.terminal.pane.TerminalContextMenu.8c17d6786d',
-                          'Close Pane'
-                        )}
+                      <TooltipContent side="bottom" sideOffset={6}>
+                        {maximizeLabel}
                       </TooltipContent>
                     </Tooltip>
                   ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="pane-title-close"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onClosePane(pane.id)
+                        }}
+                        aria-label={closeLabel}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>
+                      {closeLabel}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </>
             )}

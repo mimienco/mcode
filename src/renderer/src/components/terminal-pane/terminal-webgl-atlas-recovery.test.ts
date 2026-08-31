@@ -5,8 +5,11 @@ import {
 } from '@/lib/pane-manager/pane-manager-registry'
 import * as terminalWebglAtlasRecovery from './terminal-webgl-atlas-recovery'
 
-const { scheduleImagePasteWebglAtlasRecovery, scheduleTabRevealWebglAtlasRecovery } =
-  terminalWebglAtlasRecovery
+const {
+  resetTerminalWebglAtlasRecoveryForTest,
+  scheduleImagePasteWebglAtlasRecovery,
+  scheduleTabRevealWebglAtlasRecovery
+} = terminalWebglAtlasRecovery
 
 describe('terminal WebGL atlas recovery', () => {
   const registeredManagers: { resetWebglTextureAtlases(): void }[] = []
@@ -27,6 +30,7 @@ describe('terminal WebGL atlas recovery', () => {
   }
 
   afterEach(() => {
+    resetTerminalWebglAtlasRecoveryForTest()
     for (const manager of registeredManagers.splice(0)) {
       unregisterLivePaneManager(manager)
     }
@@ -170,6 +174,29 @@ describe('terminal WebGL atlas recovery', () => {
     expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(120)
     vi.advanceTimersByTime(380)
+    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(3)
+    expect(manager.refreshAllPanes).toHaveBeenCalledTimes(3)
+  })
+
+  it('coalesces simultaneous terminal reveals into one recovery burst', () => {
+    vi.useFakeTimers()
+    const rafCallbacks: FrameRequestCallback[] = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback)
+        return rafCallbacks.length
+      })
+    )
+    const manager = registerManager()
+
+    for (let index = 0; index < 15; index += 1) {
+      scheduleTabRevealWebglAtlasRecovery()
+    }
+
+    expect(rafCallbacks).toHaveLength(1)
+    rafCallbacks[0]?.(0)
+    vi.advanceTimersByTime(500)
     expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(3)
     expect(manager.refreshAllPanes).toHaveBeenCalledTimes(3)
   })

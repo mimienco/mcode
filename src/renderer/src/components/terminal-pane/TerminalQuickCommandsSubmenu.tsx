@@ -21,10 +21,7 @@ import {
   shouldShowTerminalQuickCommandHostOwnership,
   type TerminalQuickCommandMenuHost
 } from '@/hooks/use-terminal-quick-command-hosts'
-import {
-  finishQuickCommandDrag,
-  writeQuickCommandDragData
-} from '@/lib/quick-command-drag-data'
+import { finishQuickCommandDrag, writeQuickCommandDragData } from '@/lib/quick-command-drag-data'
 
 type TerminalQuickCommandsSubmenuProps = {
   hosts: TerminalQuickCommandMenuHost[]

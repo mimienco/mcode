@@ -88,7 +88,10 @@ describe('resumeTerminalVisibility reveal repaint', () => {
 
     expect(manager.scheduleRevealRepaint).toHaveBeenCalledTimes(1)
     expect(manager.resumeRendering).not.toHaveBeenCalled()
-    expect(scheduleTabRevealWebglAtlasRecovery).toHaveBeenCalledTimes(1)
+    // Why: a retained WebGL addon keeps its shared atlas valid — the light
+    // path no longer schedules cross-manager atlas recovery (renderer
+    // recreation only, see resumeTerminalVisibilityHeavy).
+    expect(scheduleTabRevealWebglAtlasRecovery).not.toHaveBeenCalled()
   })
 
   it('captures native trim movement before enforcing viewport intent', async () => {

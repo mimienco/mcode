@@ -73,6 +73,7 @@ export function resumeTerminalVisibility({
   // not jump to the wrong history entry.
   captureViewportPositions(!wasVisible)
   withSuppressedScrollTracking(() => {
+    let rendererChanged = false
     if (shouldUseLightTabResume) {
       let flushedDeferredMetrics = false
       for (const pane of manager.getPanes()) {
@@ -88,8 +89,6 @@ export function resumeTerminalVisibility({
       // overlay's delayed geometry fit. Still request hidden-output recovery:
       // agent TUIs can suppress hidden bytes until the pane is foregrounded.
       requestLightTabBacklogRecovery(manager)
-      // Why: reveal is the lifecycle boundary that owns hidden renderer repair.
-      scheduleTabRevealWebglAtlasRecovery()
       if (flushedDeferredMetrics) {
         // Why: the light path normally skips fitting, but flushed metrics changed
         // cell size — refit so cols/rows match before the overlay settles.
@@ -101,17 +100,14 @@ export function resumeTerminalVisibility({
     } else {
       // fitAllRevealedPanes flushes after WebGL reattaches, avoiding a redundant
       // full refresh in the suspended DOM renderer while preserving first paint.
-      resumeTerminalVisibilityHeavy(manager, isActive)
+      rendererChanged = resumeTerminalVisibilityHeavy(manager, isActive)
     }
     enforceTerminalViewportIntents(manager)
-    if (!shouldUseLightTabResume) {
-      // Why: this clear wipes the glyph atlas shared with other same-config
-      // terminals; refresh after reset so rebuilt atlases repaint from xterm.
-      resetAndRefreshAllTerminalWebglAtlases('visibility-resume')
+    // A retained WebGL addon keeps its shared atlas valid; only renderer
+    // recreation needs the coalesced cross-manager rebuild.
+    if (rendererChanged) {
+      scheduleTabRevealWebglAtlasRecovery()
     }
-    // Why: the synchronous recovery above can fire before the revealed pane is
-    // attached and laid out. Follow up after layout with one shared-atlas-safe
-    // recovery covering every visible terminal manager.
     manager.scheduleRevealRepaint()
   })
 }
@@ -199,7 +195,7 @@ function requestLightTabBacklogRecovery(manager: PaneManager): void {
   }
 }
 
-function resumeTerminalVisibilityHeavy(manager: PaneManager, isActive: boolean): void {
+function resumeTerminalVisibilityHeavy(manager: PaneManager, isActive: boolean): boolean {
   // Why: hidden panes can accumulate large PTY bursts while Chromium is
   // occluded. Drain a bounded slice before fitting; the scheduler keeps
   // ordering and continues the rest asynchronously so return-to-app does
@@ -213,7 +209,7 @@ function resumeTerminalVisibilityHeavy(manager: PaneManager, isActive: boolean):
   // on the first painted frame. macOS context creation is ~5 ms; on
   // Windows (ANGLE -> D3D11) it can be 100-500 ms but a deferred resume
   // would paint a stretched DOM-fallback flash, which is worse UX.
-  manager.resumeRendering()
+  const rendererChanged = manager.resumeRendering()
   // Why: resumeRendering just re-attached WebGL, whose cell metrics briefly differ
   // from the DOM renderer's; a raw fit here reflows on a transient one-column-off
   // grid and garbles diff-painting inline TUIs (grok minimize→restore).
@@ -221,6 +217,7 @@ function resumeTerminalVisibilityHeavy(manager: PaneManager, isActive: boolean):
   if (isActive) {
     focusActivePane(manager)
   }
+  return rendererChanged
 }
 
 function enforceTerminalViewportIntents(manager: PaneManager): void {

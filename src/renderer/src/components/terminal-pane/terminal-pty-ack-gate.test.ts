@@ -125,3 +125,77 @@ describe('terminal-pty-ack-gate parse-deferred crediting', () => {
     expect(ackDataMock).toHaveBeenCalledWith('pty-a', 7, 7)
   })
 })
+
+describe('seq-dedupe baseline (Tauri §2.3)', () => {
+  const ackDataMock = vi.fn()
+
+  beforeEach(() => {
+    vi.resetModules()
+    ackDataMock.mockClear()
+  })
+
+  afterEach(() => {
+    delete (window as unknown as { api?: unknown }).api
+  })
+
+  async function loadAckGate() {
+    return await import('./terminal-pty-ack-gate')
+  }
+
+  it('keeps advancing totals when window.api is undefined (Tauri no-op delta)', async () => {
+    // Simulate the Tauri page: no Electron bridge at all. The gate must not
+    // throw, and the local total — the dedupe baseline — must keep advancing.
+    delete (window as unknown as { api?: unknown }).api
+    const { ackPtyData, getProcessedPtyCharTotals } = await loadAckGate()
+
+    expect(() => ackPtyData('pty-t', 5)).not.toThrow()
+    ackPtyData('pty-t', 7)
+    expect(getProcessedPtyCharTotals()).toEqual({ 'pty-t': 12 })
+    expect(ackDataMock).not.toHaveBeenCalled()
+  })
+
+  it('feeds the dedupe helper: baseline consumed by applyPtySeqDedupe', async () => {
+    const { applyPtySeqDedupe } = await import('./pty-transport-tauri')
+    const { ackPtyData, getProcessedPtyCharTotals } = await loadAckGate()
+
+    ackPtyData('pty-d', 6)
+    const baseline = getProcessedPtyCharTotals()['pty-d'] ?? 0
+    // Chunk spans: 'old' (3 chars) covers 1..4 (skip — below baseline),
+    // 'new' (3 chars) covers 6..9 (keep — starts exactly at the baseline),
+    // 'edge' (4 chars) covers 4..8 (skip — starts below the baseline).
+    const { chunks } = applyPtySeqDedupe(
+      {
+        chunks: [
+          { data: 'old', seq: 4 },
+          { data: 'new', seq: 9 },
+          { data: 'edge', seq: 8 }
+        ]
+      },
+      baseline
+    )
+    expect(chunks).toEqual([{ data: 'new', seq: 9 }])
+  })
+
+  it('restoreMarker/reset semantics consumed by the dedupe helper', async () => {
+    const { applyPtySeqDedupe } = await import('./pty-transport-tauri')
+    const { ackPtyData, getProcessedPtyCharTotals } = await loadAckGate()
+
+    ackPtyData('pty-r', 20)
+    const baseline = getProcessedPtyCharTotals()['pty-r'] ?? 0
+
+    // A marker resets the window to markerSeq: chunks the stale baseline would
+    // have vetoed are re-delivered; chunks at/below markerSeq stay dropped.
+    const { chunks, nextBaseline } = applyPtySeqDedupe(
+      {
+        chunks: [
+          { data: 'a', seq: 14 },
+          { data: 'b', seq: 9 }
+        ],
+        restoreMarker: { reason: 'hidden_drop', markerSeq: 10 }
+      },
+      baseline
+    )
+    expect(chunks).toEqual([{ data: 'a', seq: 14 }])
+    expect(nextBaseline).toBe(10)
+  })
+})

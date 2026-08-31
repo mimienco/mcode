@@ -33,7 +33,9 @@ function sendPtyAck(ptyId: string, chars: number): void {
   processedPtyCharTotals.set(ptyId, processedChars)
   // Why: keep the legacy per-chunk delta alongside the cumulative total so an
   // older main (dev hot-reload mix) still credits deltas.
-  window.api.pty.ackData?.(ptyId, chars, processedChars)
+  if (typeof window !== 'undefined') {
+    window.api?.pty?.ackData?.(ptyId, chars, processedChars)
+  }
 }
 
 function releaseE2eTerminalAckGate(): void {

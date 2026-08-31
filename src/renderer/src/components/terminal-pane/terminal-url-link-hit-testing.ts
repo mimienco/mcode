@@ -130,7 +130,6 @@ export function handleTerminalHttpLink(
   })
 }
 
-
 export function findHttpLinkAtTerminalMouseEvent(
   terminal: Terminal,
   event: MouseEvent

@@ -41,7 +41,7 @@ import { serializeWithAbsoluteCursor } from '../../../../shared/terminal-seriali
 import { isTerminalQueryReply } from '../../../../shared/terminal-query-reply'
 import type { PtyBufferSnapshot, PtyConnectResult, PtyReplayDataMeta } from './pty-transport'
 import type { IpcPtyTransportOptions, PtyTransportRecoveryState } from './pty-transport-types'
-import { createIpcPtyTransport } from './pty-transport'
+import { createLocalPtyTransport } from './pty-transport-factory'
 import { createRemoteRuntimePtyTransport } from './remote-runtime-pty-transport'
 import { toAgentLaunchPreferences } from '@/runtime/agent-session-create-operation'
 import { createUnresolvedOwnerPtyTransport } from './unresolved-owner-pty-transport'
@@ -4023,7 +4023,7 @@ export function connectPanePty(
         )
       : runtimeEnvironmentId
         ? createRemoteRuntimePtyTransport(runtimeEnvironmentId, transportOptions)
-        : createIpcPtyTransport(transportOptions)
+        : createLocalPtyTransport(transportOptions)
   const canSendDesktopQueryReply = (): boolean => {
     const ptyId = transport.getPtyId()
     return !ptyId || !isPtyLocked(ptyId)

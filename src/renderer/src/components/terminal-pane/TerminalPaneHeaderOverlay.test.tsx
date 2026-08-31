@@ -44,11 +44,13 @@ function renderOverlay({
   paneCount = 2,
   showAlwaysOnHeaders = true,
   showSplitButton = true,
+  canMaximizePane = true,
+  maximizedPaneId = null,
   onClosePane = vi.fn(),
-  onRemoveTitle = vi.fn(),
   onRenameSubmit = vi.fn(),
   canContinueAgentSessionInNewSession = false,
   onContinueAgentSessionInNewSession = vi.fn(),
+  onToggleMaximize = vi.fn(),
   renameValue = '',
   renamingPaneId = null
 }: {
@@ -56,20 +58,21 @@ function renderOverlay({
   paneCount?: number
   showAlwaysOnHeaders?: boolean
   showSplitButton?: boolean
+  canMaximizePane?: boolean
+  maximizedPaneId?: number | null
   onClosePane?: ReturnType<typeof vi.fn>
-  onRemoveTitle?: ReturnType<typeof vi.fn>
   onRenameSubmit?: ReturnType<typeof vi.fn>
   canContinueAgentSessionInNewSession?: boolean
   onContinueAgentSessionInNewSession?: ReturnType<typeof vi.fn>
+  onToggleMaximize?: (pane: ManagedPane) => void
   renameValue?: string
   renamingPaneId?: number | null
 }): {
   container: HTMLDivElement
   onClosePane: ReturnType<typeof vi.fn>
-  onRemoveTitle: ReturnType<typeof vi.fn>
   onRenameSubmit: ReturnType<typeof vi.fn>
 } {
-  const panes = [makePane(1), makePane(2)]
+  const panes = Array.from({ length: paneCount }, (_, index) => makePane(index + 1))
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -83,6 +86,8 @@ function renderOverlay({
         showSplitButton={showSplitButton}
         paneCount={paneCount}
         activePaneId={1}
+        canMaximizePane={canMaximizePane}
+        maximizedPaneId={maximizedPaneId}
         panes={panes}
         paneTitles={paneTitles}
         paneTitleOverlayRects={{
@@ -103,11 +108,11 @@ function renderOverlay({
           onContinueAgentSessionInNewSession as (pane: ManagedPane) => void
         }
         onSplitPane={vi.fn()}
+        onToggleMaximize={onToggleMaximize}
         onBeginPaneDrag={vi.fn()}
         onActivatePaneTitleInteraction={vi.fn()}
         onPaneTitleContextMenu={vi.fn()}
         onStartRename={vi.fn()}
-        onRemoveTitle={onRemoveTitle as (paneId: number) => void}
         onClosePane={onClosePane as (paneId: number) => void}
         onRenameValueChange={vi.fn()}
         onRenameSubmit={onRenameSubmit as () => void}
@@ -117,7 +122,7 @@ function renderOverlay({
     )
   })
   mounted.push({ container, root })
-  return { container, onClosePane, onRemoveTitle, onRenameSubmit }
+  return { container, onClosePane, onRenameSubmit }
 }
 
 function pressInputKey(
@@ -145,36 +150,43 @@ afterEach(() => {
 })
 
 describe('TerminalPaneHeaderOverlay', () => {
-  it('keeps the titled-pane close affordance as remove-title while headers are always on', () => {
-    const { container, onClosePane, onRemoveTitle } = renderOverlay({
+  it('uses the header close action to close a titled pane', () => {
+    const { container, onClosePane } = renderOverlay({
       paneTitles: { 1: 'server', 2: '' }
     })
+    const closePane = container.querySelector<HTMLButtonElement>('button[aria-label="Close pane"]')
 
-    const removeTitle = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Remove pane title: server"]'
-    )
-    expect(removeTitle).not.toBeNull()
-
-    act(() => removeTitle?.click())
-
-    expect(onRemoveTitle).toHaveBeenCalledWith(1)
-    expect(onClosePane).not.toHaveBeenCalledWith(1)
+    expect(closePane).not.toBeNull()
+    act(() => closePane?.click())
+    expect(onClosePane).toHaveBeenCalledWith(1)
   })
 
   it('keeps split and close-pane controls available for untitled split pane headers', () => {
-    const { container, onClosePane, onRemoveTitle } = renderOverlay({
+    const { container, onClosePane } = renderOverlay({
       paneTitles: { 1: '', 2: '' }
     })
 
     expect(container.querySelector('button[aria-label="Split Terminal Right"]')).not.toBeNull()
     expect(container.querySelector('.pane-title-drag-handle')).toBeNull()
-    const closePane = container.querySelector<HTMLButtonElement>('button[aria-label="Close Pane"]')
+    const closePane = container.querySelector<HTMLButtonElement>('button[aria-label="Close pane"]')
     expect(closePane).not.toBeNull()
 
     act(() => closePane?.click())
-
     expect(onClosePane).toHaveBeenCalledWith(1)
-    expect(onRemoveTitle).not.toHaveBeenCalled()
+  })
+
+  it('closes a single chat or terminal as the current tab', () => {
+    const onClosePane = vi.fn()
+    const { container } = renderOverlay({
+      paneTitles: { 1: '' },
+      paneCount: 1,
+      onClosePane
+    })
+    const closeTab = container.querySelector<HTMLButtonElement>('button[aria-label="Close tab"]')
+
+    expect(closeTab).not.toBeNull()
+    act(() => closeTab?.click())
+    expect(onClosePane).toHaveBeenCalledWith(1)
   })
 
   it('omits the split control when the header affordance is hidden', () => {
@@ -185,6 +197,31 @@ describe('TerminalPaneHeaderOverlay', () => {
     })
 
     expect(container.querySelector('button[aria-label="Split Terminal Right"]')).toBeNull()
+  })
+
+  it('offers middle-pane maximize for one chat or terminal surface', () => {
+    const onToggleMaximize = vi.fn()
+    const { container } = renderOverlay({
+      paneTitles: { 1: '' },
+      paneCount: 1,
+      onToggleMaximize
+    })
+    const maximize = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Maximize pane"]'
+    )
+
+    expect(maximize).not.toBeNull()
+    act(() => maximize?.click())
+    expect(onToggleMaximize).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }))
+
+    const { container: maximizedContainer } = renderOverlay({
+      paneTitles: { 1: '' },
+      paneCount: 1,
+      maximizedPaneId: 1
+    })
+    expect(
+      maximizedContainer.querySelector('button[aria-label="Restore pane layout"]')
+    ).not.toBeNull()
   })
 
   it('ignores IME composition Enter before submitting a pane title rename', () => {

@@ -82,7 +82,6 @@ export function createPaneContainer(): HTMLElement {
   return container
 }
 
-
 export type MockPaneBuffer = {
   type: 'normal' | 'alternate'
   viewportY: number

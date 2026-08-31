@@ -1,6 +1,8 @@
 import { resetAndRefreshAllTerminalWebglAtlases } from '@/lib/pane-manager/pane-manager-registry'
 
 const ATLAS_RECOVERY_DELAYS_MS = [120, 500]
+let tabRevealFramePending = false
+const tabRevealTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
 function scheduleNextFrame(callback: () => void): void {
   if (typeof globalThis.requestAnimationFrame === 'function') {
@@ -35,7 +37,29 @@ export function scheduleImagePasteWebglAtlasRecovery(): void {
 }
 
 export function scheduleTabRevealWebglAtlasRecovery(): void {
-  // Why: a tab reveal is an explicit renderer lifecycle boundary where hidden
-  // GPU state can be stale; ordinary PTY output must not clear the shared atlas.
-  scheduleAtlasRecoveryBurst('tab-reveal')
+  if (!tabRevealFramePending) {
+    tabRevealFramePending = true
+    scheduleNextFrame(() => {
+      tabRevealFramePending = false
+      resetAtlasesAndRefreshPanes('tab-reveal')
+    })
+  }
+  for (const delayMs of ATLAS_RECOVERY_DELAYS_MS) {
+    if (tabRevealTimers.has(delayMs)) {
+      continue
+    }
+    const timerId = globalThis.setTimeout(() => {
+      tabRevealTimers.delete(delayMs)
+      resetAtlasesAndRefreshPanes('tab-reveal')
+    }, delayMs)
+    tabRevealTimers.set(delayMs, timerId)
+  }
+}
+
+export function resetTerminalWebglAtlasRecoveryForTest(): void {
+  tabRevealFramePending = false
+  for (const timerId of tabRevealTimers.values()) {
+    globalThis.clearTimeout(timerId)
+  }
+  tabRevealTimers.clear()
 }

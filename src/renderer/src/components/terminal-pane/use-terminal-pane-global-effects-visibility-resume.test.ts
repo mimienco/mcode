@@ -2,6 +2,7 @@ import type * as ReactModule from 'react'
 import type * as StoreModule from '@/store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useTerminalPaneGlobalEffects } from './use-terminal-pane-global-effects'
+import { resetTerminalWebglAtlasRecoveryForTest } from './terminal-webgl-atlas-recovery'
 import {
   cleanupGlobalEffectsTestWindow,
   createLivePaneManagerRegistry,
@@ -120,6 +121,7 @@ describe('useTerminalPaneGlobalEffects', () => {
   })
 
   afterEach(() => {
+    resetTerminalWebglAtlasRecoveryForTest()
     unregisterAllManagers()
     vi.useRealTimers()
     vi.unstubAllGlobals()
@@ -127,6 +129,15 @@ describe('useTerminalPaneGlobalEffects', () => {
   })
 
   it('flushes visible terminal panes before resuming rendering and fitting', () => {
+    vi.useFakeTimers()
+    const rafCallbacks: FrameRequestCallback[] = []
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback)
+        return rafCallbacks.length
+      })
+    )
     const order: string[] = []
     const terminalA = { name: 'terminal-a' }
     const terminalB = { name: 'terminal-b' }
@@ -135,7 +146,10 @@ describe('useTerminalPaneGlobalEffects', () => {
         { id: 1, terminal: terminalA },
         { id: 2, terminal: terminalB }
       ]),
-      resumeRendering: vi.fn(() => order.push('resume')),
+      resumeRendering: vi.fn(() => {
+        order.push('resume')
+        return true
+      }),
       resetWebglTextureAtlases: vi.fn(() => order.push('reset-atlas')),
       scheduleRevealRepaint: vi.fn(() => order.push('reveal-repaint')),
       scheduleRevealPresent: vi.fn(() => order.push('reveal-present')),
@@ -164,9 +178,8 @@ describe('useTerminalPaneGlobalEffects', () => {
     })
     mocks.fitAndFocusPanes.mockImplementation(() => order.push('fit-focus'))
 
-    // Why: the resume path resets atlases through the live-manager registry
-    // (shared glyph atlas), so the fake manager must be registered to observe
-    // its reset in the ordering assertion.
+    // Recreated WebGL renderers reset through the live-manager registry
+    // (shared glyph atlas), so register the fake manager for the assertion.
     registerManagerForReset(manager)
     const isActiveRef = { current: false }
     const isVisibleRef = { current: false }
@@ -197,10 +210,11 @@ describe('useTerminalPaneGlobalEffects', () => {
       'fit-reveal',
       'intent:terminal-a',
       'intent:terminal-b',
-      'reset-atlas',
-      'refresh',
       'reveal-repaint'
     ])
+    expect(rafCallbacks).toHaveLength(1)
+    rafCallbacks[0]?.(0)
+    expect(order.slice(-2)).toEqual(['reset-atlas', 'refresh'])
     expect(mocks.restoreScrollStateAfterLayout).not.toHaveBeenCalled()
     expect(mocks.flushTerminalOutput).toHaveBeenNthCalledWith(1, terminalA, {
       maxChars: 256 * 1024
@@ -289,8 +303,8 @@ describe('useTerminalPaneGlobalEffects', () => {
     expect(manager.resumeRendering).not.toHaveBeenCalled()
     expect(mocks.fitAndFocusPanes).not.toHaveBeenCalled()
     expect(mocks.fitPanes).not.toHaveBeenCalled()
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(manager.refreshAllPanes).not.toHaveBeenCalled()
     expect(mocks.focusActivePane).toHaveBeenCalledWith(manager)
     vi.advanceTimersByTime(500)
   })
@@ -361,8 +375,8 @@ describe('useTerminalPaneGlobalEffects', () => {
     expect(manager.resumeRendering).not.toHaveBeenCalled()
     expect(mocks.fitAndFocusPanes).not.toHaveBeenCalled()
     expect(mocks.fitPanes).not.toHaveBeenCalled()
-    expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
-    expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
+    expect(manager.resetWebglTextureAtlases).not.toHaveBeenCalled()
+    expect(manager.refreshAllPanes).not.toHaveBeenCalled()
     expect(mocks.focusActivePane).toHaveBeenCalledWith(manager)
     vi.advanceTimersByTime(500)
   })
@@ -424,10 +438,11 @@ describe('useTerminalPaneGlobalEffects', () => {
   })
 
   it('suspends a tab-hidden terminal when its worktree surface becomes hidden', () => {
+    vi.useFakeTimers()
     const terminal = { name: 'terminal-a' }
     const manager = {
       getPanes: vi.fn(() => [{ id: 1, terminal }]),
-      resumeRendering: vi.fn(),
+      resumeRendering: vi.fn(() => true),
       resetWebglTextureAtlases: vi.fn(),
       scheduleRevealRepaint: vi.fn(),
       scheduleRevealPresent: vi.fn(),
@@ -506,6 +521,7 @@ describe('useTerminalPaneGlobalEffects', () => {
     expect(manager.fitAllPanes).not.toHaveBeenCalled()
     expect(mocks.focusActivePane).toHaveBeenCalledWith(manager)
     expect(mocks.fitAndFocusPanes).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(0)
     expect(manager.resetWebglTextureAtlases).toHaveBeenCalledTimes(1)
     expect(manager.refreshAllPanes).toHaveBeenCalledTimes(1)
   })

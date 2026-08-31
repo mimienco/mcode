@@ -196,7 +196,10 @@ export function startTerminalDeliveryWatchdog(deps: TerminalDeliveryWatchdogDeps
   // Why gated on the invoke fn: the web remote client and unit tests expose a
   // partial pty API; without the report lane the watchdog has no safe heal
   // path and must stay off.
-  if (typeof window.api?.pty?.reportRendererDeliveryState !== 'function') {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.api?.pty?.reportRendererDeliveryState !== 'function'
+  ) {
     return
   }
   watchdogDeps = deps
