@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod restore;
 pub mod shutdown;
 pub mod single_instance;
+pub mod telemetry_consent;
 pub use restore::{
     RestorableSession, RestorableWindow, RestoreError, RestorePlan, SkipReason, SkippedSession,
     build_restore_plan, build_restore_plan_from_bytes, plan_from_error,
