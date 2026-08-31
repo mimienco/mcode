@@ -159,9 +159,10 @@ impl LruCache {
             return;
         }
         if self.entries.len() >= self.capacity
-            && let Some(oldest) = self.eviction_order.pop_front() {
-                self.entries.remove(&oldest);
-            }
+            && let Some(oldest) = self.eviction_order.pop_front()
+        {
+            self.entries.remove(&oldest);
+        }
         self.entries.insert(key.clone(), ());
         self.eviction_order.push_back(key);
     }

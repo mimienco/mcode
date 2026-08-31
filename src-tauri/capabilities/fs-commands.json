@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "fs-commands",
+  "description": "Explicit filesystem command permissions for the primary local MCode window; no default grants.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-fs-read-dir",
+    "allow-fs-read-file",
+    "allow-fs-write-file",
+    "allow-fs-path-exists",
+    "allow-fs-stat",
+    "allow-fs-create-dir",
+    "allow-fs-create-file",
+    "allow-fs-copy-path",
+    "allow-fs-rename-path",
+    "allow-fs-delete-path",
+    "allow-fs-write-file-atomic",
+    "allow-fs-search",
+    "allow-fs-search-replace",
+    "allow-fs-cancel-list-files",
+    "allow-fs-cancel-search-replace",
+    "allow-fs-watch-worktree",
+    "allow-fs-unwatch-worktree"
+  ]
+}

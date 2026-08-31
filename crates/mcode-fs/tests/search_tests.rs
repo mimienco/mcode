@@ -114,7 +114,14 @@ fn replace_skip_paths_never_written() {
     fs::write(ctx.dir.path().join("other.txt"), "alpha changes\n").unwrap();
 
     let (_reg, cancel) = token(1, "t4");
-    let summary = search_replace(&ctx.root(), "alpha", "BETA", std::slice::from_ref(&keep), &cancel).unwrap();
+    let summary = search_replace(
+        &ctx.root(),
+        "alpha",
+        "BETA",
+        std::slice::from_ref(&keep),
+        &cancel,
+    )
+    .unwrap();
     assert_eq!(
         fs::read_to_string(&keep).unwrap(),
         "alpha stays\n",

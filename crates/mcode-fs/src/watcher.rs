@@ -422,10 +422,11 @@ fn pump(
             None => Some(Duration::from_millis(200)),
         };
         if let Some(receiver) = shutdown
-            && !receiver.is_empty() {
-                flush(root, &root_key, pending, emitter, &mut batch_open);
-                return;
-            }
+            && !receiver.is_empty()
+        {
+            flush(root, &root_key, pending, emitter, &mut batch_open);
+            return;
+        }
         match notify_rx.recv_timeout(timeout.unwrap_or(Duration::from_millis(200))) {
             Ok(Ok(event)) => {
                 let now = Instant::now();

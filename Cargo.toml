@@ -2,8 +2,9 @@
 members = [
   "crates/mcode-app",
   "crates/mcode-fs",
-  "crates/mcode-git",
+  "crates/mcode-process",
   "crates/mcode-platform",
+  "crates/mcode-pty",
   "crates/mcode-settings",
   "crates/mcode-updater",
   "src-tauri",

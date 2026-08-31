@@ -1,246 +1,302 @@
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use mcode_fs::{
-    BoundedFileRead, DirectoryEntry, FsError, PathKind, PathMetadata, ScopedFilesystem,
-};
+//! Tauri commands over the `mcode-fs` scoped filesystem crate (spec
+//! `docs/migration/FS_CONTRACT_SPEC.md`).
+//!
+//! Every command authorizes the requested path through
+//! [`FsScopeRegistry::authorize`] before touching the disk, seeds the
+//! allow-list from `SettingsService::local_filesystem_roots()`, and maps
+//! [`FsError`] onto the shared [`DesktopCommandError`] shape with the crate's
+//! stable snake_case codes (`fs_path_denied`, ...).
+
+use crossbeam_channel::Receiver;
+use mcode_fs::ops;
+use mcode_fs::scope::{FsError, FsScopeRegistry, LeafPolicy};
+use mcode_fs::search::{self, CancellationRegistry};
+use mcode_fs::watcher::{WatchBatch, WatcherService, normalize_drive_case};
 use mcode_settings::{SettingsService, SettingsServiceError};
-use serde::Serialize;
-#[cfg(test)]
-use std::fs;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tauri::{Emitter, WebviewWindow};
+
+use crate::DesktopCommandError;
 
 const FS_READ_DIR_OPERATION: &str = "fs_read_dir";
 const FS_READ_FILE_OPERATION: &str = "fs_read_file";
-const FS_WRITE_FILE_ATOMIC_OPERATION: &str = "fs_write_file_atomic";
-const FS_STAT_OPERATION: &str = "fs_stat";
+const FS_WRITE_FILE_OPERATION: &str = "fs_write_file";
 const FS_PATH_EXISTS_OPERATION: &str = "fs_path_exists";
-const MAX_FILE_CONTENT_BYTES: usize = 50 * 1024 * 1024;
-const BINARY_PROBE_BYTES: usize = 8 * 1024;
+const FS_STAT_OPERATION: &str = "fs_stat";
+const FS_CREATE_DIR_OPERATION: &str = "fs_create_dir";
+const FS_CREATE_FILE_OPERATION: &str = "fs_create_file";
+const FS_COPY_PATH_OPERATION: &str = "fs_copy_path";
+const FS_RENAME_PATH_OPERATION: &str = "fs_rename_path";
+const FS_DELETE_PATH_OPERATION: &str = "fs_delete_path";
+const FS_WRITE_FILE_ATOMIC_OPERATION: &str = "fs_write_file_atomic";
+const FS_SEARCH_OPERATION: &str = "fs_search";
+const FS_SEARCH_REPLACE_OPERATION: &str = "fs_search_replace";
+const FS_CANCEL_LIST_FILES_OPERATION: &str = "fs_cancel_list_files";
+const FS_CANCEL_SEARCH_REPLACE_OPERATION: &str = "fs_cancel_search_replace";
+const FS_WATCH_WORKTREE_OPERATION: &str = "fs_watch_worktree";
+const FS_UNWATCH_WORKTREE_OPERATION: &str = "fs_unwatch_worktree";
 
-#[derive(Clone, Debug)]
-pub(crate) struct NativeFilesystemState {
-    filesystem: ScopedFilesystem,
+/// Renderer-facing watcher event name (spec §4 `fs:changed`).
+pub(crate) const FS_CHANGED_EVENT: &str = "fs://changed";
+
+struct NativeFilesystemStateInner {
+    registry: FsScopeRegistry,
     settings: SettingsService,
-    cached_roots: Arc<Mutex<Option<Vec<PathBuf>>>>,
+    watchers: WatcherService,
+    cancellations: CancellationRegistry,
+    cached_roots: Mutex<Option<(Vec<PathBuf>, Vec<PathBuf>)>>,
+    window_subscriptions: Mutex<HashMap<u64, HashSet<PathBuf>>>,
 }
+
+impl std::fmt::Debug for NativeFilesystemStateInner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("NativeFilesystemStateInner")
+            .field("registry", &self.registry)
+            .field("watchers", &self.watchers)
+            .field("cancellations", &self.cancellations)
+            .field("cached_roots", &self.cached_roots)
+            .field("window_subscriptions", &self.window_subscriptions)
+            .finish()
+    }
+}
+
+/// Tauri-managed filesystem state shared by every `fs_*` command.
+#[derive(Clone, Debug)]
+pub(crate) struct NativeFilesystemState(Arc<NativeFilesystemStateInner>);
 
 impl NativeFilesystemState {
-    pub(crate) fn new(filesystem: ScopedFilesystem, settings: SettingsService) -> Self {
-        Self {
-            filesystem,
+    /// Creates the state; watcher batches flow on the returned receiver and
+    /// must be forwarded by [`spawn_watch_forwarder`].
+    pub(crate) fn new(settings: SettingsService) -> (Self, Receiver<WatchBatch>) {
+        let (watchers, receiver) = WatcherService::new();
+        let state = Self(Arc::new(NativeFilesystemStateInner {
+            registry: FsScopeRegistry::new(),
             settings,
-            cached_roots: Arc::new(Mutex::new(None)),
-        }
+            watchers,
+            cancellations: CancellationRegistry::default(),
+            cached_roots: Mutex::new(None),
+            window_subscriptions: Mutex::new(HashMap::new()),
+        }));
+        (state, receiver)
     }
 
-    fn refresh_roots_if_changed(
-        &self,
-        operation: &'static str,
-    ) -> Result<(), FilesystemCommandError> {
-        self.refresh_roots_with(operation, || {
-            self.settings
+    /// Re-reads the allow-list from settings and reconciles the live registry
+    /// when the snapshot changed (previous wiring semantics, ported to the
+    /// register/unregister registry API).
+    ///
+    /// The memoized snapshot is only updated when every configured root
+    /// resolved, so a root that appears after a transient failure is retried
+    /// on the next request instead of being silently skipped.
+    fn refresh_roots_if_changed(&self, operation: &'static str) -> Result<(), DesktopCommandError> {
+        let roots =
+            self.0
+                .settings
                 .local_filesystem_roots()
-                .map_err(|error| FilesystemCommandError::settings(error, operation))
-        })
-    }
-
-    fn refresh_roots_with(
-        &self,
-        operation: &'static str,
-        load_roots: impl FnOnce() -> Result<Vec<PathBuf>, FilesystemCommandError>,
-    ) -> Result<(), FilesystemCommandError> {
-        let mut cached_roots = self.cached_roots.lock().map_err(|_| {
-            FilesystemCommandError::new(
-                "fs_scope_refresh_unavailable",
-                operation,
-                "filesystem scope refresh state is unavailable",
-            )
-        })?;
-        // Reading settings, comparing the cached snapshot, and replacing live
-        // capabilities are one serialized transaction. Reading before this lock
-        // would let a delayed request reinstall roots that a newer request revoked.
-        let roots = load_roots()?;
-
-        if cached_roots.as_ref() == Some(&roots) {
-            return Ok(());
+                .map_err(|error: SettingsServiceError| {
+                    DesktopCommandError::new(
+                        error.code(),
+                        operation,
+                        error.to_string(),
+                        user_message_for(operation),
+                        None,
+                        None,
+                    )
+                })?;
+        let mut cached = self
+            .0
+            .cached_roots
+            .lock()
+            .expect("filesystem roots cache lock");
+        if let Some((cached_roots, cached_normalized)) = cached.as_ref() {
+            if cached_roots == &roots {
+                return Ok(());
+            }
+            for previous in cached_normalized {
+                let previous: &Path = previous.as_path();
+                if !roots.iter().any(|root| root == previous) {
+                    self.0.registry.unregister_root(previous);
+                }
+            }
         }
-        let registered_roots = self
-            .filesystem
-            .replace_roots(roots.iter())
-            .map_err(|error| FilesystemCommandError::filesystem(error, operation))?;
-        *cached_roots = (registered_roots.len() == roots.len()).then_some(roots);
+        let mut normalized = Vec::with_capacity(roots.len());
+        for root in &roots {
+            if let Ok(authorized) = self.0.registry.register_root(root) {
+                normalized.push(authorized.into_path_buf());
+            }
+        }
+        if normalized.len() == roots.len() {
+            *cached = Some((roots, normalized));
+        }
         Ok(())
     }
-}
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FsDirectoryEntry {
-    name: String,
-    is_directory: bool,
-    is_symlink: bool,
-}
-
-impl From<DirectoryEntry> for FsDirectoryEntry {
-    fn from(entry: DirectoryEntry) -> Self {
-        Self {
-            name: entry.name,
-            is_directory: entry.kind == PathKind::Directory,
-            is_symlink: entry.kind == PathKind::Symlink,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FsPathMetadata {
-    size: u64,
-    is_directory: bool,
-    mtime: f64,
-}
-
-impl From<PathMetadata> for FsPathMetadata {
-    fn from(metadata: PathMetadata) -> Self {
-        Self {
-            size: metadata.size,
-            is_directory: metadata.kind == PathKind::Directory,
-            mtime: metadata.modified_time_millis,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FsFileContent {
-    content: String,
-    is_binary: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    is_image: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    mime_type: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    file_identity: Option<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FilesystemCommandError {
-    code: &'static str,
-    context: FilesystemCommandErrorContext,
-    message: String,
-    user_message: &'static str,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FilesystemCommandErrorContext {
-    operation: &'static str,
-}
-
-impl FilesystemCommandError {
-    fn new(code: &'static str, operation: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            context: FilesystemCommandErrorContext { operation },
-            message: message.into(),
-            user_message: user_message_for(operation),
-        }
+    /// Registers `window_id`'s ownership of a worktree watcher.
+    ///
+    /// The native watcher is keyed by root inside the crate service; the
+    /// per-window map here provides the multi-window refcount so the watcher
+    /// is only torn down when the last owning window leaves (spec §5).
+    fn watch_root(&self, window_id: u64, root: &Path) -> Result<(), FsError> {
+        self.0.watchers.subscribe(root, window_id)?;
+        self.0
+            .window_subscriptions
+            .lock()
+            .expect("window subscriptions lock")
+            .entry(window_id)
+            .or_default()
+            .insert(normalize_drive_case(root));
+        Ok(())
     }
 
-    fn filesystem(error: FsError, operation: &'static str) -> Self {
-        let code = match &error {
-            FsError::PathOutsideScope { .. } | FsError::SymlinkTraversalDenied { .. } => {
-                "fs_path_denied"
+    /// Drops `window_id`'s ownership of a worktree watcher, tearing the
+    /// native watcher down only when no other window still holds it.
+    fn unwatch_root(&self, window_id: u64, root: &Path) {
+        let normalized = normalize_drive_case(root);
+        let still_wanted = {
+            let mut subscriptions = self
+                .0
+                .window_subscriptions
+                .lock()
+                .expect("window subscriptions lock");
+            if let Some(owned) = subscriptions.get_mut(&window_id) {
+                owned.remove(&normalized);
             }
-            FsError::InvalidTargetPath { .. } | FsError::InvalidTrustedRoot { .. } => {
-                "fs_invalid_argument"
-            }
-            FsError::Io { source, .. } if source.kind() == std::io::ErrorKind::NotFound => {
-                "fs_not_found"
-            }
-            FsError::Io { source, .. } if source.kind() == std::io::ErrorKind::PermissionDenied => {
-                "fs_permission_denied"
-            }
-            FsError::Io { .. } => "fs_io",
-            _ => error.code(),
+            subscriptions
+                .values()
+                .any(|owned| owned.contains(&normalized))
         };
-        Self::new(code, operation, error.to_string())
+        if !still_wanted {
+            self.0.watchers.unsubscribe(&normalized, window_id);
+        }
     }
 
-    fn settings(error: SettingsServiceError, operation: &'static str) -> Self {
-        Self::new(error.code(), operation, error.to_string())
+    /// Releases every watcher subscription owned by a destroyed window.
+    fn release_window(&self, window_id: u64) {
+        let roots: HashSet<PathBuf> = self
+            .0
+            .window_subscriptions
+            .lock()
+            .expect("window subscriptions lock")
+            .get(&window_id)
+            .cloned()
+            .unwrap_or_default();
+        for root in roots {
+            self.unwatch_root(window_id, &root);
+        }
     }
 
-    fn blocking_task(error: impl std::fmt::Display, operation: &'static str) -> Self {
-        Self::new(
-            "fs_blocking_task_failed",
-            operation,
-            format!("filesystem task failed: {error}"),
-        )
+    /// Smoke-test probe: refresh the allow-list, authorize the fixture path,
+    /// and report whether it exists.
+    pub(crate) fn probe_path_exists(&self, path: &Path) -> Result<bool, DesktopCommandError> {
+        self.refresh_roots_if_changed(FS_PATH_EXISTS_OPERATION)?;
+        let authorized = self
+            .0
+            .registry
+            .authorize(path, LeafPolicy::Canonicalize)
+            .map_err(|error| filesystem_error(error, FS_PATH_EXISTS_OPERATION))?;
+        ops::path_exists(&authorized)
+            .map_err(|error| filesystem_error(error, FS_PATH_EXISTS_OPERATION))
     }
+}
+
+/// Forwards mcode-fs watcher batches to the renderer as `fs://changed`.
+///
+/// One thread for the whole app: the crate service debounces and coalesces
+/// per root, so the renderer-facing stream stays bounded by subscription
+/// teardown, not by this loop.
+pub(crate) fn spawn_watch_forwarder(app: tauri::AppHandle, receiver: Receiver<WatchBatch>) {
+    std::thread::Builder::new()
+        .name("mcode-fs-watch-forwarder".to_owned())
+        .spawn(move || {
+            while let Ok(batch) = receiver.recv() {
+                if let Err(error) = app.emit(FS_CHANGED_EVENT, &batch) {
+                    eprintln!("[fs] failed to emit watcher batch: {error}");
+                }
+            }
+        })
+        .expect("failed to spawn filesystem watch forwarder");
+}
+
+/// Unsubscribes the window's watcher subscriptions once it is destroyed so
+/// watcher capacity frees deterministically (spec §5, no leak).
+pub(crate) fn attach_watch_teardown(window: &tauri::WebviewWindow, state: NativeFilesystemState) {
+    let window_id = window_scope_id_for_label(window.label());
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            state.release_window(window_id);
+        }
+    });
+}
+
+/// Sender-scoped cancellation key (spec §6 keys by `(windowId, token)`).
+///
+/// Tauri exposes the window label as the stable public identity, so the
+/// scope id is a process-lifetime hash of the label: two windows can never
+/// cancel each other's requests.
+fn window_scope_id_for_label(label: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    label.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn window_scope_id(window: &WebviewWindow) -> u64 {
+    window_scope_id_for_label(window.label())
+}
+
+fn filesystem_error(error: FsError, operation: &'static str) -> DesktopCommandError {
+    DesktopCommandError::new(
+        error.code(),
+        operation,
+        error.to_string(),
+        user_message_for(operation),
+        None,
+        None,
+    )
+}
+
+fn command_error(
+    code: &'static str,
+    operation: &'static str,
+    message: impl Into<String>,
+) -> DesktopCommandError {
+    DesktopCommandError::new(
+        code,
+        operation,
+        message.into(),
+        user_message_for(operation),
+        None,
+        None,
+    )
 }
 
 fn user_message_for(operation: &'static str) -> &'static str {
     match operation {
         FS_READ_DIR_OPERATION => "MCode could not list this folder. Try again.",
         FS_READ_FILE_OPERATION => "MCode could not read this file. Try again.",
-        FS_WRITE_FILE_ATOMIC_OPERATION => "MCode could not save this file. Try again.",
+        FS_WRITE_FILE_OPERATION | FS_WRITE_FILE_ATOMIC_OPERATION => {
+            "MCode could not save this file. Try again."
+        }
         FS_STAT_OPERATION | FS_PATH_EXISTS_OPERATION => {
             "MCode could not inspect this path. Try again."
         }
+        FS_CREATE_DIR_OPERATION | FS_CREATE_FILE_OPERATION => {
+            "MCode could not create this path. Try again."
+        }
+        FS_COPY_PATH_OPERATION | FS_RENAME_PATH_OPERATION | FS_DELETE_PATH_OPERATION => {
+            "MCode could not complete the file operation. Try again."
+        }
+        FS_SEARCH_OPERATION => "MCode could not search this workspace. Try again.",
+        FS_SEARCH_REPLACE_OPERATION => "MCode could not replace in this workspace. Try again.",
+        FS_CANCEL_LIST_FILES_OPERATION | FS_CANCEL_SEARCH_REPLACE_OPERATION => {
+            "MCode could not cancel the request. Try again."
+        }
+        FS_WATCH_WORKTREE_OPERATION | FS_UNWATCH_WORKTREE_OPERATION => {
+            "MCode could not update file watching. Try again."
+        }
         _ => "MCode could not complete the filesystem request. Try again.",
-    }
-}
-
-fn previewable_mime_type(path: &Path) -> Option<&'static str> {
-    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
-    match extension.as_str() {
-        "png" => Some("image/png"),
-        "jpg" | "jpeg" | "jfif" | "jpe" => Some("image/jpeg"),
-        "avif" => Some("image/avif"),
-        "gif" => Some("image/gif"),
-        "svg" => Some("image/svg+xml"),
-        "webp" => Some("image/webp"),
-        "bmp" => Some("image/bmp"),
-        "ico" => Some("image/x-icon"),
-        "pdf" => Some("application/pdf"),
-        _ => None,
-    }
-}
-
-fn read_file_content(
-    filesystem: &ScopedFilesystem,
-    file_path: &Path,
-    include_file_identity: bool,
-) -> Result<FsFileContent, FsError> {
-    let mime_type = previewable_mime_type(file_path);
-    let probe_bytes = mime_type.is_none().then_some(BINARY_PROBE_BYTES);
-    let snapshot =
-        filesystem.read_file_snapshot_bounded(file_path, MAX_FILE_CONTENT_BYTES, probe_bytes)?;
-    let file_identity = include_file_identity.then_some(snapshot.file_identity);
-    match snapshot.read {
-        BoundedFileRead::BinaryPrefix => Ok(FsFileContent {
-            content: String::new(),
-            is_binary: true,
-            is_image: None,
-            mime_type: None,
-            file_identity,
-        }),
-        BoundedFileRead::Bytes(bytes) if mime_type.is_some() => Ok(FsFileContent {
-            content: BASE64_STANDARD.encode(bytes),
-            is_binary: true,
-            is_image: Some(true),
-            mime_type,
-            file_identity,
-        }),
-        BoundedFileRead::Bytes(bytes) => Ok(FsFileContent {
-            content: String::from_utf8_lossy(&bytes).into_owned(),
-            is_binary: false,
-            is_image: None,
-            mime_type: None,
-            file_identity,
-        }),
     }
 }
 
@@ -248,16 +304,16 @@ fn local_path(
     value: String,
     connection_id: Option<String>,
     operation: &'static str,
-) -> Result<PathBuf, FilesystemCommandError> {
+) -> Result<PathBuf, DesktopCommandError> {
     if connection_id.is_some() {
-        return Err(FilesystemCommandError::new(
+        return Err(command_error(
             "fs_remote_unsupported",
             operation,
             "remote filesystem requests must use the owning runtime transport",
         ));
     }
     if value.is_empty() || value.contains('\0') {
-        return Err(FilesystemCommandError::new(
+        return Err(command_error(
             "fs_invalid_argument",
             operation,
             "filesystem path must be a non-empty absolute path",
@@ -265,7 +321,7 @@ fn local_path(
     }
     let path = PathBuf::from(value);
     if !path.is_absolute() {
-        return Err(FilesystemCommandError::new(
+        return Err(command_error(
             "fs_invalid_argument",
             operation,
             "filesystem path must be absolute",
@@ -274,24 +330,27 @@ fn local_path(
     Ok(path)
 }
 
-async fn run_filesystem_task<T: Send + 'static>(
+async fn run_filesystem_task<T, F>(
     state: NativeFilesystemState,
     operation: &'static str,
-    task: impl FnOnce(&ScopedFilesystem) -> Result<T, FsError> + Send + 'static,
-) -> Result<T, FilesystemCommandError> {
+    task: F,
+) -> Result<T, DesktopCommandError>
+where
+    T: Send + 'static,
+    F: FnOnce(&NativeFilesystemStateInner) -> Result<T, FsError> + Send + 'static,
+{
     tauri::async_runtime::spawn_blocking(move || {
-        let result = state.refresh_roots_if_changed(operation).and_then(|()| {
-            task(&state.filesystem)
-                .map_err(|error| FilesystemCommandError::filesystem(error, operation))
-        });
-        #[cfg(debug_assertions)]
-        if let Err(error) = &result {
-            eprintln!("[filesystem] {operation} failed: {}", error.message);
-        }
-        result
+        state.refresh_roots_if_changed(operation)?;
+        task(&state.0).map_err(|error| filesystem_error(error, operation))
     })
     .await
-    .map_err(|error| FilesystemCommandError::blocking_task(error, operation))?
+    .map_err(|error| {
+        command_error(
+            "fs_blocking_task_failed",
+            operation,
+            format!("filesystem task failed: {error}"),
+        )
+    })?
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -299,17 +358,14 @@ pub(crate) async fn fs_read_dir(
     state: tauri::State<'_, NativeFilesystemState>,
     dir_path: String,
     connection_id: Option<String>,
-) -> Result<Vec<FsDirectoryEntry>, FilesystemCommandError> {
+) -> Result<Vec<ops::DirEntry>, DesktopCommandError> {
     let dir_path = local_path(dir_path, connection_id, FS_READ_DIR_OPERATION)?;
-    run_filesystem_task(
-        state.inner().clone(),
-        FS_READ_DIR_OPERATION,
-        move |filesystem| {
-            filesystem
-                .read_dir(Path::new(&dir_path))
-                .map(|entries| entries.into_iter().map(FsDirectoryEntry::from).collect())
-        },
-    )
+    run_filesystem_task(state.inner().clone(), FS_READ_DIR_OPERATION, move |inner| {
+        let authorized = inner
+            .registry
+            .authorize(Path::new(&dir_path), LeafPolicy::Canonicalize)?;
+        ops::read_dir(&authorized)
+    })
     .await
 }
 
@@ -318,14 +374,38 @@ pub(crate) async fn fs_read_file(
     state: tauri::State<'_, NativeFilesystemState>,
     file_path: String,
     connection_id: Option<String>,
-    include_local_log_metadata: Option<bool>,
-) -> Result<FsFileContent, FilesystemCommandError> {
+) -> Result<ops::ReadFileResult, DesktopCommandError> {
     let file_path = local_path(file_path, connection_id, FS_READ_FILE_OPERATION)?;
-    let include_file_identity = include_local_log_metadata == Some(true);
     run_filesystem_task(
         state.inner().clone(),
         FS_READ_FILE_OPERATION,
-        move |filesystem| read_file_content(filesystem, &file_path, include_file_identity),
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&file_path), LeafPolicy::Canonicalize)?;
+            ops::read_file(&authorized)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_write_file(
+    state: tauri::State<'_, NativeFilesystemState>,
+    file_path: String,
+    content: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let file_path = local_path(file_path, connection_id, FS_WRITE_FILE_OPERATION)?;
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_WRITE_FILE_OPERATION,
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&file_path), LeafPolicy::Canonicalize)?;
+            ops::write_file(&authorized, &content)
+        },
     )
     .await
 }
@@ -336,32 +416,16 @@ pub(crate) async fn fs_write_file_atomic(
     file_path: String,
     content: String,
     connection_id: Option<String>,
-) -> Result<(), FilesystemCommandError> {
+) -> Result<(), DesktopCommandError> {
     let file_path = local_path(file_path, connection_id, FS_WRITE_FILE_ATOMIC_OPERATION)?;
     run_filesystem_task(
         state.inner().clone(),
         FS_WRITE_FILE_ATOMIC_OPERATION,
-        move |filesystem| {
-            filesystem.write_file_atomic(&file_path, content.as_bytes(), MAX_FILE_CONTENT_BYTES)
-        },
-    )
-    .await
-}
-
-#[tauri::command(rename_all = "camelCase")]
-pub(crate) async fn fs_stat(
-    state: tauri::State<'_, NativeFilesystemState>,
-    file_path: String,
-    connection_id: Option<String>,
-) -> Result<FsPathMetadata, FilesystemCommandError> {
-    let file_path = local_path(file_path, connection_id, FS_STAT_OPERATION)?;
-    run_filesystem_task(
-        state.inner().clone(),
-        FS_STAT_OPERATION,
-        move |filesystem| {
-            filesystem
-                .stat(Path::new(&file_path))
-                .map(FsPathMetadata::from)
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&file_path), LeafPolicy::Canonicalize)?;
+            ops::write_file_atomic(&authorized, &content)
         },
     )
     .await
@@ -372,35 +436,319 @@ pub(crate) async fn fs_path_exists(
     state: tauri::State<'_, NativeFilesystemState>,
     file_path: String,
     connection_id: Option<String>,
-) -> Result<bool, FilesystemCommandError> {
+) -> Result<bool, DesktopCommandError> {
     let file_path = local_path(file_path, connection_id, FS_PATH_EXISTS_OPERATION)?;
     run_filesystem_task(
         state.inner().clone(),
         FS_PATH_EXISTS_OPERATION,
-        move |filesystem| filesystem.path_exists(Path::new(&file_path)),
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&file_path), LeafPolicy::Canonicalize)?;
+            ops::path_exists(&authorized)
+        },
     )
     .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_stat(
+    state: tauri::State<'_, NativeFilesystemState>,
+    file_path: String,
+    connection_id: Option<String>,
+) -> Result<ops::StatResult, DesktopCommandError> {
+    let file_path = local_path(file_path, connection_id, FS_STAT_OPERATION)?;
+    run_filesystem_task(state.inner().clone(), FS_STAT_OPERATION, move |inner| {
+        let authorized = inner
+            .registry
+            .authorize(Path::new(&file_path), LeafPolicy::Canonicalize)?;
+        ops::stat(&authorized)
+    })
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_create_dir(
+    state: tauri::State<'_, NativeFilesystemState>,
+    dir_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let dir_path = local_path(dir_path, connection_id, FS_CREATE_DIR_OPERATION)?;
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_CREATE_DIR_OPERATION,
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&dir_path), LeafPolicy::Canonicalize)?;
+            ops::create_dir(&authorized)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_create_file(
+    state: tauri::State<'_, NativeFilesystemState>,
+    file_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let file_path = local_path(file_path, connection_id, FS_CREATE_FILE_OPERATION)?;
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_CREATE_FILE_OPERATION,
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&file_path), LeafPolicy::Canonicalize)?;
+            ops::create_file(&authorized)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_copy_path(
+    state: tauri::State<'_, NativeFilesystemState>,
+    source_path: String,
+    destination_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let source_path = local_path(source_path, connection_id.clone(), FS_COPY_PATH_OPERATION)?;
+    let destination_path = local_path(destination_path, connection_id, FS_COPY_PATH_OPERATION)?;
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_COPY_PATH_OPERATION,
+        move |inner| {
+            let source = inner
+                .registry
+                .authorize(Path::new(&source_path), LeafPolicy::Preserve)?;
+            let destination = inner
+                .registry
+                .authorize(Path::new(&destination_path), LeafPolicy::Preserve)?;
+            ops::copy_path(&source, &destination)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_rename_path(
+    state: tauri::State<'_, NativeFilesystemState>,
+    old_path: String,
+    new_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let old_path = local_path(old_path, connection_id.clone(), FS_RENAME_PATH_OPERATION)?;
+    let new_path = local_path(new_path, connection_id, FS_RENAME_PATH_OPERATION)?;
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_RENAME_PATH_OPERATION,
+        move |inner| {
+            let source = inner
+                .registry
+                .authorize(Path::new(&old_path), LeafPolicy::Preserve)?;
+            let destination = inner
+                .registry
+                .authorize(Path::new(&new_path), LeafPolicy::Preserve)?;
+            ops::rename_path(&source, &destination)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_delete_path(
+    state: tauri::State<'_, NativeFilesystemState>,
+    target_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let target_path = local_path(target_path, connection_id, FS_DELETE_PATH_OPERATION)?;
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_DELETE_PATH_OPERATION,
+        move |inner| {
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&target_path), LeafPolicy::Preserve)?;
+            ops::delete_path(&authorized)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_search(
+    state: tauri::State<'_, NativeFilesystemState>,
+    window: WebviewWindow,
+    root_path: String,
+    query: String,
+    max_results: Option<usize>,
+    request_token: Option<String>,
+    connection_id: Option<String>,
+) -> Result<search::SearchResult, DesktopCommandError> {
+    let root_path = local_path(root_path, connection_id, FS_SEARCH_OPERATION)?;
+    let max_results = max_results
+        .unwrap_or(search::DEFAULT_SEARCH_MAX_RESULTS)
+        .min(search::DEFAULT_SEARCH_MAX_RESULTS);
+    // Token reuse supersedes; without an explicit token the previous search
+    // for the same (window, root) is still killed (spec §7 implicit supersede).
+    let token = request_token.unwrap_or_else(|| format!("fs_search:{}", window_scope_id(&window)));
+    let window_id = window_scope_id(&window);
+    run_filesystem_task(state.inner().clone(), FS_SEARCH_OPERATION, move |inner| {
+        let cancel = inner.cancellations.register(window_id, &token);
+        let authorized = inner
+            .registry
+            .authorize(Path::new(&root_path), LeafPolicy::Canonicalize)?;
+        Ok(search::search(&authorized, &query, max_results, &cancel))
+    })
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_search_replace(
+    state: tauri::State<'_, NativeFilesystemState>,
+    window: WebviewWindow,
+    root_path: String,
+    query: String,
+    replacement: String,
+    skip_paths: Option<Vec<String>>,
+    request_id: Option<String>,
+    connection_id: Option<String>,
+) -> Result<search::ReplaceSummary, DesktopCommandError> {
+    let root_path = local_path(root_path, connection_id, FS_SEARCH_REPLACE_OPERATION)?;
+    let window_id = window_scope_id(&window);
+    let token = request_id.unwrap_or_else(|| format!("fs_search_replace:{window_id}"));
+    let skip_paths: Vec<PathBuf> = skip_paths
+        .unwrap_or_default()
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+    run_filesystem_task(
+        state.inner().clone(),
+        FS_SEARCH_REPLACE_OPERATION,
+        move |inner| {
+            let cancel = inner.cancellations.register(window_id, &token);
+            let authorized = inner
+                .registry
+                .authorize(Path::new(&root_path), LeafPolicy::Canonicalize)?;
+            search::search_replace(&authorized, &query, &replacement, &skip_paths, &cancel)
+        },
+    )
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) fn fs_cancel_list_files(
+    state: tauri::State<'_, NativeFilesystemState>,
+    window: WebviewWindow,
+    request_token: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    if connection_id.is_some() {
+        return Err(command_error(
+            "fs_remote_unsupported",
+            FS_CANCEL_LIST_FILES_OPERATION,
+            "remote filesystem requests must use the owning runtime transport",
+        ));
+    }
+    state
+        .inner()
+        .0
+        .cancellations
+        .cancel(window_scope_id(&window), &request_token);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) fn fs_cancel_search_replace(
+    state: tauri::State<'_, NativeFilesystemState>,
+    window: WebviewWindow,
+    request_id: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    if connection_id.is_some() {
+        return Err(command_error(
+            "fs_remote_unsupported",
+            FS_CANCEL_SEARCH_REPLACE_OPERATION,
+            "remote filesystem requests must use the owning runtime transport",
+        ));
+    }
+    state
+        .inner()
+        .0
+        .cancellations
+        .cancel(window_scope_id(&window), &request_id);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn fs_watch_worktree(
+    state: tauri::State<'_, NativeFilesystemState>,
+    window: WebviewWindow,
+    worktree_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let worktree_path = local_path(worktree_path, connection_id, FS_WATCH_WORKTREE_OPERATION)?;
+    let window_id = window_scope_id(&window);
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state.refresh_roots_if_changed(FS_WATCH_WORKTREE_OPERATION)?;
+        // Authorize the canonical path first; the watched root keeps the
+        // renderer's drive-cased spelling so `fs://changed` payloads match
+        // the paths the renderer sent (spec §5 normalization contract).
+        state
+            .0
+            .registry
+            .authorize(Path::new(&worktree_path), LeafPolicy::Canonicalize)
+            .map_err(|error| filesystem_error(error, FS_WATCH_WORKTREE_OPERATION))?;
+        let watch_root = normalize_drive_case(Path::new(&worktree_path));
+        state
+            .watch_root(window_id, &watch_root)
+            .map_err(|error| filesystem_error(error, FS_WATCH_WORKTREE_OPERATION))
+    })
+    .await
+    .map_err(|error| {
+        command_error(
+            "fs_blocking_task_failed",
+            FS_WATCH_WORKTREE_OPERATION,
+            format!("filesystem task failed: {error}"),
+        )
+    })?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) fn fs_unwatch_worktree(
+    state: tauri::State<'_, NativeFilesystemState>,
+    window: WebviewWindow,
+    worktree_path: String,
+    connection_id: Option<String>,
+) -> Result<(), DesktopCommandError> {
+    let worktree_path = local_path(worktree_path, connection_id, FS_UNWATCH_WORKTREE_OPERATION)?;
+    state
+        .inner()
+        .unwatch_root(window_scope_id(&window), Path::new(&worktree_path));
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn fixture_path() -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
+    fn fixture_path(label: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
             .expect("system clock must follow the Unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "mcode-tauri-fs-state-{}-{nonce}",
+            "mcode-tauri-fs-commands-{label}-{}-{nonce}",
             std::process::id()
         ))
     }
 
     fn write_repo_root(settings_path: &Path, id: &str, root: &Path) {
-        fs::write(
+        std::fs::write(
             settings_path,
             serde_json::to_vec(&json!({
                 "repos": [{ "id": id, "path": root.to_string_lossy() }]
@@ -411,158 +759,37 @@ mod tests {
     }
 
     #[test]
-    fn directory_entries_serialize_the_electron_compatible_shape() {
-        let entry = FsDirectoryEntry::from(DirectoryEntry {
-            name: "docs".to_owned(),
-            kind: PathKind::Directory,
-        });
-
-        assert_eq!(
-            serde_json::to_value(entry).unwrap(),
-            json!({ "name": "docs", "isDirectory": true, "isSymlink": false })
-        );
-    }
-
-    #[test]
-    fn metadata_serializes_the_electron_compatible_shape() {
-        let metadata = FsPathMetadata::from(PathMetadata {
-            kind: PathKind::File,
-            size: 42,
-            modified_time_millis: 1_725_000_000_123.0,
-        });
-
-        assert_eq!(
-            serde_json::to_value(metadata).unwrap(),
-            json!({ "size": 42, "isDirectory": false, "mtime": 1_725_000_000_123.0 })
-        );
-    }
-
-    #[test]
-    fn file_content_preserves_electron_text_binary_and_preview_shapes() {
-        let fixture = fixture_path();
-        fs::create_dir_all(&fixture).unwrap();
-        let text = fixture.join("notes.txt");
-        let binary = fixture.join("archive.bin");
-        let image = fixture.join("pixel.png");
-        fs::write(&text, "hello 🌍").unwrap();
-        fs::write(&binary, [b'a', 0, b'b']).unwrap();
-        fs::write(&image, [0, 1, 2]).unwrap();
-        let filesystem = ScopedFilesystem::new();
-        filesystem.register_root(&fixture).unwrap();
-
-        assert_eq!(
-            serde_json::to_value(read_file_content(&filesystem, &text, false).unwrap()).unwrap(),
-            json!({ "content": "hello 🌍", "isBinary": false })
-        );
-        assert_eq!(
-            serde_json::to_value(read_file_content(&filesystem, &binary, false).unwrap()).unwrap(),
-            json!({ "content": "", "isBinary": true })
-        );
-        assert_eq!(
-            serde_json::to_value(read_file_content(&filesystem, &image, false).unwrap()).unwrap(),
-            json!({
-                "content": "AAEC",
-                "isBinary": true,
-                "isImage": true,
-                "mimeType": "image/png"
-            })
-        );
-
-        drop(filesystem);
-        fs::remove_dir_all(fixture).unwrap();
-    }
-
-    #[test]
-    fn filesystem_limits_and_target_errors_keep_stable_adapter_codes() {
-        let too_large = FsError::FileTooLarge {
-            path: PathBuf::from("large.log"),
-            size: 11,
-            limit: 10,
-        };
-        let directory = FsError::TargetIsDirectory {
-            path: PathBuf::from("folder"),
-        };
-
-        assert_eq!(
-            FilesystemCommandError::filesystem(too_large, FS_READ_FILE_OPERATION).code,
-            "fs_file_too_large"
-        );
-        assert_eq!(
-            FilesystemCommandError::filesystem(directory, FS_WRITE_FILE_ATOMIC_OPERATION).code,
-            "fs_target_is_directory"
-        );
-    }
-
-    #[test]
-    fn local_log_metadata_requests_include_a_stable_non_empty_file_identity() {
-        let fixture = fixture_path();
-        fs::create_dir_all(&fixture).unwrap();
-        let log = fixture.join("live.log");
-        fs::write(&log, "first").unwrap();
-        let filesystem = ScopedFilesystem::new();
-        filesystem.register_root(&fixture).unwrap();
-
-        let first = read_file_content(&filesystem, &log, true).unwrap();
-        fs::write(&log, "first\nsecond").unwrap();
-        let appended = read_file_content(&filesystem, &log, true).unwrap();
-
-        assert!(
-            first
-                .file_identity
-                .as_ref()
-                .is_some_and(|value| !value.is_empty())
-        );
-        assert_eq!(first.file_identity, appended.file_identity);
-
-        drop(filesystem);
-        fs::remove_dir_all(fixture).unwrap();
-    }
-
-    #[test]
-    fn errors_include_a_stable_code_operation_and_safe_message() {
-        let error = FilesystemCommandError::new(
-            "fs_path_denied",
-            FS_READ_DIR_OPERATION,
-            "path is outside every trusted root",
-        );
+    fn filesystem_errors_keep_the_crate_stable_code_and_camel_case_shape() {
+        let error = filesystem_error(FsError::PathDenied, FS_READ_DIR_OPERATION);
 
         assert_eq!(
             serde_json::to_value(error).unwrap(),
             json!({
                 "code": "fs_path_denied",
-                "context": { "operation": "fs_read_dir" },
-                "message": "path is outside every trusted root",
+                "context": { "operation": "fs_read_dir", "requestId": null, "intent": null },
+                "message": "Access denied: path resolves outside allowed directories",
                 "userMessage": "MCode could not list this folder. Try again."
             })
         );
     }
 
     #[test]
-    fn capability_boundary_errors_share_the_public_denial_code() {
-        let outside = FilesystemCommandError::filesystem(
-            FsError::PathOutsideScope {
-                path: PathBuf::from("outside"),
-            },
-            FS_STAT_OPERATION,
-        );
-        let symlink = FilesystemCommandError::filesystem(
-            FsError::SymlinkTraversalDenied {
-                path: PathBuf::from("link"),
-            },
-            FS_STAT_OPERATION,
-        );
-
-        assert_eq!(outside.code, "fs_path_denied");
-        assert_eq!(symlink.code, "fs_path_denied");
+    fn every_fs_error_maps_onto_its_stable_code() {
+        let cases = [
+            (FsError::NotFound, "fs_not_found"),
+            (FsError::AlreadyExists, "fs_already_exists"),
+            (FsError::PermissionDenied, "fs_permission_denied"),
+            (FsError::DestinationRace, "fs_destination_race"),
+            (FsError::Cancelled, "fs_cancelled"),
+            (FsError::IsDirectory, "fs_is_directory"),
+        ];
+        for (error, code) in cases {
+            assert_eq!(filesystem_error(error, FS_STAT_OPERATION).code, code);
+        }
     }
 
     #[test]
     fn request_paths_must_be_absolute_local_paths() {
-        let absolute_path = std::env::current_dir()
-            .unwrap()
-            .join("file.ts")
-            .to_string_lossy()
-            .into_owned();
         assert_eq!(
             local_path("relative/file.ts".to_owned(), None, FS_STAT_OPERATION)
                 .unwrap_err()
@@ -570,8 +797,14 @@ mod tests {
             "fs_invalid_argument"
         );
         assert_eq!(
+            local_path(String::new(), None, FS_STAT_OPERATION)
+                .unwrap_err()
+                .code,
+            "fs_invalid_argument"
+        );
+        assert_eq!(
             local_path(
-                absolute_path.clone(),
+                "D:/repo/file.ts".to_owned(),
                 Some("ssh-1".to_owned()),
                 FS_STAT_OPERATION
             )
@@ -580,239 +813,125 @@ mod tests {
             "fs_remote_unsupported"
         );
         assert_eq!(
-            local_path(absolute_path, Some(String::new()), FS_STAT_OPERATION)
-                .unwrap_err()
-                .code,
-            "fs_remote_unsupported"
+            local_path("D:/repo/file.ts".to_owned(), None, FS_STAT_OPERATION).unwrap(),
+            PathBuf::from("D:/repo/file.ts")
         );
     }
 
     #[test]
-    fn concurrent_refresh_loads_snapshots_inside_the_serialized_transaction() {
-        use std::sync::mpsc;
-        use std::thread;
-        use std::time::Duration;
-
-        let fixture = fixture_path();
-        let old_root = fixture.join("old");
-        let new_root = fixture.join("new");
-        fs::create_dir_all(&old_root).unwrap();
-        fs::create_dir_all(&new_root).unwrap();
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(fixture.join("unused-settings.json")),
-        );
-        let (old_loaded_tx, old_loaded_rx) = mpsc::channel();
-        let (release_old_tx, release_old_rx) = mpsc::channel();
-        let (new_loaded_tx, new_loaded_rx) = mpsc::channel();
-
-        let old_state = state.clone();
-        let old_root_for_thread = old_root.clone();
-        let old_refresh = thread::spawn(move || {
-            old_state.refresh_roots_with(FS_STAT_OPERATION, || {
-                old_loaded_tx.send(()).unwrap();
-                release_old_rx.recv().unwrap();
-                Ok(vec![old_root_for_thread])
-            })
-        });
-        old_loaded_rx.recv().unwrap();
-
-        let new_state = state.clone();
-        let new_root_for_thread = new_root.clone();
-        let new_refresh = thread::spawn(move || {
-            new_state.refresh_roots_with(FS_STAT_OPERATION, || {
-                new_loaded_tx.send(()).unwrap();
-                Ok(vec![new_root_for_thread])
-            })
-        });
-        assert!(
-            new_loaded_rx
-                .recv_timeout(Duration::from_millis(100))
-                .is_err()
-        );
-        release_old_tx.send(()).unwrap();
-        old_refresh.join().unwrap().unwrap();
-        new_refresh.join().unwrap().unwrap();
-        new_loaded_rx.recv().unwrap();
-
-        assert!(matches!(
-            state.filesystem.stat(&old_root),
-            Err(FsError::PathOutsideScope { .. })
-        ));
-        assert!(state.filesystem.stat(&new_root).is_ok());
-        drop(state);
-        fs::remove_dir_all(fixture).unwrap();
-    }
-
-    #[test]
-    fn changed_root_set_revokes_removed_roots_atomically() {
-        let fixture = fixture_path();
+    fn refresh_registers_settings_roots_and_revokes_removed_ones() {
+        let fixture = fixture_path("refresh");
         let first_root = fixture.join("first");
         let replacement_root = fixture.join("replacement-with-a-different-length");
-        fs::create_dir_all(&first_root).unwrap();
-        fs::create_dir_all(&replacement_root).unwrap();
+        std::fs::create_dir_all(&first_root).unwrap();
+        std::fs::create_dir_all(&replacement_root).unwrap();
         let settings_path = fixture.join("mcode-data.json");
         write_repo_root(&settings_path, "first", &first_root);
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(settings_path.clone()),
-        );
+        let (state, _receiver) =
+            NativeFilesystemState::new(SettingsService::new(settings_path.clone()));
 
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-        assert!(state.filesystem.stat(&first_root).is_ok());
+        assert!(state.probe_path_exists(&first_root).unwrap());
 
         write_repo_root(&settings_path, "replacement", &replacement_root);
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-
-        assert!(matches!(
-            state.filesystem.stat(&first_root),
-            Err(FsError::PathOutsideScope { .. })
-        ));
-        assert!(state.filesystem.stat(&replacement_root).is_ok());
-        drop(state);
-        fs::remove_dir_all(fixture).unwrap();
-    }
-
-    #[test]
-    fn file_identity_detects_same_length_replacement_with_preserved_modified_time() {
-        let fixture = fixture_path();
-        let first_root = fixture.join("first");
-        let next_root = fixture.join("other");
-        fs::create_dir_all(&first_root).unwrap();
-        fs::create_dir_all(&next_root).unwrap();
-        let settings_path = fixture.join("mcode-data.json");
-        write_repo_root(&settings_path, "scope", &first_root);
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(settings_path.clone()),
-        );
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-        let original_metadata = fs::metadata(&settings_path).unwrap();
-
-        let replacement = fixture.join("replacement.json");
-        write_repo_root(&replacement, "scope", &next_root);
-        let replacement_file = fs::OpenOptions::new()
-            .write(true)
-            .open(&replacement)
-            .unwrap();
-        replacement_file
-            .set_times(fs::FileTimes::new().set_modified(original_metadata.modified().unwrap()))
-            .unwrap();
-        drop(replacement_file);
-        fs::remove_file(&settings_path).unwrap();
-        fs::rename(&replacement, &settings_path).unwrap();
-        let replacement_metadata = fs::metadata(&settings_path).unwrap();
-        assert_eq!(replacement_metadata.len(), original_metadata.len());
+        assert!(state.probe_path_exists(&replacement_root).unwrap());
         assert_eq!(
-            replacement_metadata.modified().unwrap(),
-            original_metadata.modified().unwrap()
+            state.probe_path_exists(&first_root).unwrap_err().code,
+            "fs_path_denied"
         );
 
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-
-        assert!(matches!(
-            state.filesystem.stat(&first_root),
-            Err(FsError::PathOutsideScope { .. })
-        ));
-        assert!(state.filesystem.stat(&next_root).is_ok());
         drop(state);
-        fs::remove_dir_all(fixture).unwrap();
+        std::fs::remove_dir_all(fixture).unwrap();
     }
 
     #[test]
-    fn unchanged_stamp_does_not_replace_the_live_registry() {
-        let fixture = fixture_path();
-        let persisted_root = fixture.join("persisted");
-        let transient_root = fixture.join("transient");
-        fs::create_dir_all(&persisted_root).unwrap();
-        fs::create_dir_all(&transient_root).unwrap();
-        let settings_path = fixture.join("mcode-data.json");
-        write_repo_root(&settings_path, "persisted", &persisted_root);
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(settings_path),
-        );
-
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-        state.filesystem.register_root(&transient_root).unwrap();
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-
-        assert!(state.filesystem.stat(&transient_root).is_ok());
-        drop(state);
-        fs::remove_dir_all(fixture).unwrap();
-    }
-
-    #[test]
-    fn unchanged_settings_retry_a_root_that_appears_after_a_transient_failure() {
-        let fixture = fixture_path();
-        fs::create_dir_all(&fixture).unwrap();
+    fn settings_roots_that_fail_to_resolve_are_retried_on_the_next_request() {
+        let fixture = fixture_path("retry");
         let delayed_root = fixture.join("delayed");
+        std::fs::create_dir_all(&fixture).unwrap();
         let settings_path = fixture.join("mcode-data.json");
         write_repo_root(&settings_path, "delayed", &delayed_root);
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(settings_path),
+        let (state, _receiver) =
+            NativeFilesystemState::new(SettingsService::new(settings_path.clone()));
+
+        assert_eq!(
+            state.probe_path_exists(&delayed_root).unwrap_err().code,
+            "fs_path_denied"
         );
 
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-        assert!(matches!(
-            state.filesystem.stat(&delayed_root),
-            Err(FsError::PathOutsideScope { .. })
-        ));
+        std::fs::create_dir(&delayed_root).unwrap();
+        assert!(state.probe_path_exists(&delayed_root).unwrap());
 
-        fs::create_dir(&delayed_root).unwrap();
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-
-        assert!(state.filesystem.stat(&delayed_root).is_ok());
         drop(state);
-        fs::remove_dir_all(fixture).unwrap();
+        std::fs::remove_dir_all(fixture).unwrap();
     }
 
     #[test]
-    fn malformed_changed_settings_fail_before_a_filesystem_operation() {
-        let fixture = fixture_path();
+    fn watcher_subscriptions_are_released_with_their_window() {
+        let fixture = fixture_path("watch");
         let root = fixture.join("root");
-        fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
         let settings_path = fixture.join("mcode-data.json");
-        write_repo_root(&settings_path, "root", &root);
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(settings_path.clone()),
+        write_repo_root(&settings_path, "scope", &root);
+        let (state, _receiver) = NativeFilesystemState::new(SettingsService::new(settings_path));
+
+        let window_id = window_scope_id_for_label("main");
+        state.watch_root(window_id, &root).unwrap();
+        assert!(
+            state
+                .0
+                .window_subscriptions
+                .lock()
+                .unwrap()
+                .get(&window_id)
+                .is_some_and(|owned| owned.contains(&normalize_drive_case(&root)))
         );
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-        fs::write(&settings_path, b"{malformed-settings-payload").unwrap();
 
-        let error = state
-            .refresh_roots_if_changed(FS_STAT_OPERATION)
-            .unwrap_err();
+        state.release_window(window_id);
+        assert!(
+            state
+                .0
+                .window_subscriptions
+                .lock()
+                .unwrap()
+                .get(&window_id)
+                .is_none_or(|owned| owned.is_empty())
+        );
 
-        assert_eq!(error.code, "settings_parse_failed");
-        assert_eq!(error.context.operation, FS_STAT_OPERATION);
         drop(state);
-        fs::remove_dir_all(fixture).unwrap();
+        std::fs::remove_dir_all(fixture).unwrap();
     }
 
     #[test]
-    fn deleting_settings_revokes_every_registered_root() {
-        let fixture = fixture_path();
-        let root = fixture.join("root");
-        fs::create_dir_all(&root).unwrap();
-        let settings_path = fixture.join("mcode-data.json");
-        write_repo_root(&settings_path, "root", &root);
-        let state = NativeFilesystemState::new(
-            ScopedFilesystem::new(),
-            SettingsService::new(settings_path.clone()),
+    fn different_window_labels_never_share_a_cancellation_scope() {
+        assert_ne!(
+            window_scope_id_for_label("main"),
+            window_scope_id_for_label("secondary")
         );
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
-        fs::remove_file(&settings_path).unwrap();
+    }
 
-        state.refresh_roots_if_changed(FS_STAT_OPERATION).unwrap();
+    #[test]
+    fn stat_result_serializes_the_renderer_wire_shape() {
+        let stat = ops::StatResult {
+            size: 42,
+            is_directory: false,
+            mtime: 1_725_000_000_123,
+        };
+        assert_eq!(
+            serde_json::to_value(stat).unwrap(),
+            serde_json::json!({ "size": 42, "isDirectory": false, "mtime": 1_725_000_000_123i64 })
+        );
+    }
 
-        assert!(matches!(
-            state.filesystem.stat(&root),
-            Err(FsError::PathOutsideScope { .. })
-        ));
-        drop(state);
-        fs::remove_dir_all(fixture).unwrap();
+    #[test]
+    fn read_file_result_serializes_the_renderer_wire_shape() {
+        let read = ops::ReadFileResult {
+            content: "hello".to_owned(),
+            is_binary: false,
+            mime_type: None,
+        };
+        assert_eq!(
+            serde_json::to_value(read).unwrap(),
+            json!({ "content": "hello", "isBinary": false })
+        );
     }
 }

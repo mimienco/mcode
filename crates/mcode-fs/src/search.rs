@@ -129,16 +129,17 @@ fn resolve_rg() -> Option<PathBuf> {
     // absent from PATH (matches the original's rg-availability probe
     // tolerance).
     if cfg!(windows)
-        && let Some(home) = std::env::var_os("LOCALAPPDATA") {
-            let shim = PathBuf::from(home)
-                .join("Microsoft")
-                .join("WinGet")
-                .join("Links")
-                .join("rg.exe");
-            if shim.is_file() {
-                return Some(shim);
-            }
+        && let Some(home) = std::env::var_os("LOCALAPPDATA")
+    {
+        let shim = PathBuf::from(home)
+            .join("Microsoft")
+            .join("WinGet")
+            .join("Links")
+            .join("rg.exe");
+        if shim.is_file() {
+            return Some(shim);
         }
+    }
     None
 }
 

@@ -1,0 +1,18 @@
+[package]
+name = "mcode-pty"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+mcode-process = { path = "../mcode-process" }
+portable-pty = { version = "0.9", features = ["serde_support"] }
+serde.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+[dev-dependencies]
+serde_json.workspace = true

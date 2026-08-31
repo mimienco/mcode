@@ -9,6 +9,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_shutdown_commands;
 mod desktop_window;
+mod filesystem_commands;
 mod updater_commands;
 mod windows_tray;
 
@@ -29,6 +30,12 @@ use desktop_window::{
     NativeWindowState, attach_placement_persistence, fit_inner_size_to_work_area,
     monitor_work_areas, primary_work_area, window_hide_to_tray_if_enabled,
     window_set_minimize_to_tray_on_close,
+};
+use filesystem_commands::{
+    NativeFilesystemState, attach_watch_teardown, fs_cancel_list_files, fs_cancel_search_replace,
+    fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path, fs_path_exists, fs_read_dir,
+    fs_read_file, fs_rename_path, fs_search, fs_search_replace, fs_stat, fs_unwatch_worktree,
+    fs_watch_worktree, fs_write_file, fs_write_file_atomic, spawn_watch_forwarder,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -147,6 +154,7 @@ enum SmokeTestMode {
     RestartChild,
     Updater,
     Windowing,
+    Filesystem,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -168,6 +176,11 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
             std::env::var_os("MCODE_TAURI_SMOKE_WINDOWING_MARKER")?;
             return Some(SmokeTestMode::Windowing);
         }
+        if intent.eq_ignore_ascii_case("filesystem") {
+            std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_MARKER")?;
+            std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")?;
+            return Some(SmokeTestMode::Filesystem);
+        }
         Some(SmokeTestMode::Quit)
     }
     #[cfg(not(debug_assertions))]
@@ -180,6 +193,18 @@ fn expected_windowing_inner_size() -> Option<(u32, u32)> {
     let value = std::env::var("MCODE_TAURI_SMOKE_EXPECTED_INNER_SIZE").ok()?;
     let (width, height) = value.split_once('x')?;
     Some((width.parse().ok()?, height.parse().ok()?))
+}
+fn encode_query_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            use std::fmt::Write as _;
+            write!(encoded, "%{byte:02X}").expect("writing to a string is infallible");
+        }
+    }
+    encoded
 }
 
 fn settings_path(app: &tauri::App) -> tauri::Result<std::path::PathBuf> {
@@ -206,13 +231,24 @@ fn build_main_window(
     preferences: DesktopWindowPreferences,
     native_window_state: NativeWindowState,
 ) -> tauri::Result<()> {
-    let entrypoint = match smoke_mode {
-        Some(SmokeTestMode::RestartParent) => "lifecycle-smoke.html?intent=restart",
-        Some(SmokeTestMode::Quit) => "lifecycle-smoke.html?intent=quit",
-        Some(SmokeTestMode::RestartChild) | None => "index.html",
-        Some(SmokeTestMode::Updater) => "lifecycle-smoke.html?intent=quit&updater=true",
-        Some(SmokeTestMode::Windowing) => "lifecycle-smoke.html?intent=quit&windowing=true",
-    };
+    let entrypoint = std::borrow::Cow::from(match smoke_mode {
+        Some(SmokeTestMode::RestartParent) => "lifecycle-smoke.html?intent=restart".to_owned(),
+        Some(SmokeTestMode::Quit) => "lifecycle-smoke.html?intent=quit".to_owned(),
+        Some(SmokeTestMode::RestartChild) | None => "index.html".to_owned(),
+        Some(SmokeTestMode::Updater) => "lifecycle-smoke.html?intent=quit&updater=true".to_owned(),
+        Some(SmokeTestMode::Windowing) => {
+            "lifecycle-smoke.html?intent=quit&windowing=true".to_owned()
+        }
+        Some(SmokeTestMode::Filesystem) => {
+            let root = std::env::var("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
+                .expect("filesystem smoke root must be configured");
+            format!(
+                "lifecycle-smoke.html?intent=quit&filesystem=true&root={}",
+                encode_query_component(&root)
+            )
+        }
+    });
+    let entrypoint = entrypoint.as_ref();
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(entrypoint.into()))
         .title("MCode")
         .min_inner_size(600.0, 400.0)
@@ -238,7 +274,11 @@ fn build_main_window(
             None
         });
         builder = match default_work_area {
-            Some(bounds) => builder.inner_size(f64::from(bounds.width), f64::from(bounds.height)),
+            // Why: the work-area origin must be set too — an unpositioned window gets
+            // cascaded by Windows default placement, hanging off the right/bottom edge.
+            Some(bounds) => builder
+                .position(f64::from(bounds.x), f64::from(bounds.y))
+                .inner_size(f64::from(bounds.width), f64::from(bounds.height)),
             None => builder.inner_size(1200.0, 800.0),
         };
     }
@@ -265,7 +305,6 @@ fn build_main_window(
     if let Some(work_area) = default_work_area {
         fit_inner_size_to_work_area(&window, work_area)?;
     }
-    attach_placement_persistence(&window, native_window_state);
     if install_tray {
         let fallback_app = window.app_handle().clone();
         let fallback_window_state = fallback_app.state::<NativeWindowState>().inner().clone();
@@ -274,6 +313,13 @@ fn build_main_window(
             install_windows_tray(&fallback_app, &fallback_window_state);
         });
     }
+    let filesystem_state = app
+        .try_state::<NativeFilesystemState>()
+        .map(|state| state.inner().clone());
+    if let Some(filesystem_state) = filesystem_state {
+        attach_watch_teardown(&window, filesystem_state);
+    }
+    attach_placement_persistence(&window, native_window_state);
     if preferences.maximized {
         window.maximize()?;
     }
@@ -294,6 +340,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let settings = SettingsService::new(settings_path(app)?);
+            let (filesystem_state, watch_batches) = NativeFilesystemState::new(settings.clone());
+            spawn_watch_forwarder(app.handle().clone(), watch_batches);
+            app.manage(filesystem_state);
             let preferences = settings
                 .desktop_window_preferences()
                 .unwrap_or_else(|error| {
@@ -394,6 +443,44 @@ pub fn run() {
                         app_handle.exit(0);
                     });
                 }
+                Some(SmokeTestMode::Filesystem) => {
+                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_FILESYSTEM_MARKER")
+                        .expect("filesystem smoke marker must be configured");
+                    let smoke_root = std::path::PathBuf::from(
+                        std::env::var("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
+                            .expect("filesystem smoke root must be configured"),
+                    );
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        // Renderer readiness first, then a scoped fs_path_exists
+                        // probe against the fixture root through the managed
+                        // state (exercises refresh-roots + authorize + stat).
+                        let renderer_passed = (0..100).any(|_| {
+                            let ready = app_handle
+                                .state::<NativeWindowState>()
+                                .close_to_tray_revision()
+                                > 0;
+                            if !ready {
+                                std::thread::sleep(Duration::from_millis(100));
+                            }
+                            ready
+                        });
+                        let probe_passed = renderer_passed
+                            && app_handle
+                                .try_state::<NativeFilesystemState>()
+                                .map(|state| state.probe_path_exists(&smoke_root).unwrap_or(false))
+                                .unwrap_or(false);
+                        let marker_value = if probe_passed {
+                            "passed".to_owned()
+                        } else {
+                            "renderer-failed".to_owned()
+                        };
+                        if let Err(error) = std::fs::write(&marker, marker_value.as_bytes()) {
+                            eprintln!("[smoke] failed to write filesystem marker: {error}");
+                        }
+                        app_handle.exit(i32::from(!probe_passed));
+                    });
+                }
                 Some(SmokeTestMode::RestartParent) | None => {}
             }
             Ok(())
@@ -410,7 +497,24 @@ pub fn run() {
             update_get_status,
             update_check,
             update_download,
-            update_install
+            update_install,
+            fs_read_dir,
+            fs_read_file,
+            fs_write_file,
+            fs_path_exists,
+            fs_stat,
+            fs_create_dir,
+            fs_create_file,
+            fs_copy_path,
+            fs_rename_path,
+            fs_delete_path,
+            fs_write_file_atomic,
+            fs_search,
+            fs_search_replace,
+            fs_cancel_list_files,
+            fs_cancel_search_replace,
+            fs_watch_worktree,
+            fs_unwatch_worktree
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

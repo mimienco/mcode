@@ -1,0 +1,117 @@
+//! The stop ladder rungs: graceful signal, bounded wait, forced kill — with
+//! a recycled-pid guard before any group-wide signal.
+
+use std::process::{ExitStatus, Stdio};
+
+use crate::handle::{ExitObservation, ProcessHandle};
+
+/// Normalizes an ExitStatus into the shared observation shape.
+pub fn observation_from_status(status: ExitStatus) -> ExitObservation {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        ExitObservation {
+            exit_code: status.code().unwrap_or(-1),
+            signal: status.signal(),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        ExitObservation {
+            exit_code: status.code().unwrap_or(-1),
+            signal: None,
+        }
+    }
+}
+
+/// Rung 1: ask politely. Windows `taskkill /pid <pid>` (window-close message,
+/// no /F); POSIX SIGTERM to the direct pid.
+#[allow(unused_variables)]
+pub fn graceful_kill(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("taskkill")
+            .arg("/pid")
+            .arg(pid.to_string())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    #[cfg(unix)]
+    {
+        // SAFETY: kill(2) with a signal constant; pid came from a live child.
+        unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+    }
+}
+
+/// Rung 2: forced kill. Windows: TerminateJobObject (whole tree) with
+/// `taskkill /F /T /pid` as fallback. POSIX: SIGKILL to the spawn-time
+/// process group after verifying pgid still matches (recycled-pid guard).
+#[allow(unused_variables)]
+pub fn force_kill(
+    pid: u32,
+    job: Option<&crate::job::JobObject>,
+    pgid: Option<crate::Pgid>,
+    handle: ProcessHandle,
+) {
+    let _ = handle;
+    #[cfg(windows)]
+    {
+        if let Some(job) = job {
+            let _ = job.terminate();
+        }
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/pid", &pid.to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(unix)]
+    {
+        let _ = job;
+        if let Some(pgid) = pgid {
+            // Recycled-pid guard: only group-kill when the recorded spawn-time
+            // group still matches what the OS reports now.
+            if group_matches(pid, pgid) {
+                // SAFETY: kill(2) to a negative pid targets the group.
+                unsafe {
+                    libc::kill(-pgid, libc::SIGKILL);
+                }
+            } else {
+                unsafe {
+                    libc::kill(pid as libc::pid_t, libc::SIGKILL);
+                }
+            }
+        } else {
+            unsafe {
+                libc::kill(pid as libc::pid_t, libc::SIGKILL);
+            }
+        }
+    }
+}
+
+/// POSIX recycled-pid guard: re-read /proc to confirm the pid still belongs
+/// to the spawn-time group before aiming a group SIGKILL at it.
+#[cfg(unix)]
+fn group_matches(pid: u32, expected_pgid: libc::pid_t) -> bool {
+    let stat_path = format!("/proc/{pid}/stat");
+    let Ok(stat) = std::fs::read_to_string(stat_path) else {
+        return false;
+    };
+    // Field 5 (1-based) is pgrp; field 2 (comm) may contain spaces, so parse
+    // after the closing parenthesis.
+    let Some(rest) = stat.rsplit_once(')').map(|(_, r)| r) else {
+        return false;
+    };
+    let fields: Vec<&str> = rest.split_whitespace().collect();
+    // After ')': state(0), ppid(1), pgrp(2).
+    fields
+        .get(2)
+        .and_then(|v| v.parse::<i64>().ok())
+        .map(|pgid| pgid == expected_pgid as i64)
+        .unwrap_or(false)
+}
