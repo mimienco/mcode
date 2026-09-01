@@ -3044,6 +3044,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mcode-voice"
+version = "1.4.178"
+
+[[package]]
 name = "mcode-wire"
 version = "1.4.178"
 dependencies = [

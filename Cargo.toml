@@ -8,6 +8,7 @@ members = [
   "crates/mcode-ssh",
   "crates/mcode-wire",
   "crates/mcode-settings",
+  "crates/mcode-voice",
   "crates/mcode-updater",
   "src-tauri",
 ]

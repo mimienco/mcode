@@ -1,0 +1,16 @@
+[package]
+name = "mcode-voice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(rust_analyzer)"] }
+
+[target.'cfg(windows)'.dev-dependencies]
