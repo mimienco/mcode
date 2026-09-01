@@ -14,6 +14,7 @@ mod clipboard_commands;
 mod desktop_window;
 mod export_commands;
 mod filesystem_commands;
+mod notification_commands;
 mod os_permissions;
 mod pty_commands;
 mod skill_share_deep_link;
@@ -45,15 +46,19 @@ use desktop_window::{
     window_set_minimize_to_tray_on_close,
 };
 use export_commands::ui_export_html_to_pdf;
-use os_permissions::{
-    developer_permissions_get_status, developer_permissions_open_settings,
-    developer_permissions_request, developer_permissions_test_local_network_connection,
-};
 use filesystem_commands::{
     NativeFilesystemState, attach_watch_teardown, fs_cancel_list_files, fs_cancel_search_replace,
     fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path, fs_path_exists, fs_read_dir,
     fs_read_file, fs_rename_path, fs_search, fs_search_replace, fs_stat, fs_unwatch_worktree,
     fs_watch_worktree, fs_write_file, fs_write_file_atomic, spawn_watch_forwarder,
+};
+use notification_commands::{
+    ui_notification_dismiss, ui_notification_dispatch, ui_notification_get_permission_status,
+    ui_notification_open_system_settings,
+};
+use os_permissions::{
+    developer_permissions_get_status, developer_permissions_open_settings,
+    developer_permissions_request, developer_permissions_test_local_network_connection,
 };
 pub use pty_commands::{
     NativePtyState, PtyAppliedSize, pty_ack_data_for, pty_get_size_for, pty_register_session_for,
@@ -444,6 +449,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             skill_share_deep_link::register(app.handle().clone());
             app_menu_events::register(app.handle());
@@ -642,6 +648,10 @@ pub fn run() {
             ui_open_setup_guide,
             ui_open_feature_tour,
             ui_export_html_to_pdf,
+            ui_notification_dispatch,
+            ui_notification_dismiss,
+            ui_notification_get_permission_status,
+            ui_notification_open_system_settings,
             ui_open_crash_report,
             app_get_launch_context,
             app_stage_shutdown_checkpoint,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-notification-get-permission-status"
+description = "Enables the ui_notification_get_permission_status command without any pre-configured scope."
+commands.allow = ["ui_notification_get_permission_status"]
+
+[[permission]]
+identifier = "deny-ui-notification-get-permission-status"
+description = "Denies the ui_notification_get_permission_status command without any pre-configured scope."
+commands.deny = ["ui_notification_get_permission_status"]

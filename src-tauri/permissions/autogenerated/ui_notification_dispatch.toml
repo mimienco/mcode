@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-notification-dispatch"
+description = "Enables the ui_notification_dispatch command without any pre-configured scope."
+commands.allow = ["ui_notification_dispatch"]
+
+[[permission]]
+identifier = "deny-ui-notification-dispatch"
+description = "Denies the ui_notification_dispatch command without any pre-configured scope."
+commands.deny = ["ui_notification_dispatch"]
