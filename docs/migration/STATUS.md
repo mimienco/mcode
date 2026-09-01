@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 15 — bundle parity committed)
+
+- HEAD `a42116aef4`. Release 1/3 done: "Tauri bundles, channels".
+- `src-tauri/tauri.conf.json`: bundle.resources in MAP form (slice form would land under `_up_/` — proven against tauri-utils 2.9.3 `ResourcePaths::from_map` with a compiled probe) for notification-sounds/plugins/launch/onboarding feature-wall/skills; `nsis.installMode = currentUser` (matches electron-builder per-user default). Updater pubkey/endpoints intentionally empty (D-010: runtime-injected at build).
+- `docs/migration/BUNDLE_PARITY.md`: full electron-builder → Tauri parity table; key findings: NO artifactName field exists in Tauri 2 schema (CI must rename if old names contractual); mac zip target → .app.tar.gz via createUpdaterArtifacts; sherpa DLL bundling deferred (node_modules symlink + sidecar-vs-resource decision pending voice port).
+- Remaining Release rows are externally blocked: signing/crossgrade needs real credentials (minisign keygen is CI-side; SignPath/Authenticode policy decision); Homebrew/AUR needs published artifacts + CI hosts. Local-only work for them: none beyond the doc.
+- Next: Cutover phase can start safely in parallel — (1) dead-code audit (deadfile/knip-style inventory of src/main + src/preload refs from renderer), (2) E2E replacement inventory (tests/e2e playwright specs → tauri-driver/WebDriver plan), (3) remove Electron deps LAST. Final phase: multi-platform builds need CI hosts.
+
 ## Session progress (2026-09-01, wave 14 — voice GO, Native phase complete)
 
 - HEAD `440d6e5bbd`. Native phase COMPLETE (30/40): Voice/Sherpa ONNX marked done after a live end-to-end smoke.
