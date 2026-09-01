@@ -24,7 +24,9 @@ pub fn skill_share_id_from_url(url: &str) -> Option<String> {
     let id = path.trim_end_matches('/');
     let valid = !id.is_empty()
         && id.len() <= SHARE_ID_PATTERN_BYTES
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
     valid.then(|| id.to_string())
 }
 
@@ -88,14 +90,23 @@ mod tests {
     #[test]
     fn rejects_wrong_path_or_bad_id() {
         assert_eq!(skill_share_id_from_url("mcode://skills/other/abc"), None);
-        assert_eq!(skill_share_id_from_url("mcode://skills/share/has space"), None);
+        assert_eq!(
+            skill_share_id_from_url("mcode://skills/share/has space"),
+            None
+        );
         assert_eq!(skill_share_id_from_url("mcode://skills/share/"), None);
         let long = "a".repeat(129);
-        assert_eq!(skill_share_id_from_url(&format!("mcode://skills/share/{long}")), None);
+        assert_eq!(
+            skill_share_id_from_url(&format!("mcode://skills/share/{long}")),
+            None
+        );
     }
 
     #[test]
     fn rejects_non_scheme_urls() {
-        assert_eq!(skill_share_id_from_url("https://app.mcode.dev/skills/share/abc"), None);
+        assert_eq!(
+            skill_share_id_from_url("https://app.mcode.dev/skills/share/abc"),
+            None
+        );
     }
 }
