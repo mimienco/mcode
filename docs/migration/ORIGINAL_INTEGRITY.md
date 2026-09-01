@@ -101,3 +101,20 @@ No migration command has written to the original repository.
   not migration activity. Every migration command against the original is
   read-only. The frozen snapshot at docs/migration/source-snapshot remains
   the migration oracle; forward divergence is expected and recorded here.
+
+## 2026-09-01 wave-10 (SSH exposure) check (orchestrator)
+
+- The user continued development in the original: HEAD now `5c13ecce88`
+  (perf: skill discovery freshness / focus rescan cooldown), branch
+  rebrand/mcode unchanged, 115 working-tree entries (live WIP incl.
+  pty-daemon-spawn-agent-home-env, settings surfaces, native-chat).
+- In the rewrite tree, concurrent user slices landed as commits
+  `f2a928cc33` (clipboard), `cb8bcf98c9` (PDF export), `164ca03fb4`
+  (wave-11 docs), `5fb2c03828` (OS-permission commands) — recorded here and
+  in STATUS.md wave 10; the SSH wave rebased around them (restored the
+  transiently dropped `mod filesystem_commands`, synced
+  window_capability_contract.rs, declared the `clipboard-roundtrip-tests`
+  feature). No user work reverted.
+- Verdict: forward drift in both trees is user work, not migration
+  activity. Every migration command against the original is read-only. The
+  frozen snapshot at docs/migration/source-snapshot remains the oracle.
