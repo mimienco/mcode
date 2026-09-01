@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
-  "updatedAt": "2026-08-31",
+  "updatedAt": "2026-09-01",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
     {
@@ -564,7 +564,10 @@
       "targetCommand": ["pty_attach", "pty_search_metadata"],
       "tests": [
         "src/renderer/src/desktop/pty-client.test.ts",
-        "docs/migration/TERMINAL_UI_INTEGRATION.md §4 verification plan (transport-factory selection, seq-dedupe, pty smoke E2E)"
+        "docs/migration/TERMINAL_UI_INTEGRATION.md §4 verification plan (transport-factory selection, seq-dedupe, pty smoke E2E)",
+        "src/renderer/src/components/terminal-pane/pty-transport-factory.test.ts",
+        "src/renderer/src/components/terminal-pane/pty-transport-tauri.test.ts",
+        "src-tauri/tests/pty_command_contract.rs"
       ],
       "platforms": {
         "windows": "in_progress",
@@ -577,7 +580,8 @@
         "transport seam = one factory swap at pty-connection.ts:4026 (createIpcPtyTransport -> runtime-selected createLocalPtyTransport), PtyTransport interface unchanged",
         "seq dedupe rule (drop startSeq < processedChars) mapped onto terminal-pty-ack-gate cumulative processedPtyCharTotals; pty_ack_data exposure re-arms Rust credit (PtySession::ack)",
         "typed pty-client (src/renderer/src/desktop/pty-client.ts) + src-tauri pty_spawn/write/resize/kill/has_pty + pty://data / pty://exit already landed (pty-client.test.ts green)",
-        "pane serializers, delivery resync, hidden-delivery gate, viewport authority deferred with the pane-serializer slice (doc §3)"
+        "pane serializers, delivery resync, hidden-delivery gate, viewport authority deferred with the pane-serializer slice (doc §3)",
+        "Wave 6: transport seam landed (factory + Tauri transport + dispatcher port + seq-dedupe); pty_ack_data/pty_get_size commands + contract tests; ConPTY exit drain fix"
       ]
     },
     {

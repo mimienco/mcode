@@ -56,6 +56,14 @@ The renderer can call only the narrow `update_get_status`, `update_check`, `upda
 
 Downloaded bytes are accepted only after the Tauri updater verifies their signature, then remain backend-owned until install. Update application uses the existing shutdown checkpoint protocol with the distinct `UpdateInstall` intent. An unacknowledged request times out back to the running app and emits an exact abort event that releases renderer restart preparation; a user veto does the same. An acknowledged request may wait for the user's dirty-file/process decision, and only atomic confirmation can execute the installer. A failed install restores the verified bytes for retry, records a structured error, and leaves the app open.
 
+## D-011 (2026-09-01): ConPTY exit — reader-EOF alone is not a death signal on Windows
+
+Status: accepted.
+
+On Windows, conhost keeps the output pipe open after the child process exits, so treating reader-EOF as process death exits early and drops the tail of output (and the true exit status). The pty forwarder therefore polls `PtySession::child_exited()` as the authoritative death signal: when the child has exited without EOF, it closes the master (`SharedMaster::close` drops the Option-backed portable-pty master, terminating the pseudoconsole and releasing the reader) and joins the reader before the final drain — the node-pty close→drain→exit discipline. Reader-EOF with a live child remains a pure drain signal.
+
+Evidence: crates/mcode-pty/src/session.rs (`child_exited`, `drain_after_child_exit_and_cause`, `SharedMaster::close`), src-tauri/src/pty_commands.rs (`spawn_pty_forwarder` child-exit poll + drain-after-close branch).
+
 ## Pending decisions
 
 - PTY crate/FFI strategy after behavior and throughput spikes on all platforms.
