@@ -35,6 +35,10 @@
     "allow-update-get-status",
     "allow-update-check",
     "allow-update-download",
-    "allow-update-install"
+    "allow-update-install",
+    "allow-developer-permissions-get-status",
+    "allow-developer-permissions-request",
+    "allow-developer-permissions-open-settings",
+    "allow-developer-permissions-test-local-network-connection"
   ]
 }

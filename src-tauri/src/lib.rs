@@ -14,6 +14,7 @@ mod clipboard_commands;
 mod desktop_window;
 mod export_commands;
 mod filesystem_commands;
+mod os_permissions;
 mod pty_commands;
 mod skill_share_deep_link;
 mod ssh_commands;
@@ -44,6 +45,10 @@ use desktop_window::{
     window_set_minimize_to_tray_on_close,
 };
 use export_commands::ui_export_html_to_pdf;
+use os_permissions::{
+    developer_permissions_get_status, developer_permissions_open_settings,
+    developer_permissions_request, developer_permissions_test_local_network_connection,
+};
 use filesystem_commands::{
     NativeFilesystemState, attach_watch_teardown, fs_cancel_list_files, fs_cancel_search_replace,
     fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path, fs_path_exists, fs_read_dir,
@@ -685,6 +690,10 @@ pub fn run() {
             ui_clipboard_read_text,
             ui_clipboard_write_text,
             ui_clipboard_write_terminal_text,
+            developer_permissions_get_status,
+            developer_permissions_request,
+            developer_permissions_open_settings,
+            developer_permissions_test_local_network_connection,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

@@ -79,6 +79,10 @@ fn main() {
             "ssh_resize_pty",
             "ssh_close_pty",
             "ssh_disconnect",
+            "developer_permissions_get_status",
+            "developer_permissions_request",
+            "developer_permissions_open_settings",
+            "developer_permissions_test_local_network_connection",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         println!("{error:#}");

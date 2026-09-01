@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-developer-permissions-open-settings"
+description = "Enables the developer_permissions_open_settings command without any pre-configured scope."
+commands.allow = ["developer_permissions_open_settings"]
+
+[[permission]]
+identifier = "deny-developer-permissions-open-settings"
+description = "Denies the developer_permissions_open_settings command without any pre-configured scope."
+commands.deny = ["developer_permissions_open_settings"]
