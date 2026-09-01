@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 14 — voice GO, Native phase complete)
+
+- HEAD `440d6e5bbd`. Native phase COMPLETE (30/40): Voice/Sherpa ONNX marked done after a live end-to-end smoke.
+- **Voice runtime GO confirmed**: `cargo test -p mcode-voice -- --ignored` passes against the real prebuilt DLL (node_modules/sherpa-onnx-win-x64/sherpa-onnx-c-api.dll reports 1.12.37) and a REAL streaming model (zipformer-zh-14m downloaded from the pinned HF revision into %APPDATA%/MCode/speech-models/zipformer-streaming-zh-14m-test). Full path verified: load → recognizer create (transducer paths) → stream → accept 100 ms chunks → decode → result (sine fixture ⇒ empty text, correct). Gotchas encoded in the test: offline-only model dirs (parakeet/whisper/sense-voice) abort inside sherpa C++ — fail fast with a clear message; DLLs must be co-located with the test exe or on PATH (delay-load 0xc06d007e otherwise); wav path must be absolute (cargo runs from workspace root but the test cwd is the crate dir).
+- Remaining voice work for a later session (M steps 2-8 from agent://VoiceSurvey): model catalog/download manager port, session service, renderer runtime client + shim merge, cloud/keystore, macOS TCC, mobile RPC, packaging.
+- Release phase started: "Tauri bundles, channels" next. NOTE external blockers: signing pipeline + crossgrade need real credentials (simulated evidence prohibited); Homebrew/AUR need published artifacts; CI matrix needs hosts. What CAN be done locally: `pnpm tauri build` bundle config review, updater endpoint wiring, channel metadata.
+- Next agent: (1) tauri bundle config pass (tauri.conf.json bundle targets/updater artifacts vs electron-builder.config.cjs parity); (2) Cutover prep can start in parallel (dead code audit script, E2E replacement inventory) but DO NOT remove Electron deps until parity rows are green; (3) voice steps 2-3 if capacity remains.
+
 ## Session progress (2026-09-01, wave 13 — voice FFI spike committed)
 
 - HEAD `b6cd7b4196`. Native phase 3/3 spike: `crates/mcode-voice` — raw extern bindings to sherpa-onnx-c-api.dll v1.12.37 (prebuilt DLLs already in node_modules/sherpa-onnx-win-x64). Online (streaming) surface bound: FeatureConfig/ModelConfig (full v1.12.37 field order)/RecognizerConfig/Result/Stream, layout pinned by offset+size tests on x64. 11 unit tests (wav PCM16 parser + layouts), clippy 0 warnings, fmt clean. `#[ignore]`d E2E model test documents the acceptance run (MCODE_SHERPA_TEST_MODEL_DIR + DLL on PATH). build.rs links the DLL; `examples/dump.rs` for manual probing.
