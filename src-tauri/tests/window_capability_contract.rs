@@ -43,6 +43,14 @@ fn main_window_grants_only_default_and_required_window_mutations() {
             "allow-ui-consume-pending-skill-share",
             "allow-ui-pick-floating-markdown-document",
             "allow-ui-pick-floating-workspace-directory",
+            "allow-ui-clipboard-read-text",
+            "allow-ui-clipboard-write-text",
+            "allow-ui-clipboard-write-terminal-text",
+            "allow-terminal-preview-connect",
+            "allow-terminal-preview-ack",
+            "allow-terminal-preview-input",
+            "allow-terminal-preview-fit",
+            "allow-terminal-preview-unsubscribe",
         ])
     );
 }

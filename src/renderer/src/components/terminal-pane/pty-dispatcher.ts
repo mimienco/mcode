@@ -80,6 +80,7 @@ export type PtyEventPort = {
     }) => void
   ) => Promise<() => void>
   onExit: (listener: (payload: { id: string; code: number }) => void) => Promise<() => void>
+  onReplay: (listener: (payload: { id: string; data: string }) => void) => Promise<() => void>
 }
 
 let ptyDispatcherEventPort: PtyEventPort | null = null
@@ -239,6 +240,14 @@ function handleDispatchedPtyExit(payload: {
 async function attachPtySecondaryPushListeners(unsubscribes: (() => void)[]): Promise<void> {
   if (ptyDispatcherEventPort) {
     unsubscribes.push(await ptyDispatcherEventPort.onExit(handleDispatchedPtyExit))
+    unsubscribes.push(
+      await ptyDispatcherEventPort.onReplay((payload) => {
+        if (bufferPtyShutdownReplayData(payload.id, payload.data)) {
+          return
+        }
+        ptyReplayHandlers.get(payload.id)?.(payload.data)
+      })
+    )
   } else {
     const unsubscribeWriteUnavailable = window.api.pty.onWriteUnavailable?.((payload) => {
       ptyWriteUnavailableHandlers.get(payload.id)?.()

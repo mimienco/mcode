@@ -302,7 +302,10 @@
       "targetRustModule": "crates/mcode-ssh/src/transport",
       "targetCommand": ["ssh_connect", "ssh_exec", "ssh_open_pty", "ssh_disconnect"],
       "tests": [
-        "crates/mcode-ssh/src/lib.rs (29 unit tests: transport, verifier, store, known_hosts, fingerprint, error)"
+        "crates/mcode-ssh/src/lib.rs (38 unit tests: transport, verifier, store, known_hosts, fingerprint, error, pty_id, known_hosts_source)",
+        "src-tauri/tests/ssh_command_contract.rs (13 contract tests: seams, serde shapes, id round-trip, auth DTO)",
+        "src/renderer/src/desktop/ssh-client.test.ts (7 vitest: invoke args, response parse, timeout clamp)",
+        "src/renderer/src/desktop/pty-client.replay.test.ts + pty-dispatcher.replay.test.ts (8 vitest: pty://replay port routing, string-id boundary)"
       ],
       "platforms": {
         "windows": "not_started",
@@ -311,8 +314,12 @@
       },
       "status": "in_progress",
       "evidence": [
-        "crates/mcode-ssh (transport.rs on russh, host-key verifier/store, known_hosts decision, fingerprint) 29 unit tests green; crates/mcode-wire 21 unit+golden-vector tests green (cargo test --workspace 294 passed, 0 failed, 2026-08-31)",
-        "command exposure (ssh_connect/ssh_exec/ssh_open_pty/ssh_disconnect) and pty://replay channel remain open (PTY_CONTRACT_SPEC §9.3)"
+        "crates/mcode-ssh (transport.rs on russh, host-key verifier/store, known_hosts decision, fingerprint, pty_id routing, known_hosts_source fallback) 38 unit tests green",
+        "src-tauri/src/ssh_commands.rs: 8 ssh_* commands + *_for seams, SshState (connections/ptys/pending host keys), per-pty forwarder emitting pty://replay {ptyId,data} then exactly one pty://exit, host-key TOFU flow via ssh_accept_host_key with store at app_data_dir/ssh-host-keys.json",
+        "Renderer: ssh-client.ts typed API, ssh-host-key-prompt.tsx TOFU confirm surface (App.tsx mount), pty-client.ts onReplay + String(id) boundary, dispatcher PtyEventPort.onReplay (no dedupe on replay per ssh-relay-session.ts:1764-1766)",
+        "remote:-prefix guards: pty_kill/pty_write/pty_resize/pty_ack_data/pty_get_size/pty_has_pty parse string ids with pty_invalid_id before state lookup (pty.ts:7863-7867 discipline)",
+        "Full gates 2026-09-01: cargo test --workspace 365 passed / 0 failed, clippy 0 warnings, fmt clean; web typecheck non-inherited errors = 0",
+        "No live sshd on the dev box (port 22 closed, WSL has no sshd): command-layer evidence is contract-test shaped (seams + serde + guards); real sshd evidence still open"
       ]
     },
     {

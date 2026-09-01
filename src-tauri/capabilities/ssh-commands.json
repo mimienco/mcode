@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ssh-commands",
+  "description": "Explicit SSH command permissions for the primary local MCode window; no default grants.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-ssh-connect",
+    "allow-ssh-accept-host-key",
+    "allow-ssh-exec",
+    "allow-ssh-open-pty",
+    "allow-ssh-write-pty",
+    "allow-ssh-resize-pty",
+    "allow-ssh-close-pty",
+    "allow-ssh-disconnect"
+  ]
+}

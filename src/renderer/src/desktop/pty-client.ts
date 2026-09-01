@@ -42,6 +42,11 @@ export type PtyExitPayload = {
   code: number
 }
 
+export type PtyReplayPayload = {
+  id: number
+  data: string
+}
+
 export type PtySubscription = () => void
 
 // ─── Typed API surface (one method per pty_* command) ───────────────────────
@@ -56,6 +61,7 @@ export type PtyApi = {
   getSize: (id: number) => Promise<{ cols: number; rows: number } | null>
   onData: (listener: (payload: PtyDataPayload) => void) => Promise<PtySubscription>
   onExit: (listener: (payload: PtyExitPayload) => void) => Promise<PtySubscription>
+  onReplay: (listener: (payload: PtyReplayPayload) => void) => Promise<PtySubscription>
 }
 
 type PtyInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -67,6 +73,7 @@ type PtyEventSource = (
 
 export const PTY_DATA_EVENT = 'pty://data'
 export const PTY_EXIT_EVENT = 'pty://exit'
+export const PTY_REPLAY_EVENT = 'pty://replay'
 
 /**
  * The native pty commands serialize `Option` error-context fields as JSON
@@ -106,19 +113,20 @@ export function createTauriPtyClient(invoke: PtyInvoke, listen: PtyEventSource):
   return {
     spawn: (spec) => call('pty_spawn', { spec }) as Promise<PtySpawnResponse>,
     write: async (id, data) => {
-      await call('pty_write', { id, data })
+      await call('pty_write', { id: String(id), data })
     },
     resize: async (id, cols, rows) => {
-      await call('pty_resize', { id, cols, rows })
+      await call('pty_resize', { id: String(id), cols, rows })
     },
     kill: async (id) => {
-      await call('pty_kill', { id })
+      await call('pty_kill', { id: String(id) })
     },
-    hasPty: (id) => call('pty_has_pty', { id }) as Promise<boolean>,
+    hasPty: (id) => call('pty_has_pty', { id: String(id) }) as Promise<boolean>,
     ackData: async (id, processedChars) => {
-      await call('pty_ack_data', { id, processedChars })
+      await call('pty_ack_data', { id: String(id), processedChars })
     },
-    getSize: (id) => call('pty_get_size', { id }) as Promise<{ cols: number; rows: number } | null>,
+    getSize: (id) =>
+      call('pty_get_size', { id: String(id) }) as Promise<{ cols: number; rows: number } | null>,
     async onData(listener) {
       const unlisten = await listen(PTY_DATA_EVENT, (event) => {
         const payload = event.payload as PtyDataPayload | null
@@ -141,6 +149,20 @@ export function createTauriPtyClient(invoke: PtyInvoke, listen: PtyEventSource):
           typeof payload === 'object' &&
           typeof payload.id === 'number' &&
           typeof payload.code === 'number'
+        ) {
+          listener(payload)
+        }
+      })
+      return unlisten
+    },
+    async onReplay(listener) {
+      const unlisten = await listen(PTY_REPLAY_EVENT, (event) => {
+        const payload = event.payload as PtyReplayPayload | null
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          typeof payload.id === 'number' &&
+          typeof payload.data === 'string'
         ) {
           listener(payload)
         }

@@ -14,6 +14,11 @@ crate-type = ["rlib"]
 name = "mcode-tauri"
 path = "src/main.rs"
 
+[features]
+# Opt-in clipboard roundtrip test (`--features clipboard-roundtrip-tests`);
+# touches the live OS clipboard, so it never runs in the default suite.
+clipboard-roundtrip-tests = []
+
 [build-dependencies]
 tauri-build.workspace = true
 

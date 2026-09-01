@@ -138,7 +138,7 @@ describe('createTauriPtyTransport', () => {
     return { calls, transport, events }
   }
 
-  it('maps connect/sendInput/resize/disconnect onto pty_spawn/pty_write/pty_resize/pty_kill with Number ids', async () => {
+  it('maps connect/sendInput/resize/disconnect onto pty_spawn/pty_write/pty_resize/pty_kill with string ids', async () => {
     const { calls, transport } = buildTransport({
       pty_spawn: () => ({ id: 7, shell: 'pwsh.exe' }),
       pty_write: () => null,
@@ -172,19 +172,19 @@ describe('createTauriPtyTransport', () => {
       expect(calls.some((call) => call.command === 'pty_write')).toBe(true)
     })
     expect(calls.find((call) => call.command === 'pty_write')?.args).toEqual({
-      id: 7,
+      id: '7',
       data: 'dir\r\n'
     })
 
     expect(transport.resize(120, 40)).toBe(true)
     expect(calls.find((call) => call.command === 'pty_resize')?.args).toEqual({
-      id: 7,
+      id: '7',
       cols: 120,
       rows: 40
     })
 
     transport.disconnect()
-    expect(calls.find((call) => call.command === 'pty_kill')?.args).toEqual({ id: 7 })
+    expect(calls.find((call) => call.command === 'pty_kill')?.args).toEqual({ id: '7' })
     expect(transport.isConnected()).toBe(false)
     expect(transport.getPtyId()).toBeNull()
   })

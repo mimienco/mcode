@@ -39,6 +39,12 @@ export function installDispatcherEventPort(instanceClient: PtyApi): void {
         // No preserveRendererBinding under Tauri — remote-sleep machinery is
         // Electron-only; the dispatcher guard treats its absence as false.
         listener({ id: String(payload.id), code: payload.code })
+      }),
+    onReplay: (listener) =>
+      instanceClient.onReplay((payload) => {
+        // No seq-dedupe on replay: it is incremental scrollback (ssh-relay-session
+        // must not clear the terminal before replay), so every payload forwards.
+        listener({ id: String(payload.id), data: payload.data })
       })
   })
 }

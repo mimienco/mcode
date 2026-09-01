@@ -21,12 +21,18 @@
 pub mod error;
 pub mod fingerprint;
 pub mod known_hosts;
+pub mod known_hosts_source;
+pub mod pty_id;
 pub mod session;
 pub mod store;
 pub mod transport;
 pub mod verifier;
 
 pub use error::SshError;
+pub use known_hosts_source::default_known_hosts_files;
+pub use pty_id::{
+    ParsedSshPtyId, is_remote_pty_id, parse_app_ssh_pty_id, to_app_ssh_pty_id, to_relay_ssh_pty_id,
+};
 pub use session::{ExecOutput, SshPtyChannel};
 pub use transport::{SshAuth, SshConnection, SshTarget};
 pub use verifier::HostKeyDecision;

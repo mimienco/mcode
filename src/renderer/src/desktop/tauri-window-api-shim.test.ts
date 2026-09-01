@@ -13,6 +13,7 @@ type UiBridgeProbe = {
   writeClipboardText: (text: string) => Promise<void>
   writeTerminalClipboardText: (text: string) => Promise<void>
   saveClipboardImageAsTempFile: (args?: { connectionId?: string | null }) => Promise<string | null>
+  performNativePaste: (options?: { mode?: 'paste' | 'paste-and-match-style' }) => void
 }
 
 import type { installTauriWindowApiShim } from './tauri-window-api-shim'
@@ -25,7 +26,7 @@ describe('tauri-window-api-shim', () => {
   const originalApi = window.api
 
   beforeEach(async () => {
-    window.api = undefined
+    window.api = undefined as unknown as Window['api']
     isTauriMock.mockReturnValue(false)
     const coreModule = await import('@tauri-apps/api/core')
     const invoke = coreModule.invoke as ReturnType<typeof vi.fn>

@@ -156,7 +156,7 @@ impl NativePtyState {
             .remove(&id)
     }
 
-    fn get(&self, id: u64) -> Option<Arc<Mutex<PtySession>>> {
+    pub(crate) fn get(&self, id: u64) -> Option<Arc<Mutex<PtySession>>> {
         self.0
             .sessions
             .lock()
@@ -221,6 +221,24 @@ fn user_message_for(operation: &'static str) -> &'static str {
         PTY_GET_SIZE_OPERATION => "MCode could not read this terminal's size. Try again.",
         _ => "MCode could not complete the terminal request. Try again.",
     }
+}
+
+/// Parses the renderer's PTY id (the wire contract sends stringified ids
+/// this wave). Numeric ids are allocated Rust-side only, so any non-numeric
+/// id — which includes every `remote:`-prefixed runtime terminal handle and
+/// the empty string — is invalid and must fail with `pty_invalid_id` BEFORE
+/// any local-state lookup (grounding: the original throws
+/// 'Invalid PTY provider id' for empty/`remote:` ids, pty.ts:7863-7867;
+/// opaque string ids stay routing keys). A plain parse failure covers
+/// `remote:` — it is non-numeric — so no mcode-ssh dependency is needed.
+fn parse_pty_id(id: &str, operation: &'static str) -> Result<u64, DesktopCommandError> {
+    id.parse::<u64>().map_err(|_| {
+        command_error(
+            "pty_invalid_id",
+            operation,
+            format!("invalid pty id: {id:?}"),
+        )
+    })
 }
 
 // ─── Spawn spec assembly ────────────────────────────────────────────────────
@@ -315,9 +333,10 @@ pub(crate) async fn pty_spawn(
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_write(
     state: tauri::State<'_, NativePtyState>,
-    id: u64,
+    id: String,
     data: String,
 ) -> Result<(), DesktopCommandError> {
+    let id = parse_pty_id(&id, PTY_WRITE_OPERATION)?;
     let session = state.get(id).ok_or_else(|| {
         command_error(
             "pty_session_gone",
@@ -345,10 +364,11 @@ pub(crate) async fn pty_write(
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_resize(
     state: tauri::State<'_, NativePtyState>,
-    id: u64,
+    id: String,
     cols: u16,
     rows: u16,
 ) -> Result<(), DesktopCommandError> {
+    let id = parse_pty_id(&id, PTY_RESIZE_OPERATION)?;
     let session = state.get(id).ok_or_else(|| {
         command_error(
             "pty_session_gone",
@@ -364,8 +384,9 @@ pub(crate) async fn pty_resize(
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_kill(
     state: tauri::State<'_, NativePtyState>,
-    id: u64,
+    id: String,
 ) -> Result<(), DesktopCommandError> {
+    let id = parse_pty_id(&id, PTY_KILL_OPERATION)?;
     // Idempotent: an unknown id already exited (spec §8 kill).
     let Some(session) = state.remove(id) else {
         return Ok(());
@@ -391,8 +412,9 @@ pub(crate) async fn pty_kill(
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_has_pty(
     state: tauri::State<'_, NativePtyState>,
-    id: u64,
+    id: String,
 ) -> Result<bool, DesktopCommandError> {
+    let id = parse_pty_id(&id, PTY_HAS_PTY_OPERATION)?;
     Ok(state.get(id).is_some())
 }
 

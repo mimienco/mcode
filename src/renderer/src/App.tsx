@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react'
+import { SshHostKeyPrompt } from './desktop/ssh-host-key-prompt'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ConfirmationDialogProvider } from './components/confirmation-dialog'
@@ -30,13 +31,22 @@ import { useOnboardingAndFeatureTips } from './app-shell/use-onboarding-and-feat
 import { usePersistedUIWriter } from './app-shell/use-persisted-ui-writer'
 import { useRuntimeGraphSync } from './app-shell/use-runtime-graph-sync'
 import { useWindowVisibilityEffects } from './app-shell/use-window-visibility-effects'
-import { prefetchEditorChunks } from './components/editor/prefetch-editor-chunks'
+import { prefetchShellChunks } from './app-shell/prefetch-shell-chunks'
+import { useAppStore } from './store'
 
 function App(): React.JSX.Element {
-  // Why: warm the lazy editor chunks at idle so the first file open is instant.
+  const startupHydrationComplete = useAppStore(
+    (state) => state.workspaceSessionReady && state.hydrationSucceeded
+  )
+
   useEffect(() => {
-    prefetchEditorChunks()
-  }, [])
+    if (!startupHydrationComplete) {
+      return
+    }
+    // Why: requestIdleCallback can fire while startup is awaiting IPC, which is
+    // idle to Chromium but still on the user's critical loading path.
+    return prefetchShellChunks()
+  }, [startupHydrationComplete])
 
   const layout = useAppChromeLayout()
   const floatingWorkspace = useFloatingWorkspacePanel()
@@ -108,6 +118,7 @@ function App(): React.JSX.Element {
       <WorktreeBaseFallbackDialog />
       <PinnedTabCloseDialog />
       <RunningTerminalCloseDialog />
+      <SshHostKeyPrompt />
       {/* Why: Electron's drag-region hit-test is DOM-order-based (ignores z-index); render last so WindowControls stay clickable. */}
       {hasCustomTitleBar && <WindowControls />}
     </div>
