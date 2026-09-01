@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-export-html-to-pdf"
+description = "Enables the ui_export_html_to_pdf command without any pre-configured scope."
+commands.allow = ["ui_export_html_to_pdf"]
+
+[[permission]]
+identifier = "deny-ui-export-html-to-pdf"
+description = "Denies the ui_export_html_to_pdf command without any pre-configured scope."
+commands.deny = ["ui_export_html_to_pdf"]

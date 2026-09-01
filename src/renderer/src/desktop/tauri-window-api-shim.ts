@@ -1,9 +1,10 @@
 import { isTauri } from '@tauri-apps/api/core'
 import type { PreloadApi } from '../../../preload/api-types'
 import { tauriClipboardClient } from './tauri-clipboard-client'
-
-const NOT_YET_PORTED_MESSAGE =
-  'MCode Tauri migration: window.api.ui.saveClipboardImageAsTempFile is not yet ported.'
+import {
+  saveClipboardImageAsTempFile,
+  type SaveClipboardImageAsTempFileArgs
+} from './tauri-clipboard-image'
 
 /**
  * Partial `ui` bridge over the native Tauri clipboard commands. Keyed by the
@@ -17,8 +18,8 @@ const tauriUiClipboardBridge = {
   writeClipboardText: (text: string) => tauriClipboardClient.writeClipboardText(text),
   writeTerminalClipboardText: (text: string) =>
     tauriClipboardClient.writeTerminalClipboardText(text),
-  saveClipboardImageAsTempFile: (): Promise<string | null> =>
-    Promise.reject(new Error(NOT_YET_PORTED_MESSAGE))
+  saveClipboardImageAsTempFile: (args?: SaveClipboardImageAsTempFileArgs) =>
+    saveClipboardImageAsTempFile(args)
 }
 
 /**

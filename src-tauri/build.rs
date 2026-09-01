@@ -28,6 +28,7 @@ fn main() {
             "ui_clipboard_write_text",
             "ui_clipboard_write_terminal_text",
             "ui_consume_pending_skill_share",
+            "ui_export_html_to_pdf",
             "ui_open_settings",
             "ui_pick_floating_markdown_document",
             "ui_pick_floating_workspace_directory",

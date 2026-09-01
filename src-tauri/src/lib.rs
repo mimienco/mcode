@@ -12,6 +12,7 @@ mod app_menu_events;
 mod app_shutdown_commands;
 mod clipboard_commands;
 mod desktop_window;
+mod export_commands;
 mod filesystem_commands;
 mod pty_commands;
 mod skill_share_deep_link;
@@ -42,6 +43,7 @@ use desktop_window::{
     monitor_work_areas, primary_work_area, window_hide_to_tray_if_enabled,
     window_set_minimize_to_tray_on_close,
 };
+use export_commands::ui_export_html_to_pdf;
 use filesystem_commands::{
     NativeFilesystemState, attach_watch_teardown, fs_cancel_list_files, fs_cancel_search_replace,
     fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path, fs_path_exists, fs_read_dir,
@@ -634,6 +636,7 @@ pub fn run() {
             ui_consume_pending_open_settings,
             ui_open_setup_guide,
             ui_open_feature_tour,
+            ui_export_html_to_pdf,
             ui_open_crash_report,
             app_get_launch_context,
             app_stage_shutdown_checkpoint,
