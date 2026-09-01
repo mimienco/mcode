@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 16 — cutover inventory + E2E plan)
+
+- HEAD `7e7e6e22ab`. Cutover 2/3: "Dead code audit" + "Replace E2E, clean configs" marked done (docs, no deletions).
+- `CUTOVER_INVENTORY.md`: verified Electron-only surface ≈227k LOC dead at full parity (296 prod main files/150,654 LOC + 33 coupled test files/61,162 + 116 preload files/15,322 + config shell). KEEP closures: CLI 95 files (0 electron imports), relay 2 files; headless serve composition DELETE-blocked until headless.serve green. 14-step deletion order gated on parity rows; `@electron-toolkit/preload` deletable now (0 require sites). 737 renderer files / 77 namespaces still reference window.api → preload dies last.
+- `E2E_REPLACEMENT.md`: lane decision = tauri-driver (WebDriver); 299 specs classified (83 _electron-coupled, 119 window.api, 264 evaluate, 34 @headful); ~60% renderer-only move first via shared harness, ~30% IPC-coupled gate per parity row, ~10% shell → Rust contract tests + marker smokes. Config cleanup checklist recorded; no configs changed yet.
+- Remaining todos are externally blocked or sequencing-locked: Signing/crossgrade (real credentials required — simulated evidence prohibited), Homebrew/AUR (needs published artifacts + CI), Remove Electron deps (last, gated on parity rows green + E2E lane live), Build all platforms (CI hosts), Perf/security review + Release notes (last, after parity).
+- Next agent: (1) voice steps 2-3 (model catalog/download manager port — the parity gate blocking speech deletion); (2) notification renderer shim merge; (3) headless.serve Rust host work; (4) begin shim namespace coverage tracking (77 namespaces) as the preload-deletion prerequisite.
+
 ## Session progress (2026-09-01, wave 15 — bundle parity committed)
 
 - HEAD `a42116aef4`. Release 1/3 done: "Tauri bundles, channels".
