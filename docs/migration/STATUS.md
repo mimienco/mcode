@@ -64,6 +64,16 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 9 — clipboard slice)
+
+- HEAD `f2a928cc33` (+`ef75734da1` fmt commit from concurrent agent). In-flight: terminalPreview Rust module (PreviewSlice agent, protocol extraction done: 64 KiB batch / 512 KiB in-flight / 256 KiB pending caps, replay/resync semantics; module + wiring ETA pending — check `src-tauri/src/terminal_preview.rs` before assuming missing).
+- Clipboard slice COMMITTED: arboard-backed `ui_clipboardReadText`/`ui_clipboardWriteText`/`ui_clipboardWriteTerminalText` (16 MiB caps, write-verify for terminal text), renderer `tauri-clipboard-client.ts` (error strings matching `isClipboardTextTooLargeError`) + `tauri-window-api-shim.ts` installed FIRST in main.tsx — the 131 `window.api.ui.*ClipboardText` callsites now work unchanged under Tauri (no Electron preload needed for clipboard). `saveClipboardImageAsTempFile` intentionally rejects with a not-ported message (image clipboard = separate slice).
+- Editor/TextMate survey (EditorSurvey scout, full JSON agent://EditorSurvey): Monaco/TextMate/Oniguruma/xterm are pure renderer bundles — NO custom protocol work exists or is needed (no webview://, no main-side grammar serving). Port plan rows: clipboard (done), menu relays (partially done via app_menu_events), rich-Markdown native context menu + spellcheck (WebView2 gap — investigate native menu capabilities), terminalPreview transport (in flight), fs/dialog/pick callers (already wired). Monaco worker + Nim WASM need a production-webview smoke only.
+- pty-client.test.ts aligned to String-id contract (matches concurrent agent's pty_commands.rs WIP — `pty_ack_data`/`pty_get_size` fully wired per PtyWipAudit). ssh-host-key-prompt.tsx lint fixed (untracked concurrent file).
+- Gates: desktop suite 18 files / 90 tests; lib 17 tests; clippy 0 warnings; fmt clean; tsc 19 baseline errors unchanged (no new).
+- Ops note: concurrent `codex` agents share this repo — a stale .git/index.lock (8 min old, zero-length) was removed before committing; check lock age before `rm`.
+- Next: (1) PreviewSlice completion → verify + commit terminal_preview.rs; (2) rich-Markdown context menu via tauri menu API; (3) production-webview smoke for Monaco workers/Nim WASM; (4) image clipboard (arboard get_image + temp file).
+
 ## Session progress (2026-09-01, wave 8 — menus/tray/dialogs slice done)
 
 - HEAD `e549fcfc2d` (adds `9c46c0781c`..`e549fcfc2d` on top of wave 7). Shell phase complete: "Menus, tray, dialogs, deep links" marked done.
