@@ -30,6 +30,17 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
-    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
+    "resources": {
+      "../resources/notification-sounds": "notification-sounds",
+      "../resources/plugins/launch": "plugins/launch",
+      "../resources/onboarding/feature-wall": "onboarding/feature-wall",
+      "../resources/skills": "skills"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }
