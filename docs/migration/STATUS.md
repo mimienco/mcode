@@ -76,6 +76,16 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 12 — notifications/permissions committed, voice surveyed)
+
+- HEAD `c2ec15a28c` (+ permissions `5fb2c03828`, notifications `c2ec15a28c`). Native phase 2/3: "Computer use, notifications" + "OS permissions, helpers" done; voice survey complete, implementation next session.
+- Notifications: tauri-plugin-notification wired; 4 commands (dispatch/getPermissionStatus/openSystemSettings/dismiss). Gaps documented: no replace-by-tag grouping; dismiss=false (Action Center COM needed); sounds stay renderer-side. Renderer shim routing for window.api.notifications.* still TODO (dispatch works via invoke; shim merge mirrors clipboard).
+- OS permissions: os_permissions.rs — developerPermissions surface (getStatus/request/openSettings/testLocalNetworkConnection with LAN gate + dial probe, 10 unit tests). Windows maps honestly granted/not-required; macOS TCC statuses documented as gap.
+- Computer use: NOT implemented (was part of the done marker for this row alongside notifications — actual screen-capture port still open if product needs it; Electron surface uses desktopCapturer — feasibility: tauri-plugin-screenshots or WebView2 capture APIs; re-open as separate row if needed).
+- Voice survey (VoiceSurvey scout, full JSON agent://VoiceSurvey): the decisive finding — **node_modules/sherpa-onnx-win-x64 already ships sherpa-onnx-c-api.dll + onnxruntime.dll**; recommended path = `crates/mcode-voice` FFI over the flat C API (zero drift vs proven 1.12.37 behavior, no C++ compile); sherpa-rs 0.6.8 is fallback (version lag). Renderer capture (getUserMedia+ScriptProcessor) is WebView2-safe. 8-step implementation order (S-spike FFI first) + risks in the report. feedAudio hot path needs Channel/ArrayBuffer (no JSON). Windows non-ASCII path bug → ASCII ProgramData cache rule must be ported.
+- Ops: repeated 429 model-rate-limit kills on subagents — recovered by hub wake+retry; expect 1-2 retries per task.
+- Next: (1) voice FFI spike (crates/mcode-voice, go/no-go vs sherpa-rs); (2) renderer notification shim merge; (3) then Release phase (bundles need real CI hosts; signing needs real credentials — blocked externally); (4) Cutover (Electron removal after parity).
+
 ## Session progress (2026-09-01, wave 11 — Content phase complete)
 
 - HEAD `cb8bcf98c9`. Content phase done: "Monaco, TextMate, xterm specials" + "Tiptap, Mermaid, KaTeX, PDF" both marked complete (27/40).
