@@ -90,3 +90,14 @@ No migration command has written to the original repository.
   not migration activity. Every migration command against the original is
   read-only. The frozen snapshot remains the migration oracle; forward
   divergence is expected and recorded.
+
+## 2026-09-01 wave-6/7 close-out check (orchestrator)
+
+- The user continued development in the original: further commits since the
+  wave-4 record (through 5c13ecce88 — skill discovery freshness, dev-profile
+  cleanup retry budget, palette activation feedback), plus live working-tree
+  changes (plugin rename bundles, config drift).
+- Verdict: identical in kind to all previously documented drift — user work,
+  not migration activity. Every migration command against the original is
+  read-only. The frozen snapshot at docs/migration/source-snapshot remains
+  the migration oracle; forward divergence is expected and recorded here.
