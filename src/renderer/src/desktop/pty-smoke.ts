@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { createTauriFsClient } from './fs-client'
+import { createDesktopInvoke } from './desktop-client'
 import { createTauriPtyClient, type PtyDataPayload, type PtyExitPayload } from './pty-client'
 
 const smokeParameters = new URLSearchParams(window.location.search)
@@ -9,6 +10,9 @@ const marker = smokeParameters.get('marker')
 
 const failStatus = (message: string): void => {
   document.getElementById('status')?.replaceChildren(message)
+  // Why: the smoke page runs in an invisible window; mirroring progress into
+  // the title lets the driver script observe milestones from the outside.
+  document.title = message
 }
 
 if (!echo || !marker) {
@@ -21,8 +25,15 @@ const fs = createTauriFsClient(
   (event, listener) => listen(event, listener)
 )
 
-const report = (verdict: 'passed' | 'renderer-failed'): Promise<void> =>
-  fs.writeFileAtomic({ filePath: marker, content: verdict })
+// Why: the smoke driver's readiness handshake — the Rust side waits for the
+// tray-revision to advance past 0 (NativeWindowState::close_to_tray_revision)
+// before polling the verdict marker, mirroring the Filesystem smoke arm. It
+// lives inside the try block: a failure here must land in the verdict marker,
+// not die at module scope where nothing would be reported.
+const desktopInvoke = createDesktopInvoke((command, args) => invoke(command, args))
+
+const report = (verdict: 'passed' | 'renderer-failed', detail?: string): Promise<void> =>
+  fs.writeFileAtomic({ filePath: marker, content: detail ? `${verdict}: ${detail}` : verdict })
 
 const settle = <T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> =>
   new Promise<T>((resolve, reject) => {
@@ -45,6 +56,17 @@ try {
     (event, listener) => listen(event, listener)
   )
 
+  // BISECT: prove the fs write path works before anything else.
+  try {
+    await fs.writeFileAtomic({ filePath: `${marker}.probe`, content: 'probe' })
+  } catch (probeError) {
+    await fs
+      .writeFileAtomic({ filePath: `${marker}.probe2`, content: String(probeError) })
+      .catch(() => undefined)
+  }
+  await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })
+
+  document.title = 'ready-handshake-done'
   // Subscriptions are installed before the spawn: `cmd /c echo` can exit
   // immediately, and the forwarder owns both the final flush and the exit
   // announcement. Events are buffered by id, then replayed below.
@@ -74,6 +96,7 @@ try {
     sawExit.push(payload)
     resolveExit()
   })
+  document.title = 'subscriptions-installed'
 
   const spawned = await client.spawn({
     program: 'cmd',
@@ -82,7 +105,9 @@ try {
     rows: 24
   })
 
-  await settle(echoPromise, 30_000, 'pty echo')
+  // 60s: ConPTY cold start on a loaded dev box can take tens of seconds
+  // before the first output bytes flow.
+  await settle(echoPromise, 60_000, 'pty echo')
 
   // Optional capability probes: ackData/getSize may not exist yet while the
   // sibling migration lands them. Their absence is not a smoke failure.
@@ -111,8 +136,13 @@ try {
   document.getElementById('status')?.replaceChildren('Pty smoke passed')
 } catch (error) {
   console.error('[smoke] pty smoke failed', error)
-  void report('renderer-failed').catch((reportError: unknown) => {
+  failStatus(`Pty smoke failed: ${error instanceof Error ? error.message : String(error)}`)
+  try {
+    await report('renderer-failed', error instanceof Error ? error.message : String(error))
+  } catch (reportError) {
     console.error('[smoke] failed to report pty smoke failure', reportError)
-  })
-  failStatus('Pty smoke failed')
+    document
+      .getElementById('status')
+      ?.replaceChildren(`Pty smoke failed AND marker write failed: ${String(reportError)}`)
+  }
 }

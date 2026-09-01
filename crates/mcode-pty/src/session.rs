@@ -24,26 +24,39 @@ struct ReaderControl {
 }
 
 /// Cloneable handle to the master pty for resize/get_size from any thread.
-#[derive(Clone)]
-struct SharedMaster(Arc<Mutex<Box<dyn MasterPty + Send>>>);
+#[derive(Clone, Default)]
+struct SharedMaster(Arc<Mutex<Option<Box<dyn MasterPty + Send>>>>);
 
 impl SharedMaster {
     fn resize(&self, cols: u16, rows: u16) {
-        let _ = self
-            .0
-            .lock()
-            .expect("master lock")
-            .resize(portable_pty::PtySize {
+        if let Some(master) = self.0.lock().expect("master lock").as_mut() {
+            let _ = master.resize(portable_pty::PtySize {
                 rows,
                 cols,
                 pixel_width: 0,
                 pixel_height: 0,
             });
+        }
     }
 
     fn get_size(&self) -> Option<(u16, u16)> {
-        let size = self.0.lock().expect("master lock").get_size().ok()?;
+        let size = self
+            .0
+            .lock()
+            .expect("master lock")
+            .as_ref()?
+            .get_size()
+            .ok()?;
         Some((size.cols, size.rows))
+    }
+
+    /// Closes the pseudoconsole master by dropping the trait object. On
+    /// ConPTY the reader's blocking read ends only when conhost tears the
+    /// console down, and killing the already-exited shell does not do that;
+    /// dropping the master (the last clone of the Box, not the Arc) is what
+    /// releases the reader. Later resize/size calls tolerate the `None`.
+    fn close(&self) {
+        *self.0.lock().expect("master lock") = None;
     }
 }
 
@@ -94,7 +107,7 @@ impl PtySession {
             writer: Mutex::new(Some(writer)),
         });
 
-        let master = SharedMaster(Arc::new(Mutex::new(pair.master)));
+        let master = SharedMaster(Arc::new(Mutex::new(Some(pair.master))));
         let reader_handle = start_reader_thread(
             reader,
             Arc::clone(&owner),
@@ -180,6 +193,52 @@ impl PtySession {
     /// Whether the reader observed EOF / child death.
     pub fn is_dead(&self) -> bool {
         self.control.dead.load(Ordering::SeqCst)
+    }
+
+    /// Whether the child process has exited, regardless of whether the
+    /// ConPTY output pipe reached EOF. On Windows, conhost can keep the
+    /// pseudoconsole's output side open after the child dies, so the
+    /// reader's EOF signal alone is not a reliable death detector
+    /// (PTY_CONTRACT_SPEC.md §5: exit must be announced exactly once and
+    /// promptly). The first observation is cached; the poll is a cheap
+    /// try_wait.
+    pub fn child_exited(&self) -> bool {
+        if self.control.dead.load(Ordering::SeqCst) {
+            return true;
+        }
+        let mut child = self.child.lock().expect("child lock");
+        matches!(child.try_wait(), Ok(Some(_)))
+    }
+
+    /// Child-exit teardown: capture the real exit status, stop the reader
+    /// deterministically, then drain. On Windows, conhost can keep the
+    /// pseudoconsole's output side open after the child dies, so the reader
+    /// may never see EOF; waiting for reader EOF before announcing exit then
+    /// hangs (the exit is never announced). Instead: read the status, close
+    /// the master to release the reader's blocking read, join the reader,
+    /// then return the final batch and cause — mirroring node-pty's
+    /// close→drain→exit discipline (PTY_CONTRACT_SPEC.md §5).
+    pub fn drain_after_child_exit_and_cause(&mut self) -> (OutputBatch, mcode_process::ExitCause) {
+        let status = {
+            let mut child = self.child.lock().expect("child lock");
+            let status = child.try_wait().ok().flatten();
+            let _ = child.kill();
+            let _ = child.wait();
+            status
+        };
+        self.control.dead.store(true, Ordering::SeqCst);
+        // Why first: killing the already-exited shell releases nothing; the
+        // reader unblocks only when the pseudoconsole closes (conhost exits).
+        self.master.close();
+        if let Some(handle) = self.reader_handle.take() {
+            let _ = handle.join();
+        }
+        let batch = self.take_batch();
+        let observation = mcode_process::ExitObservation {
+            exit_code: status.map_or(0, |s| s.exit_code() as i32),
+            signal: None,
+        };
+        (batch, observation.cause())
     }
 
     /// Waits for the child, flushing pending output BEFORE reporting the

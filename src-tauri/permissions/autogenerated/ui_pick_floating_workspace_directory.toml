@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-pick-floating-workspace-directory"
+description = "Enables the ui_pick_floating_workspace_directory command without any pre-configured scope."
+commands.allow = ["ui_pick_floating_workspace_directory"]
+
+[[permission]]
+identifier = "deny-ui-pick-floating-workspace-directory"
+description = "Denies the ui_pick_floating_workspace_directory command without any pre-configured scope."
+commands.deny = ["ui_pick_floating_workspace_directory"]

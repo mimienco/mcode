@@ -52,6 +52,8 @@ export type PtyApi = {
   resize: (id: number, cols: number, rows: number) => Promise<void>
   kill: (id: number) => Promise<void>
   hasPty: (id: number) => Promise<boolean>
+  ackData: (id: number, processedChars: number) => Promise<void>
+  getSize: (id: number) => Promise<{ cols: number; rows: number } | null>
   onData: (listener: (payload: PtyDataPayload) => void) => Promise<PtySubscription>
   onExit: (listener: (payload: PtyExitPayload) => void) => Promise<PtySubscription>
 }
@@ -113,6 +115,10 @@ export function createTauriPtyClient(invoke: PtyInvoke, listen: PtyEventSource):
       await call('pty_kill', { id })
     },
     hasPty: (id) => call('pty_has_pty', { id }) as Promise<boolean>,
+    ackData: async (id, processedChars) => {
+      await call('pty_ack_data', { id, processedChars })
+    },
+    getSize: (id) => call('pty_get_size', { id }) as Promise<{ cols: number; rows: number } | null>,
     async onData(listener) {
       const unlisten = await listen(PTY_DATA_EVENT, (event) => {
         const payload = event.payload as PtyDataPayload | null

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-pick-floating-markdown-document"
+description = "Enables the ui_pick_floating_markdown_document command without any pre-configured scope."
+commands.allow = ["ui_pick_floating_markdown_document"]
+
+[[permission]]
+identifier = "deny-ui-pick-floating-markdown-document"
+description = "Denies the ui_pick_floating_markdown_document command without any pre-configured scope."
+commands.deny = ["ui_pick_floating_markdown_document"]

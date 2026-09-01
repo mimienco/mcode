@@ -32,6 +32,8 @@ const PTY_WRITE_OPERATION: &str = "pty_write";
 const PTY_RESIZE_OPERATION: &str = "pty_resize";
 const PTY_KILL_OPERATION: &str = "pty_kill";
 const PTY_HAS_PTY_OPERATION: &str = "pty_has_pty";
+const PTY_ACK_DATA_OPERATION: &str = "pty_ack_data";
+const PTY_GET_SIZE_OPERATION: &str = "pty_get_size";
 
 /// Scrollback rows driving the byte owner's pending cap
 /// (`max(2 MiB, rows × 120)` with rows clamped 1000…50000).
@@ -80,6 +82,15 @@ struct PtyExitEvent {
     code: i32,
 }
 
+/// `pty_get_size` response: the pty size as known by the kernel (applied
+/// resizes included), mirroring the crate's `applied_size`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyAppliedSize {
+    pub cols: u16,
+    pub rows: u16,
+}
+
 fn exit_code_of(cause: &mcode_process::ExitCause) -> i32 {
     match cause {
         mcode_process::ExitCause::Exited { exit_code } => *exit_code,
@@ -113,10 +124,10 @@ impl std::fmt::Debug for NativePtyStateInner {
 
 /// Tauri-managed PTY state shared by every `pty_*` command.
 #[derive(Clone, Debug)]
-pub(crate) struct NativePtyState(Arc<NativePtyStateInner>);
+pub struct NativePtyState(Arc<NativePtyStateInner>);
 
 impl NativePtyState {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self(Arc::new(NativePtyStateInner {
             sessions: Mutex::new(HashMap::new()),
             next_handle: AtomicU64::new(1),
@@ -165,6 +176,12 @@ impl NativePtyState {
     }
 }
 
+impl Default for NativePtyState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ─── Error mapping ──────────────────────────────────────────────────────────
 
 fn pty_error(error: PtyError, operation: &'static str) -> DesktopCommandError {
@@ -200,6 +217,8 @@ fn user_message_for(operation: &'static str) -> &'static str {
         PTY_RESIZE_OPERATION => "MCode could not resize this terminal. Try again.",
         PTY_KILL_OPERATION => "MCode could not close this terminal. Try again.",
         PTY_HAS_PTY_OPERATION => "MCode could not check this terminal's state. Try again.",
+        PTY_ACK_DATA_OPERATION => "MCode could not update this terminal's progress. Try again.",
+        PTY_GET_SIZE_OPERATION => "MCode could not read this terminal's size. Try again.",
         _ => "MCode could not complete the terminal request. Try again.",
     }
 }
@@ -377,6 +396,79 @@ pub(crate) async fn pty_has_pty(
     Ok(state.get(id).is_some())
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn pty_ack_data(
+    state: tauri::State<'_, NativePtyState>,
+    id: u64,
+    processed_chars: u64,
+) -> Result<(), DesktopCommandError> {
+    pty_ack_data_for(&state, id, processed_chars)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn pty_get_size(
+    state: tauri::State<'_, NativePtyState>,
+    id: u64,
+) -> Result<Option<PtyAppliedSize>, DesktopCommandError> {
+    pty_get_size_for(&state, id)
+}
+
+// ─── Command seams (renderer-contract tests) ────────────────────────────────
+
+/// `pty_ack_data` body without the Tauri runtime: registers the renderer's
+/// processed-char watermark on the byte owner (spec §5.3 cumulative max-merge
+/// ACK). Unknown ids report `pty_session_gone`, matching the command.
+pub fn pty_ack_data_for(
+    state: &NativePtyState,
+    id: u64,
+    processed_chars: u64,
+) -> Result<(), DesktopCommandError> {
+    let session = state.get(id).ok_or_else(|| {
+        command_error(
+            "pty_session_gone",
+            PTY_ACK_DATA_OPERATION,
+            "pty session is gone",
+        )
+    })?;
+    session
+        .lock()
+        .expect("pty session lock")
+        .ack(processed_chars);
+    Ok(())
+}
+
+/// `pty_get_size` body without the Tauri runtime: the applied kernel size for
+/// the session, or `None` when the pty has no size yet. Unknown ids report
+/// `pty_session_gone`, matching the command.
+pub fn pty_get_size_for(
+    state: &NativePtyState,
+    id: u64,
+) -> Result<Option<PtyAppliedSize>, DesktopCommandError> {
+    let session = state.get(id).ok_or_else(|| {
+        command_error(
+            "pty_session_gone",
+            PTY_GET_SIZE_OPERATION,
+            "pty session is gone",
+        )
+    })?;
+    Ok(session
+        .lock()
+        .expect("pty session lock")
+        .applied_size()
+        .map(|(cols, rows)| PtyAppliedSize { cols, rows }))
+}
+
+/// Harness registration for the seams: inserts an already-spawned session
+/// under an explicit id (production spawn registers through `pty_spawn`).
+/// Returns the shared session handle so tests can drive the session directly.
+pub fn pty_register_session_for(
+    state: &NativePtyState,
+    id: u64,
+    session: PtySession,
+) -> Arc<Mutex<PtySession>> {
+    state.insert(id, session)
+}
+
 // ─── Reader forwarding ──────────────────────────────────────────────────────
 
 /// One thread per session: drains `take_batch` — the crate's bounded byte
@@ -390,7 +482,11 @@ fn spawn_pty_forwarder(app: AppHandle, id: u64, session: Arc<Mutex<PtySession>>)
             loop {
                 let (batch, dead) = {
                     let guard = session.lock().expect("pty session lock");
-                    (guard.take_batch(), guard.is_dead())
+                    // Why: ConPTY's conhost can keep the output pipe open after
+                    // the child dies, so reader EOF alone is not a death signal;
+                    // poll the child as well (spec §5: exit announced exactly
+                    // once, promptly).
+                    (guard.take_batch(), guard.is_dead() || guard.child_exited())
                 };
                 if !batch.chunks.is_empty()
                     || batch.dropped.is_some()
@@ -407,26 +503,35 @@ fn spawn_pty_forwarder(app: AppHandle, id: u64, session: Arc<Mutex<PtySession>>)
                 std::thread::sleep(Duration::from_millis(2));
             }
 
-            // Flush-before-exit: whatever the reader captured before death
-            // must reach the renderer before the exit announcement.
-            let exit_code = {
+            let (exit_flush, exit_code) = {
                 let mut guard = session.lock().expect("pty session lock");
-                match guard.wait_with_flush(Duration::from_secs(1)) {
-                    Ok((batch, cause)) => {
-                        if !batch.chunks.is_empty() {
-                            let event = PtyDataEvent { id, batch };
-                            if let Err(error) = app.emit(PTY_DATA_EVENT, &event) {
-                                eprintln!("[pty] failed to emit exit flush for {id}: {error}");
-                            }
+                if guard.is_dead() {
+                    match guard.wait_with_flush(Duration::from_secs(1)) {
+                        Ok((batch, cause)) => (batch, exit_code_of(&cause)),
+                        Err(error) => {
+                            eprintln!("[pty] exit wait failed for {id}: {error}");
+                            (mcode_pty::OutputBatch::default(), -1)
                         }
-                        exit_code_of(&cause)
                     }
-                    Err(error) => {
-                        eprintln!("[pty] exit wait failed for {id}: {error}");
-                        -1
-                    }
+                } else {
+                    // Child exited but reader EOF never came (conhost holds
+                    // the pipe). Deterministic teardown, then the final batch.
+                    let (batch, cause) = guard.drain_after_child_exit_and_cause();
+                    (batch, exit_code_of(&cause))
                 }
             };
+            if !exit_flush.chunks.is_empty()
+                || exit_flush.dropped.is_some()
+                || exit_flush.restore_marker.is_some()
+            {
+                let event = PtyDataEvent {
+                    id,
+                    batch: exit_flush,
+                };
+                if let Err(error) = app.emit(PTY_DATA_EVENT, &event) {
+                    eprintln!("[pty] failed to emit exit flush for {id}: {error}");
+                }
+            }
             if let Err(error) = app.emit(
                 PTY_EXIT_EVENT,
                 PtyExitEvent {
