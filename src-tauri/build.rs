@@ -21,6 +21,8 @@ fn main() {
             "app_get_launch_context",
             "ui_consume_pending_skill_share",
             "ui_open_settings",
+            "ui_pick_floating_markdown_document",
+            "ui_pick_floating_workspace_directory",
             "ui_consume_pending_open_settings",
             "ui_open_setup_guide",
             "ui_open_feature_tour",

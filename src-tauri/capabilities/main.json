@@ -11,6 +11,8 @@
     "allow-app-get-launch-context",
     "allow-ui-consume-pending-skill-share",
     "allow-ui-open-settings",
+    "allow-ui-pick-floating-markdown-document",
+    "allow-ui-pick-floating-workspace-directory",
     "allow-ui-consume-pending-open-settings",
     "allow-ui-open-setup-guide",
     "allow-ui-open-feature-tour",

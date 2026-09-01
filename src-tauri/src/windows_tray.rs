@@ -20,6 +20,7 @@ mod windows {
     const MAIN_WINDOW_LABEL: &str = "main";
     const OPEN_MENU_ID: &str = "windows-tray-open";
     const QUIT_MENU_ID: &str = "windows-tray-quit";
+    const SETTINGS_MENU_ID: &str = "windows-tray-settings";
     const NOT_INSTALLED: u8 = 0;
     const INSTALLING: u8 = 1;
     const INSTALLED: u8 = 2;
@@ -58,9 +59,10 @@ mod windows {
 
     fn install_claimed<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         let open = MenuItem::with_id(app, OPEN_MENU_ID, "Open MCode", true, None::<&str>)?;
+        let settings = MenuItem::with_id(app, SETTINGS_MENU_ID, "Settings…", true, None::<&str>)?;
         let separator = PredefinedMenuItem::separator(app)?;
         let quit = MenuItem::with_id(app, QUIT_MENU_ID, "Quit", true, None::<&str>)?;
-        let menu = Menu::with_items(app, &[&open, &separator, &quit])?;
+        let menu = Menu::with_items(app, &[&open, &settings, &separator, &quit])?;
         let icon = app
             .default_window_icon()
             .cloned()
@@ -73,6 +75,13 @@ mod windows {
             .show_menu_on_left_click(false)
             .on_menu_event(|app, event| match event.id() {
                 id if id == OPEN_MENU_ID => restore_main_window(app),
+                // Settings must both reveal the window and push the intent:
+                // unlike Open, the renderer needs the ui:openSettings event
+                // (plus the pending one-shot for a cold renderer) to actually
+                // navigate to the Settings surface.
+                id if id == SETTINGS_MENU_ID => {
+                    let _ = crate::app_menu_events::open_settings(app);
+                }
                 id if id == QUIT_MENU_ID => {
                     restore_main_window(app);
                     app.exit(0);

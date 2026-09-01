@@ -7,6 +7,7 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod app_dialogs;
 mod app_menu_events;
 mod app_shutdown_commands;
 mod desktop_window;
@@ -16,6 +17,7 @@ mod skill_share_deep_link;
 mod updater_commands;
 mod windows_tray;
 
+use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
     app_abort_unacknowledged_update_install_for, app_acknowledge_shutdown_for,
@@ -81,6 +83,22 @@ fn ui_open_feature_tour(app: tauri::AppHandle) -> bool {
 #[tauri::command(rename_as = "ui_openCrashReport")]
 fn ui_open_crash_report(app: tauri::AppHandle) -> bool {
     app_menu_events::open_crash_report(&app)
+}
+
+/// Floating-workspace markdown document picker (`app:pickFloatingMarkdownDocument`).
+#[tauri::command(rename_as = "ui_pickFloatingMarkdownDocument")]
+async fn ui_pick_floating_markdown_document(
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    pick_floating_markdown_document(&app)
+}
+
+/// Floating-workspace directory picker (`app:pickFloatingWorkspaceDirectory`).
+#[tauri::command(rename_as = "ui_pickFloatingWorkspaceDirectory")]
+async fn ui_pick_floating_workspace_directory(
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    pick_floating_workspace_directory(&app)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -584,6 +602,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ui_consume_pending_skill_share,
+            ui_pick_floating_markdown_document,
+            ui_pick_floating_workspace_directory,
             ui_open_settings,
             ui_consume_pending_open_settings,
             ui_open_setup_guide,
