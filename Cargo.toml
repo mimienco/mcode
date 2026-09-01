@@ -21,6 +21,7 @@ license = "MIT"
 repository = "https://github.com/mimienco/mcode"
 
 [workspace.dependencies]
+arboard = "3"
 atomic-write-file = "0.3.1"
 base64 = "0.22.1"
 cap-std = "=4.0.2"

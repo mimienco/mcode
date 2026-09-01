@@ -19,6 +19,9 @@ fn main() {
     let attributes =
         Attributes::default().app_manifest(tauri_build::AppManifest::new().commands(&[
             "app_get_launch_context",
+            "ui_clipboard_read_text",
+            "ui_clipboard_write_text",
+            "ui_clipboard_write_terminal_text",
             "ui_consume_pending_skill_share",
             "ui_open_settings",
             "ui_pick_floating_markdown_document",
@@ -62,6 +65,14 @@ fn main() {
             "pty_has_pty",
             "pty_ack_data",
             "pty_get_size",
+            "ssh_connect",
+            "ssh_accept_host_key",
+            "ssh_exec",
+            "ssh_open_pty",
+            "ssh_write_pty",
+            "ssh_resize_pty",
+            "ssh_close_pty",
+            "ssh_disconnect",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         println!("{error:#}");

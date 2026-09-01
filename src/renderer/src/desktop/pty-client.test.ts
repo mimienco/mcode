@@ -59,10 +59,10 @@ test('typed client maps one method onto each pty command with camelCase args', a
       env: { MCODE_TEST: '1' }
     }
   })
-  assert.deepEqual(calls[1]?.args, { id: 1, data: 'dir\r\n' })
-  assert.deepEqual(calls[2]?.args, { id: 1, cols: 100, rows: 30 })
-  assert.deepEqual(calls[3]?.args, { id: 1 })
-  assert.deepEqual(calls[4]?.args, { id: 1 })
+  assert.deepEqual(calls[1]?.args, { id: '1', data: 'dir\r\n' })
+  assert.deepEqual(calls[2]?.args, { id: '1', cols: 100, rows: 30 })
+  assert.deepEqual(calls[3]?.args, { id: '1' })
+  assert.deepEqual(calls[4]?.args, { id: '1' })
 })
 
 test('spawn omits optional fields that were not provided', async () => {

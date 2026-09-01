@@ -8,15 +8,20 @@ use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_dialogs;
+mod clipboard_commands;
 mod app_menu_events;
 mod app_shutdown_commands;
 mod desktop_window;
 mod filesystem_commands;
 mod pty_commands;
+mod ssh_commands;
 mod skill_share_deep_link;
 mod updater_commands;
 mod windows_tray;
 
+use clipboard_commands::{
+    ui_clipboard_read_text, ui_clipboard_write_text, ui_clipboard_write_terminal_text,
+};
 use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
@@ -48,6 +53,15 @@ pub use pty_commands::{
 use pty_commands::{
     kill_all_sessions_for_shutdown, pty_ack_data, pty_get_size, pty_has_pty, pty_kill, pty_resize,
     pty_spawn, pty_write,
+};
+pub use ssh_commands::{
+    SshAuthDto, SshConnectResponse, SshExecResponse, SshOpenPtyResponse, SshState, SshTargetDto,
+    ssh_accept_host_key_for, ssh_close_pty_for, ssh_connect_for, ssh_disconnect_for,
+    ssh_exec_for, ssh_open_pty_for, ssh_resize_pty_for, ssh_write_pty_for,
+};
+use ssh_commands::{
+    ssh_accept_host_key, ssh_close_pty, ssh_connect, ssh_disconnect, ssh_exec, ssh_open_pty,
+    ssh_resize_pty, ssh_write_pty,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -426,6 +440,7 @@ pub fn run() {
             spawn_watch_forwarder(app.handle().clone(), watch_batches);
             app.manage(filesystem_state);
             app.manage(pty_state);
+            app.manage(ssh_commands::SshState::new());
             let preferences = settings
                 .desktop_window_preferences()
                 .unwrap_or_else(|error| {
@@ -642,9 +657,20 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
-            pty_has_pty,
+            pty_get_size,
+            ssh_connect,
+            ssh_accept_host_key,
+            ssh_exec,
+            ssh_open_pty,
+            ssh_write_pty,
+            ssh_resize_pty,
+            ssh_close_pty,
+            ssh_disconnect,
             pty_ack_data,
-            pty_get_size
+            ui_clipboard_read_text,
+            ui_clipboard_write_text,
+            ui_clipboard_write_terminal_text,
+            pty_get_size,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

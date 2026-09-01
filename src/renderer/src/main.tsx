@@ -1,3 +1,9 @@
+// Why: must run before any component touches window.api — under Tauri there is no
+// Electron preload, so the clipboard bridge is installed over a partial shim.
+import { installTauriWindowApiShim } from './desktop/tauri-window-api-shim'
+
+installTauriWindowApiShim()
+
 import './assets/main.css'
 
 import { StrictMode } from 'react'

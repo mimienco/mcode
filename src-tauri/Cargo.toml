@@ -19,6 +19,7 @@ tauri-build.workspace = true
 
 [dependencies]
 mcode-app = { path = "../crates/mcode-app" }
+arboard.workspace = true
 crossbeam-channel = "0.5"
 mcode-fs = { path = "../crates/mcode-fs" }
 mcode-pty = { path = "../crates/mcode-pty" }
@@ -26,9 +27,11 @@ mcode-process = { path = "../crates/mcode-process" }
 mcode-platform = { path = "../crates/mcode-platform" }
 mcode-settings = { path = "../crates/mcode-settings" }
 mcode-updater = { path = "../crates/mcode-updater" }
+mcode-ssh = { path = "../crates/mcode-ssh" }
 serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true
 tauri-plugin-updater = "=2.10.1"
 tauri-plugin-deep-link = "2.4.10"
 tauri-plugin-dialog = "2.4.0"
+tokio = { version = "1", features = ["sync", "io-util", "time", "rt", "macros", "net"] }
