@@ -1,5 +1,13 @@
 # Current Migration Status
 
+## Wave 6 progress (transport seam implementation)
+
+- Renderer seam landed: `pty-transport-factory.ts` (`createLocalPtyTransport` selecting by `isTauri()`), `pty-transport-tauri.ts` (full (a)-row `PtyTransport` over the typed pty-client), `pty-transport-tauri-dedupe.ts` (`applyPtySeqDedupe` + `installDispatcherEventPort`), `pty-dispatcher.ts` (`PtyEventPort` + `setPtyDispatcherEventPort`, async-tolerant attach, Electron-only resync/ready guards), `pty-client.ts` (`ackData`/`getSize`), `pty-connection.ts:4026` swapped to `createLocalPtyTransport`, `terminal-pty-ack-gate.ts` `window.api?.pty?.ackData?.` guard.
+- Rust command exposures landed: `pty_ack_data` + `pty_get_size` (src-tauri/src/pty_commands.rs with `*_for` seams; registered in lib.rs `generate_handler`, build.rs manifest, capabilities/pty-commands.json). Contract tests: src-tauri/tests/pty_command_contract.rs (5 tests, green).
+- ConPTY exit fix (uncommitted): reader-EOF alone is not a death signal on Windows (conhost holds the output pipe open after child exit). crates/mcode-pty/src/session.rs:205 `child_exited()`, session.rs:58 `SharedMaster::close` (Option-backed; dropping the portable-pty master terminates the pseudoconsole and releases the reader), session.rs:221 `drain_after_child_exit_and_cause()`; src-tauri/src/pty_commands.rs:478 `spawn_pty_forwarder` polls child exit (pty_commands.rs:489), closes the master and joins the reader before the final drain (pty_commands.rs:519), then emits one final flush + a single `pty://exit`.
+- Test evidence: vitest — factory 3, tauri-transport 8, ack-gate 10 (across files), pty-client 9, dispatcher spot checks 52 (all green); cargo test -p mcode-pty 37 green. Orchestrator full gates (workspace/clippy/fmt/tsc) pending.
+- In flight: real `SmokeTestMode::Pty` run (lib.rs `Pty` variant, pty-smoke.html + pty-smoke.ts vite entry landed earlier).
+
 ## Current phase
 
 Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-ssh, 29 tests), the pty command layer (src-tauri pty_spawn/pty_write/pty_resize/pty_kill/pty_has_pty + pty://data / pty://exit events over mcode-pty), and the single-instance guard (crates/mcode-app/src/single_instance.rs, 4 unit tests) are landed; TERMINAL_UI_INTEGRATION.md maps the renderer terminal stack onto the typed pty-client (`src/renderer/src/desktop/pty-client.ts`) and defines the transport-seam pass.
@@ -55,6 +63,16 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 2. SSH command exposure: wire ssh_connect/ssh_exec/ssh_open_pty/ssh_disconnect commands over mcode-ssh, then the pty://replay channel and `remote:`-prefix guards (PTY_CONTRACT_SPEC §9.3).
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
+
+## Session progress (2026-09-01, wave 8 — menus/tray/dialogs slice done)
+
+- HEAD `e549fcfc2d` (adds `9c46c0781c`..`e549fcfc2d` on top of wave 7). Shell phase complete: "Menus, tray, dialogs, deep links" marked done.
+- Tray: Windows tray now has Settings… (Open MCode / Settings… / — / Quit); Settings reveals the window AND pushes `ui:openSettings` + pending one-shot via `app_menu_events::open_settings`.
+- Dialogs: `src-tauri/src/app_dialogs.rs` ports the Electron floating-doc pickers as `ui_pickFloatingMarkdownDocument` / `ui_pickFloatingWorkspaceDirectory` (markdown ext gate incl. trailing-separator defense, canonicalize, default floating-workspace dir; 1 test); tauri-plugin-dialog wired; commands registered (generate_handler/build.rs/main.json).
+- Menu-parity survey (MenuParity scout, full JSON at agent://MenuParity): rewrite has NO Tauri application-menu builder yet — only the tray. Electron register-app-menu.ts structure documented (File/Edit/View/Window/Help; platform split; label-embedded shortcut hints, not accelerators). Remaining app-menu rows all missing (zoom, reload, appearance checkboxes, edit roles, about/updates-in-help). `ui_open_feature_tour`/`ui_open_crash_report` = Rust seam ready, renderer consumer pending. `TitlebarLeftControls` still calls `window.api.ui.popupMenu()` — no Tauri popup equivalent.
+- Verification: desktop lib 16 tests, clippy 0 warnings, fmt clean; hooks suite 26 files/122 tests green (useIpcEvents changes). useAutomationDispatchEvents 6 failures = inherited from original repo (verified against D:/ADE/orca) — do not fix blind.
+- PTY WIP audit (PtyWipAudit scout): uncommitted `session.rs` child-exit teardown + `pty_ack_data`/`pty_get_size` commands are fully wired (define/register/manifest/capability/permissions) and compile clean — concurrent agent's slice, committed later by them; I left it uncommitted.
+- Next agent: (1) Tauri application-menu builder (port register-app-menu.ts tree; Windows/Linux: File[Settings, Exit] Edit View Window Help with autoHideMenuBar equivalent; macOS: app-named menu) fed by app_menu_events seam; add zoom/reload/appearance events; (2) popupMenu equivalent for TitlebarLeftControls; (3) real PTY smoke evidence run (still outstanding since wave 3); (4) editor content parity (Monaco/TextMate) next phase.
 
 ## Session progress (2026-09-01, wave 7 — deep links + menu intents)
 
