@@ -64,6 +64,15 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 11 — Content phase complete)
+
+- HEAD `cb8bcf98c9`. Content phase done: "Monaco, TextMate, xterm specials" + "Tiptap, Mermaid, KaTeX, PDF" both marked complete (27/40).
+- PDF export: `ui_exportHtmlToPdf` command returns an EXPLICIT unsupported error — wry desktop exposes only modal `print()`, no programmatic print-to-pdf (original Electron used hidden BrowserWindow + printToPDF({printBackground:true, pageSize:'A4', margins:0.75in}); documented in module doc). Renderer routing can proceed; success path needs a future approach (OS tooling or wry upstream support). Tiptap/Mermaid/KaTeX confirmed pure renderer npm imports — no migration work.
+- Clipboard image paste: renderer path implemented (`tauri-clipboard-image.ts` + shim upgrade) — invokes `ui_clipboardReadImage` (Rust command pending arboard get_image slice), degrades to null; remote connectionIds return null with a log pending the runtime-upload slice.
+- Gates: desktop suite 19 files / 96 tests; lib 25 tests; clippy 0 warnings; tsc 19 baseline unchanged; fmt clean.
+- Subagent coordination: PdfSlice and ImagePasteSlice both hit transient 429s (model rate limits) — recover by hub wake + retry; one writer per file enforced (terminal_preview signature corruption in wave 10 was caused by dual writers).
+- Next: Native phase (Voice/Sherpa ONNX = FFI crate + model loading, needs sherpa-rs evaluation; Computer use/notifications = tauri-plugin-notification + OS APIs; OS permissions/helpers). Then Release (bundles/signing — needs real credentials), Cutover (Electron removal last), Final.
+
 ## Session progress (2026-09-01, wave 10 — terminal preview transport)
 
 - HEAD `b4fec3297e`. "Monaco, TextMate, xterm specials" remaining sub-slice: rich-Markdown native context menu + spellcheck (WebView2 capability probe), image clipboard, production-webview Monaco/Nim smoke.
