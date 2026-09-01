@@ -8,20 +8,18 @@ use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_dialogs;
-mod clipboard_commands;
 mod app_menu_events;
 mod app_shutdown_commands;
+mod clipboard_commands;
 mod desktop_window;
 mod filesystem_commands;
 mod pty_commands;
-mod ssh_commands;
 mod skill_share_deep_link;
+mod ssh_commands;
+mod terminal_preview;
 mod updater_commands;
 mod windows_tray;
 
-use clipboard_commands::{
-    ui_clipboard_read_text, ui_clipboard_write_text, ui_clipboard_write_terminal_text,
-};
 use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
@@ -34,6 +32,9 @@ pub use app_shutdown_commands::{
 use app_shutdown_commands::{
     app_acknowledge_shutdown, app_cancel_shutdown, app_confirm_and_execute_shutdown,
     app_request_shutdown, handle_exit_requested,
+};
+use clipboard_commands::{
+    ui_clipboard_read_text, ui_clipboard_write_terminal_text, ui_clipboard_write_text,
 };
 use desktop_window::logical_inner_size;
 use desktop_window::{
@@ -56,12 +57,16 @@ use pty_commands::{
 };
 pub use ssh_commands::{
     SshAuthDto, SshConnectResponse, SshExecResponse, SshOpenPtyResponse, SshState, SshTargetDto,
-    ssh_accept_host_key_for, ssh_close_pty_for, ssh_connect_for, ssh_disconnect_for,
-    ssh_exec_for, ssh_open_pty_for, ssh_resize_pty_for, ssh_write_pty_for,
+    ssh_accept_host_key_for, ssh_close_pty_for, ssh_connect_for, ssh_disconnect_for, ssh_exec_for,
+    ssh_open_pty_for, ssh_resize_pty_for, ssh_write_pty_for,
 };
 use ssh_commands::{
     ssh_accept_host_key, ssh_close_pty, ssh_connect, ssh_disconnect, ssh_exec, ssh_open_pty,
     ssh_resize_pty, ssh_write_pty,
+};
+use terminal_preview::{
+    terminal_preview_ack, terminal_preview_connect, terminal_preview_fit, terminal_preview_input,
+    terminal_preview_unsubscribe,
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
@@ -428,6 +433,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(lifecycle)
         .manage(NativeUpdaterState::from_compile_time())
+        .manage(terminal_preview::TerminalPreviewState::default())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -616,6 +622,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            terminal_preview_ack,
+            terminal_preview_connect,
+            terminal_preview_fit,
+            terminal_preview_input,
+            terminal_preview_unsubscribe,
             ui_consume_pending_skill_share,
             ui_pick_floating_markdown_document,
             ui_pick_floating_workspace_directory,
@@ -657,6 +668,8 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            pty_has_pty,
+            pty_ack_data,
             pty_get_size,
             ssh_connect,
             ssh_accept_host_key,
@@ -666,11 +679,9 @@ pub fn run() {
             ssh_resize_pty,
             ssh_close_pty,
             ssh_disconnect,
-            pty_ack_data,
             ui_clipboard_read_text,
             ui_clipboard_write_text,
             ui_clipboard_write_terminal_text,
-            pty_get_size,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

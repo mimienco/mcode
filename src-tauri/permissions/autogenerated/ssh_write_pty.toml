@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ssh-write-pty"
+description = "Enables the ssh_write_pty command without any pre-configured scope."
+commands.allow = ["ssh_write_pty"]
+
+[[permission]]
+identifier = "deny-ssh-write-pty"
+description = "Denies the ssh_write_pty command without any pre-configured scope."
+commands.deny = ["ssh_write_pty"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-terminal-preview-unsubscribe"
+description = "Enables the terminal_preview_unsubscribe command without any pre-configured scope."
+commands.allow = ["terminal_preview_unsubscribe"]
+
+[[permission]]
+identifier = "deny-terminal-preview-unsubscribe"
+description = "Denies the terminal_preview_unsubscribe command without any pre-configured scope."
+commands.deny = ["terminal_preview_unsubscribe"]

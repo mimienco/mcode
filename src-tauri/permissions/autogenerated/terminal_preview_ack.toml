@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-terminal-preview-ack"
+description = "Enables the terminal_preview_ack command without any pre-configured scope."
+commands.allow = ["terminal_preview_ack"]
+
+[[permission]]
+identifier = "deny-terminal-preview-ack"
+description = "Denies the terminal_preview_ack command without any pre-configured scope."
+commands.deny = ["terminal_preview_ack"]

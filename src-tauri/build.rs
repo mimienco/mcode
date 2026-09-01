@@ -19,6 +19,11 @@ fn main() {
     let attributes =
         Attributes::default().app_manifest(tauri_build::AppManifest::new().commands(&[
             "app_get_launch_context",
+            "terminal_preview_ack",
+            "terminal_preview_connect",
+            "terminal_preview_fit",
+            "terminal_preview_input",
+            "terminal_preview_unsubscribe",
             "ui_clipboard_read_text",
             "ui_clipboard_write_text",
             "ui_clipboard_write_terminal_text",

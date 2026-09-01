@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ssh-resize-pty"
+description = "Enables the ssh_resize_pty command without any pre-configured scope."
+commands.allow = ["ssh_resize_pty"]
+
+[[permission]]
+identifier = "deny-ssh-resize-pty"
+description = "Denies the ssh_resize_pty command without any pre-configured scope."
+commands.deny = ["ssh_resize_pty"]
