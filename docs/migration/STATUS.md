@@ -76,6 +76,13 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-01, wave 13 — voice FFI spike committed)
+
+- HEAD `b6cd7b4196`. Native phase 3/3 spike: `crates/mcode-voice` — raw extern bindings to sherpa-onnx-c-api.dll v1.12.37 (prebuilt DLLs already in node_modules/sherpa-onnx-win-x64). Online (streaming) surface bound: FeatureConfig/ModelConfig (full v1.12.37 field order)/RecognizerConfig/Result/Stream, layout pinned by offset+size tests on x64. 11 unit tests (wav PCM16 parser + layouts), clippy 0 warnings, fmt clean. `#[ignore]`d E2E model test documents the acceptance run (MCODE_SHERPA_TEST_MODEL_DIR + DLL on PATH). build.rs links the DLL; `examples/dump.rs` for manual probing.
+- Go/no-go status: compile+layout GO; live DLL decode requires the runtime smoke (set MCODE_SHERPA_TEST_MODEL_DIR to a downloaded model, run `cargo test -p mcode-voice -- --ignored` with the DLL dir on PATH) — next agent should run it before porting the full stt-worker surface.
+- Survey (agent://VoiceSurvey) remains the implementation map: 8-step order (models M, session M, renderer client S, cloud/keystore S-M, macOS TCC M, mobile RPC M, packaging S-M). feedAudio hot path = Channel/ArrayBuffer, NOT JSON. Non-ASCII path → ASCII ProgramData cache rule.
+- Next agent: (1) run the voice runtime smoke (download smallest model zipformer-zh-14m ~57 MB or point MCODE_SHERPA_TEST_MODEL_DIR at an existing speech-models dir); (2) port speech model catalog/download manager (step 2, M); (3) notification renderer shim merge still open; (4) Release phase rows need external resources (CI hosts, signing credentials) — blocked externally; Cutover last.
+
 ## Session progress (2026-09-01, wave 12 — notifications/permissions committed, voice surveyed)
 
 - HEAD `c2ec15a28c` (+ permissions `5fb2c03828`, notifications `c2ec15a28c`). Native phase 2/3: "Computer use, notifications" + "OS permissions, helpers" done; voice survey complete, implementation next session.
