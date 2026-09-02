@@ -76,6 +76,13 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 18 — voice session service done; steps 2–3 complete)
+
+- HEAD `90b246b663`. Voice steps 2–3 COMPLETE: catalog (`3e2e9ce4c3`), download manager (`606681a3ea`), session service (`90b246b663`).
+- session.rs: one-session-per-owner (`dictation_already_active`), stopping-flag drop (ghost-text bug prevention), Final-before-teardown, `session_model` for the model-in-use deletion guard, ASCII-cache mirror rule (model-cache-path.ts) on Windows. 4 unit tests. lib 22 tests; clippy 0 warnings.
+- Remaining for voice parity (voice.sherpa row): src-tauri speech commands wiring (speech_getCatalog/getModelStates/downloadModel/cancelDownload/deleteModel/startDictation/feedAudio/stopDictation + transcript events via tauri emit), reqwest-backed fetch_byte_range adapter for download_file, renderer speech client + shim merge, cloud/keystore, macOS TCC, mobile RPC. Parity-matrix row can move to in_progress.
+- Next: (1) src-tauri speech command wiring (small: service objects already exist — manage(SessionService, DownloadManager) + commands); (2) renderer speech client + shim; (3) Final phase items (multi-platform needs CI; perf/security review; release notes/runbook).
+
 ## Session progress (2026-09-02, wave 17 — voice catalog + download manager)
 
 - HEAD `606681a3ea`. Voice steps 2–3 partially landed: catalog (done, committed `3e2e9ce4c3`) + download manager (done, committed `606681a3ea`). Session service (step 3b) + src-tauri wiring + renderer client remain for the next session.
