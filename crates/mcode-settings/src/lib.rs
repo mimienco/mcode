@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 pub mod crossgrade_discovery;
+pub mod crossgrade_staging;
 mod workspace_session_bindings;
 mod workspace_session_contract;
 mod workspace_session_reconciliation;

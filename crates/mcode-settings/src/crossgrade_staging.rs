@@ -950,12 +950,11 @@ mod tests {
             host_keys_bytes()
         );
         assert!(
-            target
+            !target
                 .path()
                 .join(ELECTRON_AGENT_HOOKS_DIR)
                 .join(".keep")
                 .exists()
-                == false
         );
     }
 
