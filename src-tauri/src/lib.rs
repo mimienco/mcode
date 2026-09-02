@@ -8,15 +8,18 @@ use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod app_dialogs;
+mod app_menu;
 mod app_menu_events;
 mod app_shutdown_commands;
 mod clipboard_commands;
+mod crossgrade_commands;
 mod desktop_window;
 mod export_commands;
 mod filesystem_commands;
 mod notification_commands;
 mod os_permissions;
 mod pty_commands;
+mod runtime_rpc;
 mod skill_share_deep_link;
 mod speech_commands;
 mod ssh_commands;
@@ -25,6 +28,7 @@ mod updater_commands;
 mod windows_tray;
 
 use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
+use app_menu::ui_popup_app_menu;
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
     app_abort_unacknowledged_update_install_for, app_acknowledge_shutdown_for,
@@ -40,6 +44,7 @@ use app_shutdown_commands::{
 use clipboard_commands::{
     ui_clipboard_read_text, ui_clipboard_write_terminal_text, ui_clipboard_write_text,
 };
+use crossgrade_commands::{settings_crossgrade_migrate, settings_crossgrade_status};
 use desktop_window::logical_inner_size;
 use desktop_window::{
     NativeWindowState, attach_placement_persistence, fit_inner_size_to_work_area,
@@ -487,6 +492,39 @@ pub fn run() {
             if smoke_mode != Some(SmokeTestMode::RestartChild) {
                 build_main_window(app, smoke_mode, preferences, native_window_state)?;
             }
+            // Application menu (register-app-menu.ts port) — registered for
+            // every mode; popup for the titlebar ··· button rides the same
+            // Menu. Menu registration is idempotent through set_menu.
+            if let Err(error) = app_menu::register(app.handle()) {
+                eprintln!("[menu] failed to register the application menu: {error}");
+            }
+            // Headless-host runtime RPC (runtime-rpc.ts newline-JSON CLI
+            // plane): advertise mcode-runtime.json and serve status.get so
+            // `mcode status`/`mcode serve` discover this instance. Started
+            // in every mode; graphStatus flips to "ready" once the window is
+            // up. Failure to start is logged, not fatal — a host without
+            // RPC is degraded, not broken.
+            match app.path().app_data_dir() {
+                Ok(user_data_path) => {
+                    let window_ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                        smoke_mode != Some(SmokeTestMode::RestartChild),
+                    ));
+                    match runtime_rpc::RuntimeRpcHost::start(&user_data_path, window_ready) {
+                        Ok(host) => {
+                            app.manage(host);
+                        }
+                        Err(error) => {
+                            eprintln!(
+                                "[runtime-rpc] failed to start ({}); the CLI cannot discover this instance: {error}",
+                                error.code()
+                            );
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("[runtime-rpc] app data dir unavailable: {error}");
+                }
+            }
             match smoke_mode {
                 Some(SmokeTestMode::Quit) | Some(SmokeTestMode::Updater) => {
                     let app_handle = app.handle().clone();
@@ -718,6 +756,9 @@ pub fn run() {
             ui_speech_start_dictation,
             ui_speech_feed_audio,
             ui_speech_stop_dictation,
+            ui_popup_app_menu,
+            settings_crossgrade_status,
+            settings_crossgrade_migrate,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

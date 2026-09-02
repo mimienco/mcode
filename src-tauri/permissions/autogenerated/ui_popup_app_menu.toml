@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-popup-app-menu"
+description = "Enables the ui_popup_app_menu command without any pre-configured scope."
+commands.allow = ["ui_popup_app_menu"]
+
+[[permission]]
+identifier = "deny-ui-popup-app-menu"
+description = "Denies the ui_popup_app_menu command without any pre-configured scope."
+commands.deny = ["ui_popup_app_menu"]

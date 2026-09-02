@@ -52,6 +52,9 @@
     "allow-ui-speech-cancel-download",
     "allow-ui-speech-start-dictation",
     "allow-ui-speech-feed-audio",
-    "allow-ui-speech-stop-dictation"
+    "allow-ui-speech-stop-dictation",
+    "allow-ui-popup-app-menu",
+    "allow-settings-crossgrade-status",
+    "allow-settings-crossgrade-migrate"
   ]
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-settings-crossgrade-status"
+description = "Enables the settings_crossgrade_status command without any pre-configured scope."
+commands.allow = ["settings_crossgrade_status"]
+
+[[permission]]
+identifier = "deny-settings-crossgrade-status"
+description = "Denies the settings_crossgrade_status command without any pre-configured scope."
+commands.deny = ["settings_crossgrade_status"]

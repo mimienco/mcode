@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-speech-get-model-states"
+description = "Enables the ui_speech_get_model_states command without any pre-configured scope."
+commands.allow = ["ui_speech_get_model_states"]
+
+[[permission]]
+identifier = "deny-ui-speech-get-model-states"
+description = "Denies the ui_speech_get_model_states command without any pre-configured scope."
+commands.deny = ["ui_speech_get_model_states"]

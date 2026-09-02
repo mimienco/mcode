@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-speech-cancel-download"
+description = "Enables the ui_speech_cancel_download command without any pre-configured scope."
+commands.allow = ["ui_speech_cancel_download"]
+
+[[permission]]
+identifier = "deny-ui-speech-cancel-download"
+description = "Denies the ui_speech_cancel_download command without any pre-configured scope."
+commands.deny = ["ui_speech_cancel_download"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-speech-start-dictation"
+description = "Enables the ui_speech_start_dictation command without any pre-configured scope."
+commands.allow = ["ui_speech_start_dictation"]
+
+[[permission]]
+identifier = "deny-ui-speech-start-dictation"
+description = "Denies the ui_speech_start_dictation command without any pre-configured scope."
+commands.deny = ["ui_speech_start_dictation"]

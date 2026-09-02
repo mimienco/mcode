@@ -94,6 +94,9 @@ fn main() {
             "ui_speech_start_dictation",
             "ui_speech_feed_audio",
             "ui_speech_stop_dictation",
+            "ui_popup_app_menu",
+            "settings_crossgrade_status",
+            "settings_crossgrade_migrate",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         println!("{error:#}");

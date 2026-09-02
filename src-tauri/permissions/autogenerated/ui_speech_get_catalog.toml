@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ui-speech-get-catalog"
+description = "Enables the ui_speech_get_catalog command without any pre-configured scope."
+commands.allow = ["ui_speech_get_catalog"]
+
+[[permission]]
+identifier = "deny-ui-speech-get-catalog"
+description = "Denies the ui_speech_get_catalog command without any pre-configured scope."
+commands.deny = ["ui_speech_get_catalog"]
