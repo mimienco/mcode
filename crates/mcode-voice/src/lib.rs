@@ -9,6 +9,7 @@
 
 pub mod catalog;
 pub mod download;
+pub mod session;
 pub mod sherpa;
 
 pub use sherpa::{
