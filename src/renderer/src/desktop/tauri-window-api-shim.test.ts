@@ -16,10 +16,41 @@ type UiBridgeProbe = {
   performNativePaste: (options?: { mode?: 'paste' | 'paste-and-match-style' }) => void
 }
 
+type SpeechBridgeProbe = {
+  getCatalog: () => Promise<unknown[]>
+  getModelStates: () => Promise<unknown[]>
+  startDictation: (
+    modelId: string,
+    hotwords: string[] | undefined,
+    sessionId: string
+  ) => Promise<void>
+  feedAudio: (samples: Float32Array, sampleRate: number, sessionId?: string) => Promise<void>
+  stopDictation: (sessionId?: string) => Promise<void>
+  onPartialTranscript: (callback: (data: unknown) => void) => () => void
+}
+
+type WindowApiProbe = { ui: UiBridgeProbe; speech: SpeechBridgeProbe }
+
 import type { installTauriWindowApiShim } from './tauri-window-api-shim'
 
 function loadShim(): Promise<{ installTauriWindowApiShim: typeof installTauriWindowApiShim }> {
   return import('./tauri-window-api-shim')
+}
+
+function apiProbe(): WindowApiProbe {
+  return window.api as unknown as WindowApiProbe
+}
+
+async function installUnderTauri(invokeResult?: unknown): Promise<ReturnType<typeof vi.fn>> {
+  isTauriMock.mockReturnValue(true)
+  const coreModule = await import('@tauri-apps/api/core')
+  const invoke = coreModule.invoke as ReturnType<typeof vi.fn>
+  if (invokeResult !== undefined) {
+    invoke.mockResolvedValue(invokeResult)
+  }
+  const { installTauriWindowApiShim } = await loadShim()
+  installTauriWindowApiShim()
+  return invoke
 }
 
 describe('tauri-window-api-shim', () => {
@@ -55,19 +86,28 @@ describe('tauri-window-api-shim', () => {
   })
 
   it('installs a clipboard ui bridge over a missing window.api under Tauri', async () => {
-    isTauriMock.mockReturnValue(true)
-    const { installTauriWindowApiShim } = await loadShim()
-    installTauriWindowApiShim()
+    await installUnderTauri()
 
-    const ui = (window.api as unknown as { ui: UiBridgeProbe }).ui
+    const ui = apiProbe().ui
     expect(ui.readClipboardText).toBeTypeOf('function')
     expect(ui.writeClipboardText).toBeTypeOf('function')
     expect(ui.writeTerminalClipboardText).toBeTypeOf('function')
     expect(ui.saveClipboardImageAsTempFile).toBeTypeOf('function')
   })
 
+  it('installs a speech bridge over a missing window.api under Tauri', async () => {
+    await installUnderTauri()
+
+    const speech = apiProbe().speech
+    expect(speech.getCatalog).toBeTypeOf('function')
+    expect(speech.getModelStates).toBeTypeOf('function')
+    expect(speech.startDictation).toBeTypeOf('function')
+    expect(speech.feedAudio).toBeTypeOf('function')
+    expect(speech.stopDictation).toBeTypeOf('function')
+    expect(speech.onPartialTranscript).toBeTypeOf('function')
+  })
+
   it('overrides only the clipboard members of an existing ui bridge', async () => {
-    isTauriMock.mockReturnValue(true)
     const performNativePaste = vi.fn()
     window.api = {
       ui: {
@@ -76,24 +116,17 @@ describe('tauri-window-api-shim', () => {
       }
     } as unknown as Window['api']
 
-    const { installTauriWindowApiShim } = await loadShim()
-    installTauriWindowApiShim()
+    await installUnderTauri()
 
-    const ui = (window.api as unknown as { ui: UiBridgeProbe }).ui
+    const ui = apiProbe().ui
     expect(ui.performNativePaste).toBe(performNativePaste)
     await expect(ui.readClipboardText()).resolves.not.toBe('electron')
   })
 
   it('bridges writeClipboardText and readClipboardText through the core invoke', async () => {
-    isTauriMock.mockReturnValue(true)
-    const coreModule = await import('@tauri-apps/api/core')
-    const invoke = coreModule.invoke as ReturnType<typeof vi.fn>
-    invoke.mockResolvedValue('tauri text')
+    const invoke = await installUnderTauri('tauri text')
 
-    const { installTauriWindowApiShim } = await loadShim()
-    installTauriWindowApiShim()
-
-    const ui = (window.api as unknown as { ui: UiBridgeProbe }).ui
+    const ui = apiProbe().ui
     await ui.writeClipboardText('payload')
     expect(invoke).toHaveBeenCalledWith('ui_clipboardWriteText', { text: 'payload' })
 
@@ -103,35 +136,87 @@ describe('tauri-window-api-shim', () => {
     })
   })
 
-  it('saveClipboardImageAsTempFile returns null when ui_clipboardReadImage is unavailable', async () => {
-    isTauriMock.mockReturnValue(true)
-    const { installTauriWindowApiShim } = await loadShim()
-    installTauriWindowApiShim()
+  it('routes speech dictation calls through the renamed Rust commands', async () => {
+    const invoke = await installUnderTauri([])
 
-    const ui = (window.api as unknown as { ui: UiBridgeProbe }).ui
+    const speech = apiProbe().speech
+    await speech.startDictation('model-1', undefined, 'session-1')
+    expect(invoke).toHaveBeenCalledWith('ui_speechStartDictation', {
+      sessionId: 'session-1',
+      owner: 'desktop',
+      modelId: 'model-1'
+    })
+
+    await speech.feedAudio(new Float32Array([0.5, 1]), 16000, 'session-1')
+    expect(invoke).toHaveBeenCalledWith('ui_speechFeedAudio', {
+      sessionId: 'session-1',
+      samples: [0.5, 1],
+      sampleRate: 16000
+    })
+
+    await speech.stopDictation('session-1')
+    expect(invoke).toHaveBeenCalledWith('ui_speechStopDictation', { sessionId: 'session-1' })
+  })
+
+  it('maps the Rust model-state record into the Electron state array', async () => {
+    await installUnderTauri({
+      'whisper-tiny': 'ready',
+      'zipformer-streaming-zh-14m': 'idle',
+      'paraformer-bilingual-zh-en': 'downloading'
+    })
+
+    const speech = apiProbe().speech
+    await expect(speech.getModelStates()).resolves.toEqual([
+      { id: 'whisper-tiny', status: 'ready' },
+      { id: 'zipformer-streaming-zh-14m', status: 'not-downloaded' },
+      { id: 'paraformer-bilingual-zh-en', status: 'downloading' }
+    ])
+  })
+
+  it('lets the Tauri bridge override an existing speech member', async () => {
+    const electronGetCatalog = (): Promise<unknown[]> => Promise.resolve([{ id: 'electron-only' }])
+    window.api = {
+      speech: {
+        getCatalog: electronGetCatalog
+      }
+    } as unknown as Window['api']
+
+    await installUnderTauri([])
+
+    const speech = apiProbe().speech
+    expect(speech.getCatalog).not.toBe(electronGetCatalog)
+    await expect(speech.getCatalog()).resolves.not.toEqual([{ id: 'electron-only' }])
+    await expect(speech.startDictation('m', undefined, 's')).resolves.toBeUndefined()
+  })
+
+  it('returns a synchronous unlisten from speech subscriptions', async () => {
+    await installUnderTauri()
+
+    const speech = apiProbe().speech
+    const unlisten = speech.onPartialTranscript(() => undefined)
+    expect(typeof unlisten).toBe('function')
+    expect(() => unlisten()).not.toThrow()
+  })
+
+  it('saveClipboardImageAsTempFile returns null when ui_clipboardReadImage is unavailable', async () => {
+    await installUnderTauri()
+
+    const ui = apiProbe().ui
     await expect(ui.saveClipboardImageAsTempFile()).resolves.toBeNull()
   })
 
   it('saveClipboardImageAsTempFile returns the temp path from ui_clipboardReadImage', async () => {
-    isTauriMock.mockReturnValue(true)
-    const coreModule = await import('@tauri-apps/api/core')
-    const invoke = coreModule.invoke as ReturnType<typeof vi.fn>
-    invoke.mockResolvedValue('C:\\Temp\\mcode-paste-1.png')
+    const invoke = await installUnderTauri('C:\\Temp\\mcode-paste-1.png')
 
-    const { installTauriWindowApiShim } = await loadShim()
-    installTauriWindowApiShim()
-
-    const ui = (window.api as unknown as { ui: UiBridgeProbe }).ui
+    const ui = apiProbe().ui
     await expect(ui.saveClipboardImageAsTempFile()).resolves.toBe('C:\\Temp\\mcode-paste-1.png')
     expect(invoke).toHaveBeenCalledWith('ui_clipboardReadImage')
   })
 
   it('saveClipboardImageAsTempFile returns null for a remote connection without invoking', async () => {
-    isTauriMock.mockReturnValue(true)
-    const { installTauriWindowApiShim } = await loadShim()
-    installTauriWindowApiShim()
+    await installUnderTauri()
 
-    const ui = (window.api as unknown as { ui: UiBridgeProbe }).ui
+    const ui = apiProbe().ui
     await expect(
       ui.saveClipboardImageAsTempFile({ connectionId: 'ssh-remote-1' })
     ).resolves.toBeNull()

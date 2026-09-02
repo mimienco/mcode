@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 import type { PreloadApi } from '../../../preload/api-types'
+import { tauriSpeechBridge } from './tauri-speech-shim'
 import { tauriClipboardClient } from './tauri-clipboard-client'
 import {
   saveClipboardImageAsTempFile,
@@ -24,8 +25,9 @@ const tauriUiClipboardBridge = {
 
 /**
  * Installs a minimal `window.api` shim before the React tree renders when the
- * renderer boots under Tauri (no Electron preload). The clipboard bridge is
- * merged over any existing `window.api`; under Electron this is a no-op.
+ * renderer boots under Tauri (no Electron preload). The clipboard and speech
+ * bridges are merged over any existing `window.api`; under Electron this is a
+ * no-op.
  */
 export function installTauriWindowApiShim(): void {
   if (!isTauri()) {
@@ -37,6 +39,10 @@ export function installTauriWindowApiShim(): void {
     ui: {
       ...existing?.ui,
       ...tauriUiClipboardBridge
+    },
+    speech: {
+      ...existing?.speech,
+      ...tauriSpeechBridge
     }
   } as unknown as Window['api']
 }
