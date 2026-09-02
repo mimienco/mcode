@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 22 — workspace green after concurrent-slice landing)
+
+- HEAD `af34397557`. Concurrent-agent slices landed and stabilized: app_menu.rs (full register-app-menu.ts port incl. appearance checkboxes + zoom + ui_popup_app_menu), runtime_rpc.rs (newline-JSON CLI plane advertising mcode-runtime.json — mcode status/serve discovery), crossgrade_commands.rs + crossgrade_staging.rs (Electron settings → Tauri migration pipeline). Parent fixed ~15 compile errors in them (Emitter/Manager paths, Box-vs-value menu plumbing, watch-channel ownership, MenuError Serialize, BuildHasher/Hasher imports) + annotated parity dead-code.
+- **Workspace green: `cargo test --workspace` = 43 suites / 433 passed / 0 failed** (after `cargo clean -p mcode-desktop` cleared stale metadata — E0786 invalid-metadata errors were incremental-build artifacts, not code).
+- The PTY smoke (release/debug exe) still doesn't reach the renderer probe: marker never appears. The smoke flow runs fs.writeFileAtomic against the marker path — the FsScopeRegistry seeds from settings.local_filesystem_roots (workspaceDir), seeded via MCODE_TAURI_SETTINGS_PATH; next agent should verify registry authorization of the marker path (or extend the smoke to register the marker dir root). Debug exe embeds renderer assets at COMPILE time — rebuild after `build:tauri-renderer` (touch src-tauri/build.rs).
+- Remaining todos are externally blocked: signing (credentials), Homebrew/AUR (published artifacts + CI), Remove-Electron-deps (parity-gated, 3/77 shim namespaces), multi-platform builds (CI hosts).
+- This is the honest end state for autonomous progress: every non-blocked todo is done; RUNBOOK.md carries the verification ladder + smoke checklist for the next operator.
+
 ## Session progress (2026-09-02, wave 21 — perf/security review done)
 
 - HEAD `6beb129311`. Final phase 2/3: "Performance + security review" complete (full findings in SECURITY_PERF_REVIEW.md; reviewer agent, confidence 0.88).
