@@ -155,4 +155,5 @@ const SHERPA_EXPORTS: &[&str] = &[
     "SherpaOnnxOnlineStreamReset",
     "SherpaOnnxOnlineStreamInputFinished",
     "SherpaOnnxOnlineStreamIsEndpoint",
+    "SherpaOnnxGetVersionStr",
 ];

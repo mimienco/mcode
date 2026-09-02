@@ -33,6 +33,16 @@ mcode-platform = { path = "../crates/mcode-platform" }
 mcode-settings = { path = "../crates/mcode-settings" }
 mcode-updater = { path = "../crates/mcode-updater" }
 mcode-ssh = { path = "../crates/mcode-ssh" }
+mcode-voice = { path = "../crates/mcode-voice" }
+# Blocking download transport for the speech model fetcher. Match
+# tauri-plugin-updater's TLS stack: rustls via the ring provider
+# (no-provider + explicit rustls dep keeps a single provider in the binary).
+reqwest = { version = "0.13", default-features = false, features = [
+    "blocking",
+    "rustls-no-provider",
+    "stream",
+] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true

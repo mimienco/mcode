@@ -44,6 +44,13 @@
     "allow-developer-permissions-get-status",
     "allow-developer-permissions-request",
     "allow-developer-permissions-open-settings",
-    "allow-developer-permissions-test-local-network-connection"
+    "allow-developer-permissions-test-local-network-connection",
+    "allow-ui-speech-get-catalog",
+    "allow-ui-speech-get-model-states",
+    "allow-ui-speech-download-model",
+    "allow-ui-speech-cancel-download",
+    "allow-ui-speech-start-dictation",
+    "allow-ui-speech-feed-audio",
+    "allow-ui-speech-stop-dictation"
   ]
 }

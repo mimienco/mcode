@@ -18,6 +18,7 @@ mod notification_commands;
 mod os_permissions;
 mod pty_commands;
 mod skill_share_deep_link;
+mod speech_commands;
 mod ssh_commands;
 mod terminal_preview;
 mod updater_commands;
@@ -66,6 +67,11 @@ pub use pty_commands::{
 use pty_commands::{
     kill_all_sessions_for_shutdown, pty_ack_data, pty_get_size, pty_has_pty, pty_kill, pty_resize,
     pty_spawn, pty_write,
+};
+use speech_commands::{
+    ui_speech_cancel_download, ui_speech_download_model, ui_speech_feed_audio,
+    ui_speech_get_catalog, ui_speech_get_model_states, ui_speech_start_dictation,
+    ui_speech_stop_dictation,
 };
 pub use ssh_commands::{
     SshAuthDto, SshConnectResponse, SshExecResponse, SshOpenPtyResponse, SshState, SshTargetDto,
@@ -454,12 +460,13 @@ pub fn run() {
             skill_share_deep_link::register(app.handle().clone());
             app_menu_events::register(app.handle());
             let pty_state = NativePtyState::new();
+            app.manage(ssh_commands::SshState::new());
+            app.manage(speech_commands::voice_state(app));
             let settings = SettingsService::new(settings_path(app)?);
             let (filesystem_state, watch_batches) = NativeFilesystemState::new(settings.clone());
             spawn_watch_forwarder(app.handle().clone(), watch_batches);
             app.manage(filesystem_state);
             app.manage(pty_state);
-            app.manage(ssh_commands::SshState::new());
             let preferences = settings
                 .desktop_window_preferences()
                 .unwrap_or_else(|error| {
@@ -704,6 +711,13 @@ pub fn run() {
             developer_permissions_request,
             developer_permissions_open_settings,
             developer_permissions_test_local_network_connection,
+            ui_speech_get_catalog,
+            ui_speech_get_model_states,
+            ui_speech_download_model,
+            ui_speech_cancel_download,
+            ui_speech_start_dictation,
+            ui_speech_feed_audio,
+            ui_speech_stop_dictation,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");
