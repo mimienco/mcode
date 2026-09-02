@@ -96,6 +96,16 @@ fn write_atomic(path: &Path, metadata: &RuntimeMetadata) -> Result<(), MetadataE
     let temp_path = path.with_extension("json.tmp");
     std::fs::write(&temp_path, &serialized)
         .map_err(|error| MetadataError::Write(error.to_string()))?;
+    // Why: the file carries the CLI authToken; the TS original enforced 0600
+    // (secure-file.ts) — keep the user-only permission on POSIX. Windows ACL
+    // restriction needs the windows-registry/acl toolchain and stays a
+    // documented deviation (the parent dir is already user-scoped).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|error| MetadataError::Write(error.to_string()))?;
+    }
     // Windows: AtomicWriteFile-equivalent — a plain rename over an existing
     // file fails, so remove-then-rename. The temp file makes the window
     // where the path has no file as short as one syscall.

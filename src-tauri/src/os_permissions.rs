@@ -105,8 +105,7 @@ fn windows_status(id: DeveloperPermissionId) -> DeveloperPermissionStatus {
 /// Reports the status of every developer permission (same set and order as
 /// Electron's `developerPermissions:getStatus`).
 #[tauri::command(rename_as = "developerPermissions_getStatus")]
-pub(crate) async fn developer_permissions_get_status(
-) -> Vec<DeveloperPermissionState> {
+pub(crate) async fn developer_permissions_get_status() -> Vec<DeveloperPermissionState> {
     ALL_PERMISSION_IDS
         .iter()
         .map(|id| DeveloperPermissionState {
@@ -135,10 +134,7 @@ pub(crate) async fn developer_permissions_request(
 /// Windows there is nothing equivalent to open for any permission id, so this
 /// is a documented no-op.
 #[tauri::command(rename_as = "developerPermissions_openSettings")]
-pub(crate) async fn developer_permissions_open_settings(
-    _id: DeveloperPermissionId,
-) {
-}
+pub(crate) async fn developer_permissions_open_settings(_id: DeveloperPermissionId) {}
 
 /// Mirrors `testLocalNetworkConnection` from
 /// `src/main/ipc/local-network-connection-test.ts`: connects to a LAN host and
@@ -167,18 +163,26 @@ pub(crate) async fn developer_permissions_test_local_network_connection(
     let host = host.unwrap();
     let addr = format!("{host}:{port}");
     let timeout = std::time::Duration::from_millis(4000);
-    let failure = match tokio::time::timeout(
-        timeout,
-        tokio::net::TcpStream::connect(&addr),
-    )
-    .await
-    {
+    let failure = match tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr)).await {
+        // Why: classification runs on the RESOLVED peer address, not the
+        // hostname — the renderer must not be able to use this probe as a
+        // CSP-bypassing reachability oracle for non-LAN hosts (Electron
+        // parity: local-network-connection-test.ts INVALID_TARGET).
+        Ok(Ok(stream))
+            if !is_lan_address(
+                &stream
+                    .peer_addr()
+                    .map(|a| a.to_string())
+                    .unwrap_or_default(),
+            ) =>
+        {
+            Some("invalid-target")
+        }
         Ok(Ok(_)) => None,
         Ok(Err(error)) => Some(classify_connect_error(error.kind())),
         Err(_) => Some("timeout"),
     };
     let ok = failure.is_none();
-    let _ = is_lan_address(&host); // retained for parity with Electron's LAN gate
     LocalNetworkConnectionTestResult {
         ok,
         host,
@@ -233,8 +237,7 @@ fn is_lan_address(address: &str) -> bool {
 /// Mirrors Electron's `failureFromChild` classification over connect errors.
 fn classify_connect_error(kind: std::io::ErrorKind) -> &'static str {
     match kind {
-        std::io::ErrorKind::PermissionDenied
-        | std::io::ErrorKind::ConnectionRefused => "refused",
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ConnectionRefused => "refused",
         std::io::ErrorKind::TimedOut => "timeout",
         _ => "failed",
     }
@@ -346,11 +349,7 @@ mod tests {
     #[test]
     fn local_network_test_reports_invalid_target_for_blank_host() {
         let result = futures_lite_block(async {
-            developer_permissions_test_local_network_connection(
-                "   ".to_owned(),
-                8080,
-            )
-            .await
+            developer_permissions_test_local_network_connection("   ".to_owned(), 8080).await
         });
         assert!(!result.ok);
         assert_eq!(result.failure, Some("invalid-target"));
@@ -360,11 +359,7 @@ mod tests {
     fn local_network_test_classifies_refused_connection() {
         // Port 1 on loopback is refused by the OS, not filtered.
         let result = futures_lite_block(async {
-            developer_permissions_test_local_network_connection(
-                "127.0.0.1".to_owned(),
-                1,
-            )
-            .await
+            developer_permissions_test_local_network_connection("127.0.0.1".to_owned(), 1).await
         });
         assert!(!result.ok);
         assert_eq!(result.failure, Some("refused"));
@@ -377,6 +372,9 @@ mod tests {
             status: DeveloperPermissionStatus::Unsupported,
         })
         .unwrap();
-        assert_eq!(json, serde_json::json!({ "id": "full-disk-access", "status": "unsupported" }));
+        assert_eq!(
+            json,
+            serde_json::json!({ "id": "full-disk-access", "status": "unsupported" })
+        );
     }
 }

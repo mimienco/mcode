@@ -30,6 +30,7 @@
     "allow-ui-open-setup-guide",
     "allow-ui-open-feature-tour",
     "allow-ui-open-crash-report",
+    "allow-ui-export-html-to-pdf",
     "allow-app-stage-shutdown-checkpoint",
     "allow-app-request-shutdown",
     "allow-app-acknowledge-shutdown",

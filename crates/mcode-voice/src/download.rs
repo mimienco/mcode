@@ -131,17 +131,12 @@ pub fn download_file(
     let destination = model_dir.join(file.name);
     let part_path = model_dir.join(format!("{}.part", file.name));
 
-    let mut hasher = Sha256::new();
     let mut downloaded: u64 = 0;
 
-    // Resume: if a .part exists, its byte count is the resume offset and its
-    // bytes are already-verified content prefix (we re-hash it to be safe).
+    // Resume: a .part's byte count is the next Range offset. Its prefix hash
+    // is NOT tracked here — hash_file re-covers the whole file at finalize.
     if part_path.exists() {
-        let mut part = std::fs::File::open(&part_path)?;
-        let mut buf = Vec::new();
-        part.read_to_end(&mut buf)?;
-        hasher.update(&buf);
-        downloaded = buf.len() as u64;
+        downloaded = std::fs::metadata(&part_path)?.len();
     }
 
     let mut attempt: usize = 0;
@@ -168,7 +163,6 @@ pub fn download_file(
                 if read == 0 {
                     break;
                 }
-                hasher.update(&chunk[..read]);
                 part.write_all(&chunk[..read])?;
                 downloaded += read as u64;
                 on_progress(downloaded.min(total), total);

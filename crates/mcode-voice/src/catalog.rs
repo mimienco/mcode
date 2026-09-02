@@ -21,8 +21,8 @@ pub struct ModelCatalogEntry<'a> {
 /// URL for a catalog file: pinned revision, `?download=true` as upstream.
 pub fn file_url(entry: &ModelCatalogEntry, file: &ModelFileSpec) -> String {
     format!(
-        "https://huggingface.co/{}/{}/resolve/{}/{}?download=true",
-        entry.repo, entry.repo, entry.revision, file.name
+        "https://huggingface.co/{}/resolve/{}/{}?download=true",
+        entry.repo, entry.revision, file.name
     )
 }
 
@@ -344,8 +344,13 @@ mod tests {
             .unwrap();
         let file = &entry.files[0];
         let url = file_url(entry, file);
-        assert!(url.contains("/resolve/"), "{url}");
-        assert!(url.ends_with("?download=true"), "{url}");
-        assert!(url.contains(entry.revision), "{url}");
+        // Why: exact-shape assertion — a doubled-repo regression here 404s
+        // every download while the contains-checks below would still pass.
+        let expected = format!(
+            "https://huggingface.co/{}/resolve/{}/{}?download=true",
+            entry.repo, entry.revision, file.name
+        );
+        assert_eq!(url, expected, "{url}");
+        assert_eq!(url.matches(entry.repo).count(), 1, "{url}");
     }
 }
