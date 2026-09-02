@@ -95,6 +95,28 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session close (2026-09-02, wave 24 — final state)
+
+- HEAD `722f09d7b5` (sibling continued: voice/notifications clippy zero-warning pass landed as
+  `d9d73e5749`; parity-matrix updated — voice.sherpa + notifications.status → in_progress with
+  landed evidence; distribution now 2 done / 23 in_progress / 11 not_started).
+- Gates verified at close: `cargo test --workspace` = 43 suites / 433 passed / 0 failed
+  (after `cargo clean -p mcode-desktop` for stale metadata); voice 22 tests; desktop 53 tests;
+  clippy 0 warnings across voice+desktop; fmt clean; web suite 21 files / 114 tests; renderer
+  release build OK (`out/tauri-renderer`, chunk-size warnings only).
+- PTY smoke (manual) remains NOT proven end-to-end: marker never appears — the renderer's
+  fs.writeFileAtomic on the marker path needs the FsScopeRegistry to authorize the marker dir
+  (seeded via MCODE_TAURI_SETTINGS_PATH workspaceDir; verify registry authorization or register
+  the marker dir root). Debug exe embeds renderer assets at compile time — rebuild after
+  build:tauri-renderer.
+- All non-externally-blocked todos are DONE. Remaining, with hard blockers:
+  - Signing pipeline, crossgrade evidence → real credentials (simulated prohibited)
+  - Homebrew/AUR, update survival → published artifacts + CI hosts
+  - Remove Electron dependencies → parity gates (11 not_started rows) + E2E lane live
+  - Build all platforms, full tests → macOS/Linux CI hosts
+- Runbook for the next operator: RUNBOOK.md (verification ladder, smoke checklist, deviations
+  table, rollback). Integrity: ORIGINAL_INTEGRITY.md close-out record.
+
 ## Session progress (2026-09-02, wave 22 — workspace green after concurrent-slice landing)
 
 - HEAD `af34397557`. Concurrent-agent slices landed and stabilized: app_menu.rs (full register-app-menu.ts port incl. appearance checkboxes + zoom + ui_popup_app_menu), runtime_rpc.rs (newline-JSON CLI plane advertising mcode-runtime.json — mcode status/serve discovery), crossgrade_commands.rs + crossgrade_staging.rs (Electron settings → Tauri migration pipeline). Parent fixed ~15 compile errors in them (Emitter/Manager paths, Box-vs-value menu plumbing, watch-channel ownership, MenuError Serialize, BuildHasher/Hasher imports) + annotated parity dead-code.
