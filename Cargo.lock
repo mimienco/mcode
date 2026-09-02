@@ -3046,6 +3046,11 @@ dependencies = [
 [[package]]
 name = "mcode-voice"
 version = "1.4.178"
+dependencies = [
+ "hex",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+]
 
 [[package]]
 name = "mcode-wire"

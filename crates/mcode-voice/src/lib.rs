@@ -8,6 +8,7 @@
 //! test. Offline/sense-voice recognition is intentionally out of scope.
 
 pub mod catalog;
+pub mod download;
 pub mod sherpa;
 
 pub use sherpa::{
