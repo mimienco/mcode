@@ -95,6 +95,20 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 28 — fs + computer slices stabilized)
+
+- HEAD `2a50919dc9`. Sibling slices landed and repaired to green: fs log-tail commands
+  (fs_read/start/stopLocalLogTail port), fs download-transfer registry (TTL sweep,
+  stage/advance/finish), computer-use script exec port (30 s timeout + 1 s force-kill parity,
+  resolution chain incl. packaged resources), plus crossgrade/lib.rs wiring repairs (dropped
+  mod declarations; truncated fs_read_local_log_tail rebuilt from the shared local-log-tail-types
+  contract). Desktop lib tests 64 (up from 53); clippy 0 warnings; fmt clean.
+- Cutover steps landed so far: step 1 (@electron-toolkit/preload removed, `b8d2f2222a`);
+  chunk-budget --tauri lane (`cd0a90f900`); computer-use exec resolved the computer.use port path.
+- Remaining todos stay externally blocked (signing credentials; published artifacts/CI for
+  Homebrew/AUR + multi-platform builds; Remove-Electron-deps gated on the 11 not_started parity
+  rows, of which computer.use + ssh.workspaces + notifications.status are now in_progress).
+
 ## Session progress (2026-09-02, wave 27 — computer.use feasibility resolved)
 
 - computer.use is NOT blocked on a Tauri capability gap: the Electron implementation (`src/main/computer/`,
