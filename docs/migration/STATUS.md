@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 19 — speech commands wired)
+
+- HEAD `e230a32096`. voice.sherpa parity row: commands landed — src-tauri speech_commands.rs with 7 ui_speech* commands (catalog/states/download/cancel/start/feed/stop), reqwest blocking + rustls transport, speech:// events, lazily spawned recognizer thread (DLL delay-load via LoadLibraryExW; failure → speech://error, session discipline preserved). DLL-free surface: catalog/states/download/start/stop; DLL surface: partials/finals.
+- mcode-voice build.rs: SherpaOnnxGetVersionStr added to import-lib exports (was breaking desktop test linking); stale cached .lib regenerated.
+- Renderer speech client + shim namespace merge remain (next agent; pattern = tauri-clipboard-client + shim merge; namespaces tracked in CUTOVER_INVENTORY §3).
+- Gates: desktop lib 36 tests, voice 22 tests, clippy 0 warnings (sibling crossgrade_staging needless_option_as_deref fixed in passing).
+- Next: (1) renderer speech client + shim merge; (2) crossgrade pipeline completion (sibling agent's untracked crossgrade_staging.rs); (3) Final phase: multi-platform (CI hosts), perf/security review, release notes/runbook.
+
 ## Session progress (2026-09-02, wave 18 — voice session service done; steps 2–3 complete)
 
 - HEAD `90b246b663`. Voice steps 2–3 COMPLETE: catalog (`3e2e9ce4c3`), download manager (`606681a3ea`), session service (`90b246b663`).
