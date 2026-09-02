@@ -16,6 +16,8 @@ mod crossgrade_commands;
 mod desktop_window;
 mod export_commands;
 mod filesystem_commands;
+mod fs_download_commands;
+mod fs_log_tail_commands;
 mod notification_commands;
 mod os_permissions;
 mod pty_commands;
