@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 20 — renderer speech bridge done)
+
+- HEAD `0f9ed9565a`. voice.sherpa renderer surface landed: tauri-speech-client + tauri-speech-shim (window.api.speech namespace merged; catalog enriched with Electron metadata + cloud OpenAI key stubs; model states mapped to the Electron contract; onStopped bridged post-stop; deleteModel throws so VoicePane surfaces its error toast rather than fake success). Dictation UI (DictationController/use-audio-capture) now runs unchanged under Tauri.
+- shim-coverage.ts: 77 window.api namespaces tracked — covered: notifications/speech/ui-clipboard-subset; 74 pending. This is the preload-deletion prerequisite metric (update per merge).
+- Gates: desktop suite 21 files / 114 tests; oxlint 0; tsc no new errors. Stale gitignored tsc-emit artifacts (*.js/*.d.ts next to desktop sources) removed — they shadowed .ts files in vitest resolution.
+- Remaining voice.sherpa items (row → in_progress): live recognizer E2E with a real mic run (needs the DLL + model at runtime — manual smoke), hotwords pass-through, deleteModel Rust command.
+- Next: (1) crossgrade pipeline completion (sibling agent's in-flight crossgrade_staging.rs — untracked, owner pending); (2) Final phase: perf/security review pass, release notes/runbook, multi-platform builds (needs CI hosts); (3) parity-matrix.json row updates for voice.sherpa + notifications.status.
+
 ## Session progress (2026-09-02, wave 19 — speech commands wired)
 
 - HEAD `e230a32096`. voice.sherpa parity row: commands landed — src-tauri speech_commands.rs with 7 ui_speech* commands (catalog/states/download/cancel/start/feed/stop), reqwest blocking + rustls transport, speech:// events, lazily spawned recognizer thread (DLL delay-load via LoadLibraryExW; failure → speech://error, session discipline preserved). DLL-free surface: catalog/states/download/start/stop; DLL surface: partials/finals.
