@@ -76,6 +76,14 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 17 — voice catalog + download manager)
+
+- HEAD `606681a3ea`. Voice steps 2–3 partially landed: catalog (done, committed `3e2e9ce4c3`) + download manager (done, committed `606681a3ea`). Session service (step 3b) + src-tauri wiring + renderer client remain for the next session.
+- catalog.rs: generated from the authoritative TS (bracket-tracked parser, CRLF-aware): 10 local models, 35 files, pinned HF revisions + per-file sha256; 4 unit tests incl. streaming-layout rules (zipformer=3 onnx, paraformer=2).
+- download.rs: transport-neutral core (caller supplies byte-range fetcher; Tauri command layer owns HTTP) — .part resume with re-hash, 1/2/4s retry ladder, sha256 verify, atomic rename, per-model state map + cancel (paused), progress callbacks. 3 unit tests. lib 18 tests; clippy 0 warnings.
+- Subagent reliability note: model-rate-limit 429s killed both parallel slices repeatedly with zero files landed after 3 retries each — parent took over. Budget 1 subagent retry max before takeover.
+- Next: (1) session.rs (dictation sessions: start/feed/stop, ASCII-cache rule, stopping-flag discipline); (2) src-tauri speech commands wiring; (3) renderer speech client + shim namespace merge; (4) then Final-phase items.
+
 ## Session progress (2026-09-01, wave 16 — cutover inventory + E2E plan)
 
 - HEAD `7e7e6e22ab`. Cutover 2/3: "Dead code audit" + "Replace E2E, clean configs" marked done (docs, no deletions).
