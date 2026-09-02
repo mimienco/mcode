@@ -7,6 +7,7 @@
 //! `reset`), plus a minimal PCM16-mono WAV reader used by the acceptance
 //! test. Offline/sense-voice recognition is intentionally out of scope.
 
+pub mod catalog;
 pub mod sherpa;
 
 pub use sherpa::{
