@@ -545,14 +545,21 @@
       "currentBehavior": "Speech capture/transcription using Sherpa ONNX resources and platform audio permissions.",
       "targetRustModule": "crates/mcode-voice/src/sherpa",
       "targetCommand": ["speech_start", "speech_stop", "speech_models"],
-      "tests": [],
+      "tests": [
+        "catalog 4 tests",
+        "download 3 tests",
+        "session 4 tests",
+        "layout/wav 11 tests",
+        "live DLL decode smoke (GO)"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "crates/mcode-voice: FFI vs sherpa-onnx-c-api.dll v1.12.37 (node_modules prebuilt); src-tauri speech_commands 7 commands; renderer speech bridge via shim; live decode verified vs zipformer-zh-14m",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "computer.use",
@@ -654,14 +661,18 @@
       "currentBehavior": "Native notifications, task/session status, sound, badges, and focus/navigation behavior.",
       "targetRustModule": "crates/mcode-platform/src/notifications",
       "targetCommand": ["notification_show", "notification_permission"],
-      "tests": [],
+      "tests": [
+        "notification_commands 2 tests",
+        "desktop suite tauri-speech/shim 114 tests incl. notification client"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "tauri-plugin-notification wired; dispatch/status/openSettings/dismiss commands + renderer shim merge (tauri-notification-client)",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "i18n.theme",

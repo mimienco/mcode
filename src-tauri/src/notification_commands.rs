@@ -103,12 +103,10 @@ pub(crate) fn ui_notification_dismiss(_ids: Vec<String>) -> Result<bool, String>
 mod tests {
     #[test]
     fn windows_permission_is_granted_by_default() {
-        // Compile-time platform mapping check; runs everywhere.
-        let status = if cfg!(target_os = "windows") {
-            "granted"
-        } else {
-            "granted"
-        };
+        // Windows maps notification permission to granted at the command
+        // layer (os-permission TCC work is a separate surface); the expected
+        // value is pinned so a future platform split fails loudly here.
+        let status = "granted";
         assert_eq!(super::ui_notification_get_permission_status(), status);
     }
 

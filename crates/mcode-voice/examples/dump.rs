@@ -11,7 +11,8 @@ fn main() {
     b.extend_from_slice(&1u16.to_le_bytes());
     b.extend_from_slice(&1u16.to_le_bytes());
     b.extend_from_slice(&16000i32.to_le_bytes());
-    b.extend_from_slice(&(16000i32 * 1 * 16 / 8).to_le_bytes());
+    // WAV byte-rate field = sample-rate (16000) * channels (1) * width/8 (2).
+    b.extend_from_slice(&32000i32.to_le_bytes());
     b.extend_from_slice(&2u16.to_le_bytes());
     b.extend_from_slice(&16u16.to_le_bytes());
     b.extend_from_slice(b"data");

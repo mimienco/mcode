@@ -274,7 +274,7 @@ mod tests {
         let resolved = resolve_model_dir(requested);
         if cfg!(target_os = "windows") {
             let text = resolved.to_string_lossy();
-            assert!(text.chars().all(|c| c.is_ascii()), "{text}");
+            assert!(text.is_ascii(), "{text}");
         } else {
             assert_eq!(resolved, requested);
         }

@@ -260,7 +260,7 @@ mod tests {
         let mut progress: Vec<(u64, u64)> = Vec::new();
         let result = download_file(
             &manager,
-            &entry,
+            entry,
             &file,
             &dir,
             |_, _| {
@@ -281,7 +281,7 @@ mod tests {
         // Hash mismatch path: serve different bytes.
         let result = download_file(
             &manager,
-            &entry,
+            entry,
             &file,
             &dir,
             |_, _| {
