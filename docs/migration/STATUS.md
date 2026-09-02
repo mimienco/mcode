@@ -95,6 +95,20 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 25 — cutover step 1 landed)
+
+- HEAD `b8d2f2222a`. **Cutover step 1 executed**: `@electron-toolkit/preload` dependency removed
+  (package.json + pnpm-lock + the inert `externalizeDeps.exclude` in electron.vite.config.ts).
+  Verified: 0 require sites in source; pnpm install clean (after killing a lingering OpenConsole
+  process that held the node-pty conpty.dll copy target — EBUSY, resolved by renaming locked
+  files aside); desktop suite 21 files / 114 tests + desktop lib 53 tests green; web lane green.
+- Step 3 pre-check: `verify-web-build.mjs` passes; the Tauri (`vite.tauri.config.ts`) and web
+  (`vite.web.config.ts`) lanes are the only ones the Tauri app needs. electron.vite.config.ts
+  itself remains until step 2's E2E-lane replacement (its build output is the Electron main).
+- Next cutover steps remain gated: step 2 (packaging shell) needs `packaging.release` green +
+  E2E lane; step 3 (electron.vite.config.ts) can follow once the chunk-budget check is ported.
+- Runbook/chunk note: renderer build warns on >500 kB chunks (pre-existing baseline, not new).
+
 ## Session close (2026-09-02, wave 24 — final state)
 
 - HEAD `722f09d7b5` (sibling continued: voice/notifications clippy zero-warning pass landed as
