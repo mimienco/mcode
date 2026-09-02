@@ -145,7 +145,6 @@
     "repro:live-remote-realistic-freeze": "node config/scripts/live-remote-realistic-freeze-repro.mjs"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@floating-ui/dom": "1.7.6",
     "@linear/sdk": "^82.1.0",

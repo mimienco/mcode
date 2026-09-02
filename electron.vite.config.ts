@@ -288,11 +288,7 @@ export const electronViteConfig: UserConfig = {
     }
   },
   preload: {
-    build: {
-      externalizeDeps: {
-        exclude: ['@electron-toolkit/preload']
-      }
-    }
+    build: {}
   },
   renderer: {
     resolve: {
