@@ -95,6 +95,17 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 26 — chunk-budget tauri lane)
+
+- HEAD `cd0a90f900`. check-renderer-chunk-budgets.mjs gains `--tauri`: same 250 kB shell /
+  200 kB section budgets gate `out/tauri-renderer` (tauri shell measures 75.5 kB — well inside;
+  the electron lane measures 125 kB). `check:renderer-chunk-budgets:tauri` script added. This
+  unblocks CUTOVER step 3's "port the chunk-budget check first" precondition.
+- electron.vite.config.ts deletion (step 3 proper) still references 11 files
+  (electron-builder.config, electron-vite-target.config.ts, knip.json, tsconfig.node.json, two
+  contract tests, cli parity test) — step 3 stays gated behind step 2 (E2E lane replacement)
+  exactly as CUTOVER_INVENTORY §8 orders it.
+
 ## Session progress (2026-09-02, wave 25 — cutover step 1 landed)
 
 - HEAD `b8d2f2222a`. **Cutover step 1 executed**: `@electron-toolkit/preload` dependency removed
