@@ -110,12 +110,24 @@ export function checkManifest({
 }
 
 if (process.argv[1] && process.argv[1].endsWith('check-renderer-chunk-budgets.mjs')) {
-  const result = checkRendererChunkBudgets()
+  // Tauri lane: the same budgets gate the out/tauri-renderer dist
+  // (build:tauri-renderer) — pass --tauri to check that manifest instead.
+  const tauriLane = process.argv.includes('--tauri')
+  const result = checkRendererChunkBudgets(
+    tauriLane
+      ? {
+          manifestPath: 'out/tauri-renderer/.vite/manifest.json',
+          rootDir: 'out/tauri-renderer'
+        }
+      : undefined
+  )
   for (const violation of result.violations) {
     console.error(`renderer chunk budget violation: ${violation}`)
   }
   if (!result.ok) {
     process.exit(1)
   }
-  console.log(`renderer chunk budgets OK (Settings shell graph: ${result.shellBytes} bytes)`)
+  console.log(
+    `renderer chunk budgets OK (${tauriLane ? 'tauri lane, ' : ''}Settings shell graph: ${result.shellBytes} bytes)`
+  )
 }
