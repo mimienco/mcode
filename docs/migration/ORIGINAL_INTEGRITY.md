@@ -118,3 +118,17 @@ No migration command has written to the original repository.
 - Verdict: forward drift in both trees is user work, not migration
   activity. Every migration command against the original is read-only. The
   frozen snapshot at docs/migration/source-snapshot remains the oracle.
+
+## Final integrity check — 2026-09-02 (migration wave-21 close)
+
+- Original HEAD at close: `5c13ecce88` (advanced externally from the captured `6740f9c…` through
+  `6c8bd7a…`, `f052c83…`, `2a2b517a85`, `9772da844a`, `56578c26e6` (rebrand) — all user work).
+- Original working tree: 115 dirty paths / 35 modified tracked files (271 insertions, 103
+  deletions) — consistent with the user's active WIP documented in waves 10/14; the migration
+  never wrote to the original.
+- Read-only backup unchanged: `D:\ADE\orca-electron-backup-20260829-095236` (manifest PASS as of
+  the wave-10 record; files remain read-only).
+- Rewrite branch `rewrite/tauri-full` @ `883e3ae669`: 44 commits ahead of the wave-5 handoff
+  (`b0c749cb58`), 131 files / +12,253 −354 across the final sprint.
+- Snapshot preserved: `docs/migration/source-snapshot` (HEAD `6740f9c…`, manifest.sha256 with
+  16,751 entries) — the original's identity at migration start is reproducible from it.
