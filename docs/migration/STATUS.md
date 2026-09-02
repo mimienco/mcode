@@ -76,6 +76,15 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 21 — perf/security review done)
+
+- HEAD `6beb129311`. Final phase 2/3: "Performance + security review" complete (full findings in SECURITY_PERF_REVIEW.md; reviewer agent, confidence 0.88).
+- BLOCKER fixed: catalog.rs file_url doubled entry.repo → every model download URL 404'd (contains-checks passed; test now asserts exact URL shape + single occurrence).
+- SHOULD-FIX fixed: (1) os_permissions testLocalNetworkConnection classifies on the resolved peer address (was a discarded let _ — renderer could probe non-LAN hosts via the CSP escape hatch); (2) runtime_metadata.json (authToken) now 0600 on POSIX (Windows ACL = documented deviation); (3) allow-ui-export-html-to-pdf granted (registered-but-ungranted wiring defect); (4) download.rs dead streaming hasher + resume read_to_end RAM spike removed.
+- NOTEs (accepted): feedAudio number[] JSON overhead (Channel/ArrayBuffer upgrade flagged in code + ingest cap suggested), clipboard 16 MiB post-allocation cap (arboard limitation), terminal-preview O(n) eviction acceptable at batch sizes (connect accepts unknown pty ids — renderer-DoS only), deep-link asymmetries all fail-closed (no bypass), CSP adequate (style unsafe-inline standard), zeroize absent on E2EE keys (hygiene note), dictation sessions never time out (best-effort reaper suggested).
+- Verified clean: capability ACLs least-privilege, fs commands scope-authorized (fail-closed), speech paths catalog-gated (no ../ escape), open-settings constant args, pty argv-vector + env scrub, updater fail-closed on empty pubkey, SSH TOFU, single-instance guard exists but NOT yet invoked from lib.rs run() (flagged; PARITY_MATRIX.md:16).
+- Next: release notes/runbook/integrity check (last non-blocked todo); signing/crossgrade + Homebrew/AUR + multi-platform remain externally blocked.
+
 ## Session progress (2026-09-02, wave 20 — renderer speech bridge done)
 
 - HEAD `0f9ed9565a`. voice.sherpa renderer surface landed: tauri-speech-client + tauri-speech-shim (window.api.speech namespace merged; catalog enriched with Electron metadata + cloud OpenAI key stubs; model states mapped to the Electron contract; onStopped bridged post-stop; deleteModel throws so VoicePane surfaces its error toast rather than fake success). Dictation UI (DictationController/use-audio-capture) now runs unchanged under Tauri.
