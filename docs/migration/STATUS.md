@@ -95,6 +95,21 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 3. Relay host daemon (mcode-relay host RPC) and wire-protocol v2 handshake against mobile pairing.
 4. Crossgrade: settings migration path from Electron data dir; updater channel endpoints need real credentials for signed-artifact evidence.
 
+## Session progress (2026-09-02, wave 27 — computer.use feasibility resolved)
+
+- computer.use is NOT blocked on a Tauri capability gap: the Electron implementation (`src/main/computer/`,
+  6.5k LOC) execs a standalone platform script — `native/computer-use-windows/runtime.ps1`
+  (UIAutomation + System.Drawing/WinForms) / `native/computer-use-linux/runtime.py` — via
+  `execFile` with a 30 s timeout and force-kill grace (desktop-script-provider-bridge.ts). Zero
+  Electron APIs involved; the desktopCapturer/robotjs assumption was wrong.
+- Tauri port is mechanical (M): `computer_desktop_script_exec` Rust command = resolve script via
+  the same candidates chain (env override → packaged resources → dev tree), spawn
+  powershell/python3 with identical args, enforce the 30 s timeout + 1 s force-kill, return
+  {stdout, stderr}. Script assets bundle as resources (same pattern as notification-sounds).
+  Renderer consumer (`desktop-script-provider-client.ts` + orchestration) stays renderer-side.
+- Next session can land this slice; then computer.use → in_progress. macOS screen-recording
+  permission parity (macos-computer-use-permission-status.ts) maps to os_permissions.rs.
+
 ## Session progress (2026-09-02, wave 26 — chunk-budget tauri lane)
 
 - HEAD `cd0a90f900`. check-renderer-chunk-budgets.mjs gains `--tauri`: same 250 kB shell /
