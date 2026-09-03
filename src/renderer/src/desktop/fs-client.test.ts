@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, expect, it as test, vi } from 'vitest'
 import {
   FS_CHANGED_EVENT,
+  FS_LOG_TAIL_CHANGED_EVENT,
   createRuntimeFsClient,
   createTauriFsClient,
   type FsApi,
@@ -215,6 +216,322 @@ test('runtime wrapper loads the Tauri client once and reuses it', async () => {
 
 test('the watcher event name matches the native emit contract', () => {
   assert.equal(FS_CHANGED_EVENT, 'fs://changed')
+})
+// ─── Task-C remainder: routing tests (one happy path + error passthrough) ───
+
+const ERROR_PAYLOAD = {
+  code: 'fs_transfer_unknown',
+  context: { operation: 'fs_append_download_chunk', requestId: null, intent: null },
+  message: 'Download session not found',
+  userMessage: 'MCode could not complete this download. Try again.'
+}
+
+function failingInvokeClient(code: string) {
+  return createTauriFsClient(
+    async () => {
+      throw { ...ERROR_PAYLOAD, code }
+    },
+    async () => () => undefined
+  )
+}
+
+test('task-c methods route onto their fs_* commands with camelCase args', async () => {
+  const { calls, invoke } = recordedInvoke({
+    fs_authorize_external_path: () => null,
+    fs_list_files: () => ['src/a.ts', 'src/b.ts'],
+    fs_list_markdown_documents: () => [
+      {
+        filePath: 'D:/repo/README.md',
+        relativePath: 'README.md',
+        basename: 'README.md',
+        name: 'README'
+      }
+    ],
+    fs_import_external_paths: () => ({
+      results: [
+        {
+          sourcePath: 'C:/drop/x.txt',
+          status: 'imported',
+          destPath: 'D:/repo/x.txt',
+          kind: 'file',
+          renamed: false
+        }
+      ]
+    }),
+    fs_stage_external_paths_for_runtime_upload: () => ({
+      sources: [
+        {
+          sourcePath: 'C:/drop/x.txt',
+          status: 'staged',
+          name: 'x.txt',
+          kind: 'file',
+          entries: [{ relativePath: '', kind: 'file', contentBase64: 'aGk=' }]
+        }
+      ]
+    }),
+    fs_resolve_dropped_paths_for_agent: () => ({
+      resolvedPaths: ['C:/drop/x.txt'],
+      skipped: [],
+      failed: []
+    }),
+    fs_download_remote_file: () => ({ canceled: true }),
+    fs_download_remote_folder: () => ({ canceled: false, destinationPath: 'D:/out/folder' }),
+    fs_save_downloaded_file: () => ({ canceled: false, destinationPath: 'D:/out/saved.bin' }),
+    fs_start_download: () => ({
+      canceled: false,
+      transferId: 't-1',
+      destinationPath: 'D:/out/chunk.bin'
+    }),
+    fs_append_download_chunk: () => ({ ok: true }),
+    fs_finish_download: () => ({ canceled: false, destinationPath: 'D:/out/chunk.bin' }),
+    fs_cancel_download: () => ({ ok: true }),
+    fs_read_local_log_tail: () => ({
+      contentBase64: 'aGk=',
+      nextByteOffset: 2,
+      fileSize: 2,
+      fileIdentity: '0:0:1',
+      hasMore: false,
+      reset: false
+    }),
+    fs_start_local_log_tail: () => null,
+    fs_stop_local_log_tail: () => null
+  })
+  const client = createTauriFsClient(invoke, async () => () => undefined)
+
+  await client.authorizeExternalPath({ targetPath: 'C:/drop' })
+  assert.deepEqual(
+    await client.listFiles({
+      rootPath: 'D:/repo',
+      searchQuery: 'a',
+      maxResults: 5,
+      requestToken: 'tok'
+    }),
+    ['src/a.ts', 'src/b.ts']
+  )
+  assert.deepEqual(await client.listMarkdownDocuments({ rootPath: 'D:/repo' }), [
+    {
+      filePath: 'D:/repo/README.md',
+      relativePath: 'README.md',
+      basename: 'README.md',
+      name: 'README'
+    }
+  ])
+  const imported = await client.importExternalPaths({
+    sourcePaths: ['C:/drop/x.txt'],
+    destDir: 'D:/repo'
+  })
+  assert.equal(imported.results[0]?.status, 'imported')
+  const staged = await client.stageExternalPathsForRuntimeUpload({ sourcePaths: ['C:/drop/x.txt'] })
+  assert.equal(staged.sources[0]?.status, 'staged')
+  assert.deepEqual(
+    await client.resolveDroppedPathsForAgent({ paths: ['C:/drop/x.txt'], worktreePath: 'D:/repo' }),
+    {
+      resolvedPaths: ['C:/drop/x.txt'],
+      skipped: [],
+      failed: []
+    }
+  )
+  assert.deepEqual(
+    await client.downloadFile({ filePath: '/remote/f.bin', connectionId: 'ssh-1' }),
+    { canceled: true }
+  )
+  assert.deepEqual(await client.downloadFolder({ dirPath: '/remote/dir', connectionId: 'ssh-1' }), {
+    canceled: false,
+    destinationPath: 'D:/out/folder'
+  })
+  assert.deepEqual(
+    await client.saveDownloadedFile({
+      suggestedName: 'saved.bin',
+      content: 'aGk=',
+      encoding: 'base64'
+    }),
+    {
+      canceled: false,
+      destinationPath: 'D:/out/saved.bin'
+    }
+  )
+  assert.deepEqual(await client.startDownloadedFile({ suggestedName: 'chunk.bin' }), {
+    canceled: false,
+    transferId: 't-1',
+    destinationPath: 'D:/out/chunk.bin'
+  })
+  assert.deepEqual(
+    await client.appendDownloadedFileChunk({ transferId: 't-1', contentBase64: 'aGk=' }),
+    { ok: true }
+  )
+  assert.deepEqual(await client.finishDownloadedFile({ transferId: 't-1' }), {
+    canceled: false,
+    destinationPath: 'D:/out/chunk.bin'
+  })
+  assert.deepEqual(await client.cancelDownloadedFile({ transferId: 't-1' }), { ok: true })
+  assert.deepEqual(
+    await client.readLocalLogTail({ filePath: 'D:/logs/a.log', fromByteOffset: 0 }),
+    {
+      contentBase64: 'aGk=',
+      nextByteOffset: 2,
+      fileSize: 2,
+      fileIdentity: '0:0:1',
+      hasMore: false,
+      reset: false
+    }
+  )
+  await client.startLocalLogTail({ filePath: 'D:/logs/a.log', subscriptionId: 'sub-1' })
+  await client.stopLocalLogTail({ subscriptionId: 'sub-1' })
+
+  assert.deepEqual(
+    calls.map(({ command }) => command),
+    [
+      'fs_authorize_external_path',
+      'fs_list_files',
+      'fs_list_markdown_documents',
+      'fs_import_external_paths',
+      'fs_stage_external_paths_for_runtime_upload',
+      'fs_resolve_dropped_paths_for_agent',
+      'fs_download_remote_file',
+      'fs_download_remote_folder',
+      'fs_save_downloaded_file',
+      'fs_start_download',
+      'fs_append_download_chunk',
+      'fs_finish_download',
+      'fs_cancel_download',
+      'fs_read_local_log_tail',
+      'fs_start_local_log_tail',
+      'fs_stop_local_log_tail'
+    ]
+  )
+  assert.deepEqual(calls[0]?.args, { targetPath: 'C:/drop' })
+  assert.deepEqual(calls[1]?.args, {
+    rootPath: 'D:/repo',
+    excludePaths: undefined,
+    requestToken: 'tok',
+    maxResults: 5,
+    searchQuery: 'a'
+  })
+  assert.deepEqual(calls[6]?.args, { filePath: '/remote/f.bin', connectionId: 'ssh-1' })
+  assert.deepEqual(calls[10]?.args, { transferId: 't-1', contentBase64: 'aGk=' })
+  assert.deepEqual(calls[14]?.args, { filePath: 'D:/logs/a.log', subscriptionId: 'sub-1' })
+})
+
+test('task-c methods pass native error codes through DesktopCommandError', async () => {
+  // Why: per-code clients created inside thunks — a fixed array of promises
+  // would fire every rejection before the loop attaches its catch,
+  // surfacing unhandled rejections, and one shared stub could not emit
+  // per-command codes.
+  const cases: [() => Promise<unknown>, string][] = [
+    [
+      () =>
+        failingInvokeClient('fs_transfer_unknown').appendDownloadedFileChunk({
+          transferId: 'gone',
+          contentBase64: 'aGk='
+        }),
+      'fs_transfer_unknown'
+    ],
+    [
+      () => failingInvokeClient('fs_transfer_unknown').finishDownloadedFile({ transferId: 'gone' }),
+      'fs_transfer_unknown'
+    ],
+    [
+      () =>
+        failingInvokeClient('fs_remote_unsupported').downloadFile({
+          filePath: '/remote/f.bin',
+          connectionId: 'ssh-1'
+        }),
+      'fs_remote_unsupported'
+    ],
+    [
+      () =>
+        failingInvokeClient('fs_remote_unsupported').downloadFolder({
+          dirPath: '/remote/dir',
+          connectionId: 'ssh-1'
+        }),
+      'fs_remote_unsupported'
+    ],
+    [
+      () =>
+        failingInvokeClient('fs_remote_unsupported').resolveDroppedPathsForAgent({
+          paths: ['x'],
+          worktreePath: 'D:/repo',
+          connectionId: 'ssh-1'
+        }),
+      'fs_remote_unsupported'
+    ],
+    [
+      () =>
+        failingInvokeClient('fs_invalid_argument').startLocalLogTail({
+          filePath: 'D:/logs/a.log',
+          subscriptionId: 'sub'
+        }),
+      'fs_invalid_argument'
+    ]
+  ]
+  for (const [run, code] of cases) {
+    const error = await run().catch((caught: unknown) => caught)
+    assert.ok(error instanceof DesktopCommandError, `expected DesktopCommandError for ${code}`)
+    assert.equal(error.code, code)
+  }
+})
+
+test('log-tail subscription filters malformed payloads and unsubscribes', async () => {
+  const listeners: ((event: { payload: unknown }) => void)[] = []
+  let unlistenCalls = 0
+  const client = createTauriFsClient(
+    async () => null,
+    async (_event, listener) => {
+      listeners.push(listener)
+      return () => {
+        unlistenCalls += 1
+      }
+    }
+  )
+
+  const received: { subscriptionId: string; eventType: string }[] = []
+  const subscription = await client.onLocalLogTailChanged((payload) => received.push(payload))
+  assert.equal(listeners.length, 1)
+
+  listeners[0]?.({ payload: { subscriptionId: 'sub-1', eventType: 'change' } })
+  listeners[0]?.({ payload: { subscriptionId: 'sub-1', eventType: 'bogus' } })
+  listeners[0]?.({ payload: { unrelated: true } })
+
+  assert.deepEqual(received, [{ subscriptionId: 'sub-1', eventType: 'change' }])
+
+  subscription()
+  assert.equal(unlistenCalls, 1)
+})
+
+test('the log-tail event name matches the native emit contract', () => {
+  assert.equal(FS_LOG_TAIL_CHANGED_EVENT, 'fs://log-tail-changed')
+})
+
+test('runtime wrapper routes task-c methods to the resolved client once', async () => {
+  let tauriLoads = 0
+  let routed = 0
+  const client = createRuntimeFsClient({
+    isTauri: () => true,
+    electron: {} as unknown as FsApi,
+    loadTauri: async () => {
+      tauriLoads += 1
+      return {
+        listFiles: () => {
+          routed += 1
+          return Promise.resolve(['a.ts'])
+        },
+        startDownloadedFile: () => {
+          routed += 1
+          return Promise.resolve({ canceled: true })
+        },
+        onLocalLogTailChanged: () => {
+          routed += 1
+          return Promise.resolve(() => undefined)
+        }
+      } as unknown as FsApi
+    }
+  })
+
+  assert.deepEqual(await client.listFiles({ rootPath: 'D:/repo' }), ['a.ts'])
+  assert.deepEqual(await client.startDownloadedFile({ suggestedName: 'x.bin' }), { canceled: true })
+  await client.onLocalLogTailChanged(() => undefined)
+  assert.equal(tauriLoads, 1)
+  assert.equal(routed, 3)
 })
 
 describe('smoke', () => {

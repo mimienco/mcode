@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fs-import-external-paths"
+description = "Enables the fs_import_external_paths command without any pre-configured scope."
+commands.allow = ["fs_import_external_paths"]
+
+[[permission]]
+identifier = "deny-fs-import-external-paths"
+description = "Denies the fs_import_external_paths command without any pre-configured scope."
+commands.deny = ["fs_import_external_paths"]

@@ -5,7 +5,13 @@ import { expect, it } from 'vitest'
 const RENDERER_SOURCE_ROOT = join(process.cwd(), 'src', 'renderer', 'src')
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'])
 const TEST_FILE_PATTERN = /\.(?:bench|test|spec)\.[^.]+$/
-const ELECTRON_COMPATIBILITY_CLIENT = 'desktop/runtime-desktop-updater-client.ts'
+const ELECTRON_COMPATIBILITY_CLIENTS = [
+  'desktop/runtime-desktop-updater-client.ts',
+  // The Tauri typed bridge mirrors window.api.updater verbatim in its
+  // Electron-compatibility branch; every other production file must route
+  // through a runtime client.
+  'desktop/updater-client.ts'
+]
 
 function productionRendererSources(directory = RENDERER_SOURCE_ROOT): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -23,12 +29,13 @@ function productionRendererSources(directory = RENDERER_SOURCE_ROOT): string[] {
     return [path]
   })
 }
-
 it('routes every production renderer update operation through the runtime updater client', () => {
   const directUpdaterCallers = productionRendererSources()
     .filter(
       (path) =>
-        relative(RENDERER_SOURCE_ROOT, path).replaceAll('\\', '/') !== ELECTRON_COMPATIBILITY_CLIENT
+        !ELECTRON_COMPATIBILITY_CLIENTS.includes(
+          relative(RENDERER_SOURCE_ROOT, path).replaceAll('\\', '/')
+        )
     )
     .filter((path) =>
       /window\.api\.updater\.(?:getVersion|getStatus|check|download|quitAndInstall|onStatus)\s*\(/.test(

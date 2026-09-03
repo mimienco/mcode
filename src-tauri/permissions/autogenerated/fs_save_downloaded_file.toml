@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fs-save-downloaded-file"
+description = "Enables the fs_save_downloaded_file command without any pre-configured scope."
+commands.allow = ["fs_save_downloaded_file"]
+
+[[permission]]
+identifier = "deny-fs-save-downloaded-file"
+description = "Denies the fs_save_downloaded_file command without any pre-configured scope."
+commands.deny = ["fs_save_downloaded_file"]

@@ -23,6 +23,9 @@ describe('shim-coverage', () => {
     expect(coverage.pending).not.toContain('speech')
     expect(coverage.pending).not.toContain('ui')
     expect(coverage.pending).not.toContain('notifications')
+    expect(coverage.pending).not.toContain('fs')
+    expect(coverage.pending).not.toContain('shell')
+    expect(coverage.pending).not.toContain('updater')
   })
 
   it('leaves every other namespace pending', () => {
@@ -31,7 +34,6 @@ describe('shim-coverage', () => {
       ALL_WINDOW_API_NAMESPACES.length - SHIMMED_NAMESPACES.length
     )
     expect(coverage.pending).toContain('pty')
-    expect(coverage.pending).toContain('fs')
     expect(coverage.pending).toContain('settings')
   })
 

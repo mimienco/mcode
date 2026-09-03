@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shell-pick-audio"
+description = "Enables the shell_pick_audio command without any pre-configured scope."
+commands.allow = ["shell_pick_audio"]
+
+[[permission]]
+identifier = "deny-shell-pick-audio"
+description = "Denies the shell_pick_audio command without any pre-configured scope."
+commands.deny = ["shell_pick_audio"]

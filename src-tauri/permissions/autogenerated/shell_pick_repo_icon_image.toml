@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shell-pick-repo-icon-image"
+description = "Enables the shell_pick_repo_icon_image command without any pre-configured scope."
+commands.allow = ["shell_pick_repo_icon_image"]
+
+[[permission]]
+identifier = "deny-shell-pick-repo-icon-image"
+description = "Denies the shell_pick_repo_icon_image command without any pre-configured scope."
+commands.deny = ["shell_pick_repo_icon_image"]

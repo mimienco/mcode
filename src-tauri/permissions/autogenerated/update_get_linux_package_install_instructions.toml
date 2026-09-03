@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-get-linux-package-install-instructions"
+description = "Enables the update_get_linux_package_install_instructions command without any pre-configured scope."
+commands.allow = ["update_get_linux_package_install_instructions"]
+
+[[permission]]
+identifier = "deny-update-get-linux-package-install-instructions"
+description = "Denies the update_get_linux_package_install_instructions command without any pre-configured scope."
+commands.deny = ["update_get_linux_package_install_instructions"]

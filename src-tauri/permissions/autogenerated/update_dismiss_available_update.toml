@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-dismiss-available-update"
+description = "Enables the update_dismiss_available_update command without any pre-configured scope."
+commands.allow = ["update_dismiss_available_update"]
+
+[[permission]]
+identifier = "deny-update-dismiss-available-update"
+description = "Denies the update_dismiss_available_update command without any pre-configured scope."
+commands.deny = ["update_dismiss_available_update"]

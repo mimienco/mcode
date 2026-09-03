@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fs-stage-external-paths-for-runtime-upload"
+description = "Enables the fs_stage_external_paths_for_runtime_upload command without any pre-configured scope."
+commands.allow = ["fs_stage_external_paths_for_runtime_upload"]
+
+[[permission]]
+identifier = "deny-fs-stage-external-paths-for-runtime-upload"
+description = "Denies the fs_stage_external_paths_for_runtime_upload command without any pre-configured scope."
+commands.deny = ["fs_stage_external_paths_for_runtime_upload"]

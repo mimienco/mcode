@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-show-linux-package"
+description = "Enables the update_show_linux_package command without any pre-configured scope."
+commands.allow = ["update_show_linux_package"]
+
+[[permission]]
+identifier = "deny-update-show-linux-package"
+description = "Denies the update_show_linux_package command without any pre-configured scope."
+commands.deny = ["update_show_linux_package"]

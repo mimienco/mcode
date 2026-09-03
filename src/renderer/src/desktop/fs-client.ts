@@ -1,3 +1,9 @@
+import {
+  createTauriFsExtraMethods,
+  subscribeFsChanged,
+  type FsExtraMethods
+} from './fs-extra-client'
+
 import { createDesktopInvoke } from './desktop-client'
 
 // ─── Wire DTOs (mirror the Rust serde shapes in src-tauri) ──────────────────
@@ -58,7 +64,7 @@ export type FsWatchSubscription = () => void
 
 // ─── Typed API surface (one method per fs_* command) ────────────────────────
 
-export type FsApi = {
+export type FsApiCore = {
   readDir: (args: { dirPath: string }) => Promise<FsDirEntry[]>
   readFile: (args: { filePath: string }) => Promise<FsReadFileResult>
   writeFile: (args: { filePath: string; content: string }) => Promise<void>
@@ -90,6 +96,12 @@ export type FsApi = {
   onFsChanged: (listener: (payload: FsChangedPayload) => void) => Promise<FsWatchSubscription>
 }
 
+/**
+ * Full 34-method `window.api.fs` surface: the 21-command core plus the
+ * Task-C remainder methods from `fs-extra-client`.
+ */
+export type FsApi = FsApiCore & FsExtraMethods
+
 type FsInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
 
 type FsEventSource = (
@@ -97,13 +109,18 @@ type FsEventSource = (
   listener: (payload: { payload: unknown }) => void
 ) => Promise<() => void>
 
-export const FS_CHANGED_EVENT = 'fs://changed'
-
 /**
  * The native fs commands serialize `Option` error-context fields as JSON
  * `null`, but the shared `DesktopCommandError` guard treats only `undefined`
  * as absent. Nulls are stripped so the payload keeps its native code.
  */
+export const FS_CHANGED_EVENT = 'fs://changed'
+
+/**
+ * Renderer-facing log-tail event name (spec §4 `fs:localLogTailChanged`).
+ */
+export const FS_LOG_TAIL_CHANGED_EVENT = 'fs://log-tail-changed'
+
 function stripNullContextFields(error: unknown): unknown {
   if (
     !error ||
@@ -125,7 +142,12 @@ function stripNullContextFields(error: unknown): unknown {
  * only here; callers receive one typed method per `fs_*` command and every
  * failure is normalized onto `DesktopCommandError`.
  */
-export function createTauriFsClient(invoke: FsInvoke, listen: FsEventSource): FsApi {
+export function createTauriFsClient(
+  invoke: FsInvoke,
+  // The injected event source: Task-C event subscriptions and the guarded
+  // fs://changed subscriber both route through it, so tests keep the seam.
+  listen: FsEventSource
+): FsApi {
   const desktopInvoke = createDesktopInvoke((command, args) =>
     invoke(command, args).catch((error: unknown) => {
       throw stripNullContextFields(error)
@@ -168,19 +190,8 @@ export function createTauriFsClient(invoke: FsInvoke, listen: FsEventSource): Fs
       call('fs_watch_worktree', { worktreePath }).then(() => undefined),
     unwatchWorktree: ({ worktreePath }) =>
       call('fs_unwatch_worktree', { worktreePath }).then(() => undefined),
-    async onFsChanged(listener) {
-      const unlisten = await listen(FS_CHANGED_EVENT, (event) => {
-        if (
-          event.payload &&
-          typeof event.payload === 'object' &&
-          'worktreePath' in event.payload &&
-          Array.isArray((event.payload as FsChangedPayload).events)
-        ) {
-          listener(event.payload as FsChangedPayload)
-        }
-      })
-      return unlisten
-    }
+    ...createTauriFsExtraMethods(call, listen),
+    onFsChanged: (listener) => subscribeFsChanged(listener, listen)
   }
 }
 
@@ -245,6 +256,33 @@ export function createRuntimeFsClient({
     unwatchWorktree: async (args) => {
       await (await resolveClient()).unwatchWorktree(args)
     },
+    authorizeExternalPath: async (args) => {
+      await (await resolveClient()).authorizeExternalPath(args)
+    },
+    listFiles: async (args) => (await resolveClient()).listFiles(args),
+    listMarkdownDocuments: async (args) => (await resolveClient()).listMarkdownDocuments(args),
+    importExternalPaths: async (args) => (await resolveClient()).importExternalPaths(args),
+    stageExternalPathsForRuntimeUpload: async (args) =>
+      (await resolveClient()).stageExternalPathsForRuntimeUpload(args),
+    resolveDroppedPathsForAgent: async (args) =>
+      (await resolveClient()).resolveDroppedPathsForAgent(args),
+    downloadFile: async (args) => (await resolveClient()).downloadFile(args),
+    downloadFolder: async (args) => (await resolveClient()).downloadFolder(args),
+    saveDownloadedFile: async (args) => (await resolveClient()).saveDownloadedFile(args),
+    startDownloadedFile: async (args) => (await resolveClient()).startDownloadedFile(args),
+    appendDownloadedFileChunk: async (args) =>
+      (await resolveClient()).appendDownloadedFileChunk(args),
+    finishDownloadedFile: async (args) => (await resolveClient()).finishDownloadedFile(args),
+    cancelDownloadedFile: async (args) => (await resolveClient()).cancelDownloadedFile(args),
+    readLocalLogTail: async (args) => (await resolveClient()).readLocalLogTail(args),
+    startLocalLogTail: async (args) => {
+      await (await resolveClient()).startLocalLogTail(args)
+    },
+    stopLocalLogTail: async (args) => {
+      await (await resolveClient()).stopLocalLogTail(args)
+    },
+    onLocalLogTailChanged: async (callback) =>
+      (await resolveClient()).onLocalLogTailChanged(callback),
     onFsChanged: async (listener) => (await resolveClient()).onFsChanged(listener)
   }
 }

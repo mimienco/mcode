@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shell-open-in-file-manager"
+description = "Enables the shell_open_in_file_manager command without any pre-configured scope."
+commands.allow = ["shell_open_in_file_manager"]
+
+[[permission]]
+identifier = "deny-shell-open-in-file-manager"
+description = "Denies the shell_open_in_file_manager command without any pre-configured scope."
+commands.deny = ["shell_open_in_file_manager"]
