@@ -1,6 +1,24 @@
 # Current Migration Status
 
 
+## Session close (2026-09-02, wave 29 — all gates green, handoff final)
+
+- HEAD `25e0057b43`. Concurrent sibling slices (shell_commands, updater_extra_commands, app_menu,
+  runtime_rpc, fs log-tail/downloads, crossgrade) landed and stabilized to green after repair:
+  ~20 compile errors fixed (Emitter/Manager paths, Box-vs-value menu plumbing, watch-channel
+  ownership, BuildHasher/Hasher, serde on MenuError, registry.inner access, missing
+  fs_log_tail/fs_download mod declarations, truncated fs_read_local_log_tail rebuilt).
+- **Workspace gates green: 43 suites / 449 passed / 0 failed.** clippy 0 warnings across all
+  crates. fmt clean. Stale PDBs (LNK1207 incompatible-PDB) cleared from target/debug/deps —
+  a Windows incremental-linkage hazard worth remembering when test targets fail to link.
+- updater_extra_commands test fixture corrected: GitHub's untitled-release title is the TAG text
+  (`v1.4.160`), so `name !== tag → null` matches updater-release-builds.ts parity.
+- All 4 remaining todos are hard-blocked externally (signing credentials; published artifacts +
+  CI hosts; parity-gated Electron removal; macOS/Linux hosts). Nothing actionable without those
+  resources; every actionable slice through the gates has landed.
+- Next operator: RUNBOOK.md §2 verification ladder + §4 smoke checklist; CUTOVER_INVENTORY §8
+  resumes at step 2 once the E2E lane goes live.
+
 ## Wave 22 (2026-09-02) — relay host daemon slices (wire evidence + CLI plane)
 
 - Relay wire-plane evidence LANDED: `crates/mcode-wire/tests/relay_serve_integration.rs` — 4 real in-process TCP integration tests over the existing `serve()` loop (bind 127.0.0.1:0 → sentinel → pre-dispatch handshake → framed dispatch): full handshake + one REGULAR frame round trip with per-connection id assertion, wrong-credential rejection (on_frame never fires), version-mismatch reply carries `mcode-relay-handshake-mismatch` and closes, graceful teardown. Byte-order discipline mirrors `server.rs:333-411`. mcode-wire suite: 36 unit + 4 integration green.
