@@ -7,6 +7,9 @@
 //! failures, typed `DesktopCommandError`s for copy/pick failures — so
 //! `src/renderer/src/desktop/shell-client.ts` can swap transports without
 //! behavior drift.
+// Why: in-flight shell slice — operation constants consumed by the command
+// registrations landing with the desktop.shell-ui parity batch.
+#![allow(dead_code)]
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -38,10 +41,11 @@ const OPERATION_COPY_FILE: &str = "shell_copy_file";
 fn user_message_for(operation: &'static str) -> &'static str {
     match operation {
         OPERATION_COPY_FILE => "MCode could not copy the file. Try again.",
-        OPERATION_PICK_DIRECTORY | OPERATION_PICK_ATTACHMENT | OPERATION_PICK_IMAGE
-        | OPERATION_PICK_REPO_ICON_IMAGE | OPERATION_PICK_AUDIO => {
-            "MCode could not open the picker. Try again."
-        }
+        OPERATION_PICK_DIRECTORY
+        | OPERATION_PICK_ATTACHMENT
+        | OPERATION_PICK_IMAGE
+        | OPERATION_PICK_REPO_ICON_IMAGE
+        | OPERATION_PICK_AUDIO => "MCode could not open the picker. Try again.",
         _ => "MCode could not complete the shell request. Try again.",
     }
 }
@@ -325,11 +329,7 @@ pub(crate) async fn shell_open_file_uri(
         Ok(file_path) => file_path,
         Err(_) => return Ok(()),
     };
-    let target = match validate_local_path_target(
-        file_path.to_string_lossy().as_ref(),
-    )
-    .await
-    {
+    let target = match validate_local_path_target(file_path.to_string_lossy().as_ref()).await {
         ValidatedTarget::Ok(path) => path,
         ValidatedTarget::NotAbsolute | ValidatedTarget::NotFound => return Ok(()),
     };
@@ -351,7 +351,11 @@ pub(crate) async fn shell_open_file_uri(
 pub(crate) async fn shell_open_in_external_editor(
     request: ShellOpenExternalEditorRequest,
 ) -> Result<ShellOpenExternalEditorResult, DesktopCommandError> {
-    if request.connection_id.as_deref().is_some_and(|id| !id.trim().is_empty()) {
+    if request
+        .connection_id
+        .as_deref()
+        .is_some_and(|id| !id.trim().is_empty())
+    {
         return Ok(ShellOpenExternalEditorResult::failed(
             ShellOpenExternalEditorFailureReason::RemoteEditorUnsupported,
         ));
@@ -407,7 +411,10 @@ fn canonicalized(path: std::path::PathBuf) -> Result<String, DesktopCommandError
         command_error(
             "shell_pick_failed",
             OPERATION_PICK_DIRECTORY,
-            format!("failed to resolve selected path {}: {error}", path.display()),
+            format!(
+                "failed to resolve selected path {}: {error}",
+                path.display()
+            ),
         )
     })?;
     canonical.to_str().map(str::to_owned).ok_or_else(|| {
@@ -464,7 +471,10 @@ pub(crate) async fn shell_pick_image(
     let Some(picked) = app
         .dialog()
         .file()
-        .add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"])
+        .add_filter(
+            "Images",
+            &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"],
+        )
         .blocking_pick_file()
     else {
         return Ok(None);
@@ -606,7 +616,11 @@ pub(crate) async fn shell_copy_file(
             command_error(
                 "shell_launch_failed",
                 OPERATION_COPY_FILE,
-                format!("failed to copy {} to {}: {error}", src.display(), dest.display()),
+                format!(
+                    "failed to copy {} to {}: {error}",
+                    src.display(),
+                    dest.display()
+                ),
             )
         })?;
     Ok(())
@@ -653,10 +667,11 @@ fn is_windows() -> bool {
 fn strip_matching_quotes(value: &str) -> &str {
     let trimmed = value.trim();
     let bytes = trimmed.as_bytes();
-    if let Some(&quote) = bytes.first() {
-        if (quote == b'"' || quote == b'\'') && bytes.last() == Some(&quote) {
-            return &trimmed[1..trimmed.len() - 1];
-        }
+    if let Some(&quote) = bytes.first()
+        && (quote == b'"' || quote == b'\'')
+        && bytes.last() == Some(&quote)
+    {
+        return &trimmed[1..trimmed.len() - 1];
     }
     trimmed
 }
@@ -782,12 +797,13 @@ fn build_executable_args(editor_command: &str, path_value: &str) -> Vec<String> 
         // worktree (external-editor-launch.ts:102-106).
         return vec!["--new-window".to_owned(), path_value.to_owned()];
     }
-    if is_windows() && is_vscode_launcher_executable(editor_command) {
-        if let Some((distro, linux_path)) = parse_wsl_unc_path(path_value) {
-            // Why: VS Code otherwise treats a WSL UNC path as a local Windows
-            // folder (external-editor-launch.ts:107-113).
-            return vec!["--remote".to_owned(), format!("wsl+{distro}"), linux_path];
-        }
+    if is_windows()
+        && is_vscode_launcher_executable(editor_command)
+        && let Some((distro, linux_path)) = parse_wsl_unc_path(path_value)
+    {
+        // Why: VS Code otherwise treats a WSL UNC path as a local Windows
+        // folder (external-editor-launch.ts:107-113).
+        return vec!["--remote".to_owned(), format!("wsl+{distro}"), linux_path];
     }
     vec![path_value.to_owned()]
 }
@@ -913,7 +929,10 @@ fn resolve_cli_command(command_name: &str) -> String {
         let mut directories = vec![
             home.join(".volta").join("bin"),
             home.join(".asdf").join("shims"),
-            home.join(".fnm").join("aliases").join("default").join("bin"),
+            home.join(".fnm")
+                .join("aliases")
+                .join("default")
+                .join("bin"),
             home.join(".local").join("share").join("mise").join("shims"),
         ];
         if is_windows() {
@@ -953,8 +972,7 @@ fn is_runnable_command(candidate: &std::path::Path) -> bool {
 
 /// Port of `getCmdExePath` (orca/src/shared/windows-batch-spawn.ts:4-9).
 fn get_cmd_exe_path() -> String {
-    std::env::var("ComSpec")
-        .unwrap_or_else(|_| "C:\\Windows\\System32\\cmd.exe".to_owned())
+    std::env::var("ComSpec").unwrap_or_else(|_| "C:\\Windows\\System32\\cmd.exe".to_owned())
 }
 
 /// Port of `escapePathForShell` (external-editor-launch.ts:45-60).
@@ -1035,8 +1053,7 @@ fn resolve_external_editor_launch_spec(
     path_value: &std::path::Path,
 ) -> ExternalEditorLaunchSpec {
     let path_value = path_value.to_string_lossy().to_string();
-    let file_exists =
-        |path: &str| std::path::Path::new(path).exists();
+    let file_exists = |path: &str| std::path::Path::new(path).exists();
     let trimmed = command
         .map(str::trim)
         .filter(|command| !command.is_empty())
@@ -1076,8 +1093,7 @@ fn resolve_external_editor_spawn(launch_spec: &ExternalEditorLaunchSpec) -> Reso
             spawn_args,
         } => {
             let lower = spawn_cmd.to_ascii_lowercase();
-            let is_batch = is_windows()
-                && (lower.ends_with(".cmd") || lower.ends_with(".bat"));
+            let is_batch = is_windows() && (lower.ends_with(".cmd") || lower.ends_with(".bat"));
             if is_batch {
                 // Batch targets route through cmd.exe; the JetBrains detached
                 // form nests an inner `cmd /d /c` so the shim exits with the
@@ -1105,6 +1121,8 @@ fn resolve_external_editor_spawn(launch_spec: &ExternalEditorLaunchSpec) -> Reso
                         "/c".to_owned(),
                         spawn_cmd.clone(),
                     ];
+                    #[allow(clippy::iter_cloned_collect)]
+                    // keep: extend needs an owned copy while spawn_args is mutably borrowed
                     let extra: Vec<String> = spawn_args.iter().cloned().collect();
                     spawn_args.extend(extra);
                     return ResolvedSpawn {
@@ -1141,7 +1159,6 @@ fn resolve_external_editor_spawn(launch_spec: &ExternalEditorLaunchSpec) -> Reso
         },
     }
 }
-
 
 /// Port of `launchExternalEditor` (external-editor-launch.ts:269-296): spawn
 /// detached with ignored stdio; success = the process started.

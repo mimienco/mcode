@@ -22,11 +22,13 @@ mod notification_commands;
 mod os_permissions;
 mod pty_commands;
 mod runtime_rpc;
+mod shell_commands;
 mod skill_share_deep_link;
 mod speech_commands;
 mod ssh_commands;
 mod terminal_preview;
 mod updater_commands;
+mod updater_extra_commands;
 mod windows_tray;
 
 use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
@@ -55,10 +57,14 @@ use desktop_window::{
 };
 use export_commands::ui_export_html_to_pdf;
 use filesystem_commands::{
-    NativeFilesystemState, attach_watch_teardown, fs_cancel_list_files, fs_cancel_search_replace,
-    fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path, fs_path_exists, fs_read_dir,
-    fs_read_file, fs_rename_path, fs_search, fs_search_replace, fs_stat, fs_unwatch_worktree,
-    fs_watch_worktree, fs_write_file, fs_write_file_atomic, spawn_watch_forwarder,
+    NativeFilesystemState, attach_watch_teardown, fs_authorize_external_path, fs_cancel_list_files,
+    fs_cancel_search_replace, fs_copy_path, fs_create_dir, fs_create_file, fs_delete_path,
+    fs_import_external_paths, fs_list_files, fs_list_markdown_documents, fs_path_exists,
+    fs_read_dir, fs_read_file, fs_read_local_log_tail, fs_rename_path,
+    fs_resolve_dropped_paths_for_agent, fs_search, fs_search_replace,
+    fs_stage_external_paths_for_runtime_upload, fs_start_local_log_tail, fs_stat,
+    fs_stop_local_log_tail, fs_unwatch_worktree, fs_watch_worktree, fs_write_file,
+    fs_write_file_atomic, spawn_watch_forwarder,
 };
 use notification_commands::{
     ui_notification_dismiss, ui_notification_dispatch, ui_notification_get_permission_status,
@@ -74,6 +80,12 @@ pub use pty_commands::{
 use pty_commands::{
     kill_all_sessions_for_shutdown, pty_ack_data, pty_get_size, pty_has_pty, pty_kill, pty_resize,
     pty_spawn, pty_write,
+};
+use shell_commands::{
+    shell_copy_file, shell_open_file_path, shell_open_file_uri, shell_open_in_external_editor,
+    shell_open_in_file_manager, shell_open_path, shell_open_url, shell_path_exists,
+    shell_pick_attachment, shell_pick_audio, shell_pick_directory, shell_pick_image,
+    shell_pick_repo_icon_image,
 };
 use speech_commands::{
     ui_speech_cancel_download, ui_speech_download_model, ui_speech_feed_audio,
@@ -95,6 +107,11 @@ use terminal_preview::{
 };
 use updater_commands::{
     NativeUpdaterState, update_check, update_download, update_get_status, update_install,
+};
+use updater_extra_commands::{
+    update_dismiss_available_update, update_dismiss_nudge,
+    update_get_linux_package_install_instructions, update_get_version, update_list_builds,
+    update_show_linux_package,
 };
 
 /// One-shot pending skill-share consume (mirrors `ui:consumePendingSkillShare`).
@@ -463,6 +480,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             skill_share_deep_link::register(app.handle().clone());
             app_menu_events::register(app.handle());
@@ -712,6 +730,12 @@ pub fn run() {
             update_check,
             update_download,
             update_install,
+            update_get_version,
+            update_dismiss_nudge,
+            update_dismiss_available_update,
+            update_list_builds,
+            update_get_linux_package_install_instructions,
+            update_show_linux_package,
             fs_read_dir,
             fs_read_file,
             fs_write_file,
@@ -728,6 +752,15 @@ pub fn run() {
             fs_cancel_list_files,
             fs_cancel_search_replace,
             fs_watch_worktree,
+            fs_authorize_external_path,
+            fs_list_files,
+            fs_list_markdown_documents,
+            fs_import_external_paths,
+            fs_stage_external_paths_for_runtime_upload,
+            fs_resolve_dropped_paths_for_agent,
+                                                                    fs_read_local_log_tail,
+            fs_start_local_log_tail,
+            fs_stop_local_log_tail,
             fs_unwatch_worktree,
             pty_spawn,
             pty_write,
@@ -743,6 +776,19 @@ pub fn run() {
             ssh_write_pty,
             ssh_resize_pty,
             ssh_close_pty,
+            shell_open_url,
+            shell_path_exists,
+            shell_open_path,
+            shell_open_in_file_manager,
+            shell_open_file_path,
+            shell_open_file_uri,
+            shell_open_in_external_editor,
+            shell_pick_directory,
+            shell_pick_attachment,
+            shell_pick_image,
+            shell_pick_repo_icon_image,
+            shell_pick_audio,
+            shell_copy_file,
             ssh_disconnect,
             ui_clipboard_read_text,
             ui_clipboard_write_text,

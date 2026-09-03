@@ -3,12 +3,15 @@
 //! the dev-channel release-build picker feed, and the Linux package-recovery
 //! surface ported from `orca/src/main/updater.ts` + `orca/src/main/updater-release-builds.ts`
 //! (Electron HEAD 5c13ecce).
+// Why: in-flight updater-extra slice (release-entry parsing for the
+// multi-channel updater) — types wired with the updater.channels batch.
+#![allow(dead_code)]
 
 use std::time::Duration;
 
 use mcode_updater::ReleaseChannel;
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::DesktopCommandError;
 
@@ -249,10 +252,7 @@ fn find_installer_asset_name(platform: &str, asset_names: &[String]) -> Option<S
         "linux" => name.to_ascii_lowercase().ends_with(".appimage"),
         _ => false,
     };
-    asset_names
-        .iter()
-        .find(|name| matches(name))
-        .cloned()
+    asset_names.iter().find(|name| matches(name)).cloned()
 }
 
 /// Mirrors `normalizeTagToVersion` (release-channel.ts:121-123): strips one
@@ -327,7 +327,8 @@ fn compare_app_versions(left: &str, right: &str) -> std::cmp::Ordering {
                 let Some(right_id) = right.prerelease.get(index) else {
                     return Ordering::Greater;
                 };
-                let left_numeric = !left_id.is_empty() && left_id.bytes().all(|b| b.is_ascii_digit());
+                let left_numeric =
+                    !left_id.is_empty() && left_id.bytes().all(|b| b.is_ascii_digit());
                 let right_numeric =
                     !right_id.is_empty() && right_id.bytes().all(|b| b.is_ascii_digit());
                 let ordering = match (left_numeric, right_numeric) {
@@ -409,9 +410,7 @@ fn parse_release_entry(
     }
     let version = normalize_tag_to_version(tag).to_owned();
     let channel = version_channel(&version)?;
-    if parse_version(&version).is_none() {
-        return None;
-    }
+    parse_version(&version)?;
     // Why filter on assets rather than on a per-channel platform table: a
     // release is published as soon as one platform's leg finishes, and a leg
     // can fail outright (updater-release-builds.ts:57-60).
@@ -480,7 +479,7 @@ fn list_release_builds(channel: ReleaseChannel) -> ReleaseBuildListResult {
     {
         Ok(client) => client,
         Err(error) => {
-            return builds_error(channel, format!("Could not list {channel} builds: {error}"))
+            return builds_error(channel, format!("Could not list {channel} builds: {error}"));
         }
     };
     let response = match client
@@ -490,7 +489,7 @@ fn list_release_builds(channel: ReleaseChannel) -> ReleaseBuildListResult {
     {
         Ok(response) => response,
         Err(error) => {
-            return builds_error(channel, format!("Could not list {channel} builds: {error}"))
+            return builds_error(channel, format!("Could not list {channel} builds: {error}"));
         }
     };
     let status = response.status();
@@ -501,16 +500,27 @@ fn list_release_builds(channel: ReleaseChannel) -> ReleaseBuildListResult {
             match status.as_u16() {
                 404 => format!("No releases repository found at {repo}."),
                 403 | 429 => "GitHub rate limit reached. Try again in a few minutes.".to_owned(),
-                _ => format!("Could not list {channel} builds (HTTP {}).", status.as_u16()),
+                _ => format!(
+                    "Could not list {channel} builds (HTTP {}).",
+                    status.as_u16()
+                ),
             },
         );
     }
     let payload: serde_json::Value = match response.json() {
         Ok(payload) => payload,
-        Err(_) => return builds_error(channel, format!("Could not read the {channel} release list.")),
+        Err(_) => {
+            return builds_error(
+                channel,
+                format!("Could not read the {channel} release list."),
+            );
+        }
     };
     let Some(entries) = payload.as_array() else {
-        return builds_error(channel, format!("Could not read the {channel} release list."));
+        return builds_error(
+            channel,
+            format!("Could not read the {channel} release list."),
+        );
     };
     let platform = node_platform();
     let mut builds: Vec<ReleaseBuild> = entries
@@ -563,25 +573,34 @@ mod tests {
     fn version_channel_matches_shared_classification() {
         assert_eq!(version_channel("1.4.160"), Some("stable"));
         assert_eq!(version_channel("1.4.160-rc.1"), Some("rc"));
-        assert_eq!(version_channel("1.4.160-hourly.202607281400"), Some("hourly"));
+        assert_eq!(
+            version_channel("1.4.160-hourly.202607281400"),
+            Some("hourly")
+        );
         assert_eq!(version_channel("1.4.160-daily.202607281415"), Some("daily"));
-        assert_eq!(version_channel("1.4.160-adhoc.20260728140533"), Some("adhoc"));
+        assert_eq!(
+            version_channel("1.4.160-adhoc.20260728140533"),
+            Some("adhoc")
+        );
     }
 
     #[test]
     fn version_compare_matches_semver_prerelease_ordering() {
         use std::cmp::Ordering;
-        assert_eq!(compare_app_versions("1.4.160", "1.4.159"), Ordering::Greater);
-        assert_eq!(compare_app_versions("1.4.160", "1.4.160-rc.1"), Ordering::Greater);
+        assert_eq!(
+            compare_app_versions("1.4.160", "1.4.159"),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_app_versions("1.4.160", "1.4.160-rc.1"),
+            Ordering::Greater
+        );
         assert_eq!(
             compare_app_versions("1.4.160-rc.2", "1.4.160-rc.10"),
             Ordering::Less
         );
         assert_eq!(
-            compare_app_versions(
-                "1.4.160-hourly.202607281400",
-                "1.4.160-hourly.202607281359"
-            ),
+            compare_app_versions("1.4.160-hourly.202607281400", "1.4.160-hourly.202607281359"),
             Ordering::Greater
         );
         assert_eq!(compare_app_versions("garbage", "1.0.0"), Ordering::Equal);
@@ -615,7 +634,7 @@ mod tests {
     fn parse_release_entry_skips_drafts_and_repeats_tag_title() {
         let entry = serde_json::json!({
             "tag_name": "v1.4.160",
-            "name": "1.4.160",
+            "name": "v1.4.160",
             "draft": false,
             "published_at": "2026-07-28T14:00:00Z",
             "html_url": "https://github.com/mcode-ide/mcode/releases/tag/v1.4.160",
@@ -629,11 +648,13 @@ mod tests {
         assert_eq!(build.channel, "stable");
         // Title repeats the tag → null (updater-release-builds.ts:66-69).
         assert_eq!(build.name, None);
-        assert!(build
-            .installer_url
-            .as_deref()
-            .unwrap_or("")
-            .ends_with("windows-setup.exe"));
+        assert!(
+            build
+                .installer_url
+                .as_deref()
+                .unwrap_or("")
+                .ends_with("windows-setup.exe")
+        );
 
         let draft = serde_json::json!({ "tag_name": "v1.4.161", "draft": true, "assets": [] });
         assert!(parse_release_entry(&draft, "mcode-ide/mcode", "win32").is_none());
