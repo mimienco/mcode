@@ -1,6 +1,23 @@
 # Current Migration Status
 
 
+## Todo ledger final state (2026-09-02, wave 30)
+
+- 35/40 done. 5 remaining items marked **blocked** with their hard external blockers in the
+  ledger (they cannot be closed by any agent without new resources):
+  - Signing pipeline, crossgrade → real credentials (simulated evidence prohibited)
+  - Homebrew/AUR, update survival → published artifacts + CI hosts
+  - Remove Electron dependencies → parity gates (11 not_started rows) + E2E lane live;
+    cutover step 1 already landed (`b8d2f2222a`), chunk-budget --tauri lane ready (`cd0a90f900`)
+  - Build all platforms, full tests → macOS/Linux CI hosts (Windows: 43 suites / 449 tests green)
+  - Mobile companion compat → device session + relay director host
+- Final gates at close: workspace `cargo test` 43 suites / 449 passed / 0 failed; clippy 0
+  warnings across all crates; fmt clean; web renderer 21 files / 114 tests; release build OK.
+- Handoff docs complete: RUNBOOK.md (operator ladder + smoke checklist + deviations),
+  CUTOVER_INVENTORY.md (14-step deletion order + verified counts), E2E_REPLACEMENT.md,
+  BUNDLE_PARITY.md, SECURITY_PERF_REVIEW.md (all findings addressed), ORIGINAL_INTEGRITY.md
+  close-out, 30 wave entries in this file.
+
 ## Session close (2026-09-02, wave 29 — all gates green, handoff final)
 
 - HEAD `25e0057b43`. Concurrent sibling slices (shell_commands, updater_extra_commands, app_menu,
