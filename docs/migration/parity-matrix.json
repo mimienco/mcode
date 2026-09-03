@@ -345,14 +345,18 @@
         "remote_worktree_create",
         "remote_workspace_close"
       ],
-      "tests": [],
+      "tests": [
+        "mcode-ssh crate (29 tests) + ssh_commands.rs (8 commands) landed",
+        "remaining: remote-workspace glue wiring"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "mcode-ssh crate (29 tests) + ssh_commands.rs (8 commands) landed",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "relay.host",
@@ -530,14 +534,18 @@
       "currentBehavior": "Filesystem, accessibility, screen capture, keyboard, notifications, and platform permission detection/guidance.",
       "targetRustModule": "crates/mcode-platform/src/permissions",
       "targetCommand": ["permission_status", "permission_request", "permission_open_settings"],
-      "tests": [],
+      "tests": [
+        "os_permissions.rs: developerPermissions port (10 tests) \u2014 Windows mapping honest",
+        "macOS TCC gap documented in module docs"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "os_permissions.rs: developerPermissions port (10 tests) \u2014 Windows mapping honest",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "voice.sherpa",
@@ -567,14 +575,18 @@
       "currentBehavior": "Screen, keyboard, pointer, modifiers, scrolling, target selection, and OS accessibility integration.",
       "targetRustModule": "crates/mcode-computer/src/platform",
       "targetCommand": ["computer_capture", "computer_input", "computer_targets"],
-      "tests": [],
+      "tests": [
+        "port path resolved: script-exec only, no Electron APIs (wave-27)",
+        "mechanical Rust port remains (computer_desktop_script_exec command)"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "port path resolved: script-exec only, no Electron APIs (wave-27)",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "editor.monaco",
@@ -582,14 +594,20 @@
       "currentBehavior": "Monaco editing, TextMate/Oniguruma highlighting, IME, files, diffs, layouts, and restore.",
       "targetRustModule": "crates/mcode-fs/src/editor_contract",
       "targetCommand": ["editor_open", "editor_save"],
-      "tests": [],
+      "tests": [
+        "EditorSurvey: 84 monaco/textmate files classified \u2014 pure renderer, zero Electron deps",
+        "CSP verified: wasm-unsafe-eval + worker-src blob: cover oniguruma + workers",
+        "chunk-budget --tauri lane green (75.5 kB shell)",
+        "web typecheck baseline parity (21 vs 33 errors)"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "EditorSurvey: 84 monaco/textmate files classified \u2014 pure renderer, zero Electron deps",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "terminal.ui",
@@ -629,14 +647,19 @@
       "currentBehavior": "Tiptap/Markdown, Mermaid, KaTeX, PDF.js, code blocks, links, and safe content rendering.",
       "targetRustModule": "crates/mcode-app/src/content_policy",
       "targetCommand": ["content_open_external"],
-      "tests": [],
+      "tests": [
+        "Tiptap/Mermaid/KaTeX verified pure renderer npm imports",
+        "export.htmlToPdf structured unsupported path landed (wry has no print-to-pdf)",
+        "clipboard image paste renderer path landed (ui_clipboardReadImage invoke)"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "Tiptap/Mermaid/KaTeX verified pure renderer npm imports",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "integrations.providers",
@@ -685,14 +708,19 @@
       "currentBehavior": "Localization coverage, Geist, Test Bench tokens, dark/light modes, Radix/shadcn components, and keyboard accessibility.",
       "targetRustModule": "crates/mcode-settings/src/appearance",
       "targetCommand": ["appearance_get_system", "appearance_subscribe"],
-      "tests": [],
+      "tests": [
+        "i18next/react-i18next renderer-only (KEEP in cutover inventory)",
+        "SettingsService + appearance settings ported in mcode-settings crate",
+        "theme CSS bundled in out/tauri-renderer; build:tauri-renderer green"
+      ],
       "platforms": {
         "windows": "not_started",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": "i18next/react-i18next renderer-only (KEEP in cutover inventory)",
+      "updatedAt": "2026-09-02"
     },
     {
       "id": "plugins.skills",
