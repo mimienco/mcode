@@ -159,6 +159,24 @@ Wave 4 complete — wire protocol (mcode-wire, 21 tests), SSH transport (mcode-s
 - Next session can land this slice; then computer.use → in_progress. macOS screen-recording
   permission parity (macos-computer-use-permission-status.ts) maps to os_permissions.rs.
 
+## Session progress (2026-09-02, wave 31 — tsconfig inlining attempted and reverted)
+
+- Attempted CUTOVER step 3 prep: inlined @electron-toolkit/tsconfig into
+  config/tsconfig.base.json and swapped 5 tsconfig extends. REVERTED — the
+  electron-lane tsconfig.node.json pulls src/main into the web graph via
+  include lists, and the electron-vite-output-contract/plain-node tests
+  depend on electron-vite types that the inlined base doesn't carry. Error
+  delta: 16 vs 19 baseline. Correct sequencing: this inlining belongs to
+  step 3 (after electron.vite.config.ts deletion), not before it.
+- Gate state re-verified after revert: web 16 errors (baseline), cli 0,
+  node 0.
+- "Remove Electron dependencies" remains blocked on parity gates: 5
+  not_started rows (workspace.session, agents.execution, telemetry.diagnostics,
+  plugins.skills, browser.emulator) each need real Rust-side implementation
+  work, not dependency surgery. The dependency tree cannot shrink while
+  electron.vite.config.ts + electron-builder.config.cjs still build the
+  Electron main (steps 2-3 of the deletion order).
+
 ## Session progress (2026-09-02, wave 26 — chunk-budget tauri lane)
 
 - HEAD `cd0a90f900`. check-renderer-chunk-budgets.mjs gains `--tauri`: same 250 kB shell /
