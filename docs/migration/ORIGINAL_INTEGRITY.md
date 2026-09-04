@@ -132,3 +132,13 @@ No migration command has written to the original repository.
   (`b0c749cb58`), 131 files / +12,253 −354 across the final sprint.
 - Snapshot preserved: `docs/migration/source-snapshot` (HEAD `6740f9c…`, manifest.sha256 with
   16,751 entries) — the original's identity at migration start is reproducible from it.
+
+## Wave 32 (2026-09-04) re-verification
+
+- Original HEAD: `5c13ecce88` (branch `rebrand/mcode`) — UNCHANGED from the wave-24 handoff state
+  recorded above; no migration session advanced it this wave.
+- Original working tree: 115 dirty paths — identical count to the wave-24 record; user's active WIP
+  continues, all of it preserved; the migration never wrote to the original.
+- Rewrite branch `rewrite/tauri-full` @ `d644ff275d`: wave-24 shim grind (`d0bc03740b`, fs/shell/
+  updater namespaces) + smoke fixes (`d644ff275d`, runtime-rpc reactor bind, crossgrade target env,
+  Crossgrade smoke mode). Working tree carries only user WIP + gitignored migration docs.

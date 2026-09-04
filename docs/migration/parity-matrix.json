@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
-  "updatedAt": "2026-09-02",
+  "updatedAt": "2026-09-04",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
     {
@@ -125,7 +125,7 @@
         "left click and Open restore, show, and focus the main window",
         "real Open, left-click, and Quit menu interaction evidence remains pending",
         "tray menu contains Open MCode, separator, and Quit with the packaged default icon and MCode tooltip",
-        "ui_popup_app_menu + Menu::popup(window) (menu.rs:29 ContextMenu) for the TitlebarLeftControls \u00b7\u00b7\u00b7 button; WebviewWindow::reload() used for Reload/Force Reload"
+        "ui_popup_app_menu + Menu::popup(window) (menu.rs:29 ContextMenu) for the TitlebarLeftControls ··· button; WebviewWindow::reload() used for Reload/Force Reload"
       ]
     },
     {
@@ -158,16 +158,18 @@
         "src-tauri crossgrade_commands: settings_crossgrade_status + settings_crossgrade_migrate, typed snake_case codes matching DesktopCommandError shape"
       ],
       "platforms": {
-        "windows": "not_started",
+        "windows": "in_progress",
         "macos": "not_started",
         "linux": "not_started"
       },
       "status": "in_progress",
       "evidence": [
-        "D-012 surface decision: explicit user-triggered command (settings UI), never an automatic startup hook \u2014 doc invariant requires discovery stay read-only until a verified migration completes",
-        "Gaps recorded: secrets stay in the platform keychain (plaintext copying prohibited \u2014 no keychain slice yet); no UI surface wired; progress record is non-sensitive (plan hash + counts only)",
-        "Key mapping table MAPPED_SETTING_KEYS (8 entries) from Electron mcode-data.json to the SettingsService schema; ssh-host-keys.json copied byte-for-byte (TOFU public keys, not secrets)"
-      ]
+        "D-012 surface decision: explicit user-triggered command (settings UI), never an automatic startup hook — doc invariant requires discovery stay read-only until a verified migration completes",
+        "Gaps recorded: secrets stay in the platform keychain (plaintext copying prohibited — no keychain slice yet); no UI surface wired; progress record is non-sensitive (plan hash + counts only)",
+        "Key mapping table MAPPED_SETTING_KEYS (8 entries) from Electron mcode-data.json to the SettingsService schema; ssh-host-keys.json copied byte-for-byte (TOFU public keys, not secrets)",
+        "Wave 32 (2026-09-04) crossgrade round-trip PASSED against a COPY of real %APPDATA%/MCode: discovery found all 4 markers, plan→stage→verify→commit→discard executed, target settings landed path-aware nested (settings.telemetry exact, ui.windowBounds nested, repos top-level), staging discarded, source sha256-identical, real app-data untouched. Fixed: migrate target now honors MCODE_TAURI_SETTINGS_PATH in debug builds (was writing to the real profile). Remaining: secrets keychain slice + settings-UI surface."
+      ],
+      "updatedAt": "2026-09-04"
     },
     {
       "id": "filesystem.scoped",
@@ -378,8 +380,10 @@
         "WireServe integration evidence is in-process TCP (Windows box has no unix sockets); pipe transport compile-gated windows code path, not runtime-proven",
         "mcode-runtime.json advertised before accept (metadata-first discipline, runtime-rpc.ts:1207-1222); auth codes bad_request/unauthorized/request_too_large byte-match parseAndAuth (runtime-rpc.ts:1596-1610)",
         "src-tauri/src/runtime_rpc.rs: RuntimeRpcHost serves the newline-JSON CLI plane (runtime-rpc.ts port) on a Windows named pipe / POSIX unix socket with 0600 perms, 32-connection cap, 30s idle timeout, 16 MiB line cap",
-        "status.get envelope matches RuntimeRpcEnvelopeSchema (_meta.runtimeId stamped); RUNTIME_PROTOCOL_VERSION=3 / MIN_COMPATIBLE=2; node-platform spelling (win32/darwin) fixed vs std::env::consts::OS"
-      ]
+        "status.get envelope matches RuntimeRpcEnvelopeSchema (_meta.runtimeId stamped); RUNTIME_PROTOCOL_VERSION=3 / MIN_COMPATIBLE=2; node-platform spelling (win32/darwin) fixed vs std::env::consts::OS",
+        "Wave 32 (2026-09-04) pipe-transport CLI smoke PASSED: mcode-tauri.exe published mcode-runtime.json (named-pipe) before accept; mcode status returned ok:true, runtimeState ready, graphState ready, pid+runtimeId match. Windows named-pipe transport runtime-proven (was compile-verified only). Fixed: Transport::bind now runs inside the tokio runtime via tauri::async_runtime::block_on (setup-thread bind panicked: ServerOptions::create needs a reactor)."
+      ],
+      "updatedAt": "2026-09-04"
     },
     {
       "id": "mobile.pairing",
@@ -431,7 +435,7 @@
       },
       "status": "in_progress",
       "evidence": [
-        "Host side of `mcode status` discovery landed: runtime_rpc.rs serves status.get over the advertised mcode-runtime.json endpoint; CLI binary itself remains Node (bundled) \u2014 Rust CLI port not started"
+        "Host side of `mcode status` discovery landed: runtime_rpc.rs serves status.get over the advertised mcode-runtime.json endpoint; CLI binary itself remains Node (bundled) — Rust CLI port not started"
       ]
     },
     {
@@ -535,7 +539,7 @@
       "targetRustModule": "crates/mcode-platform/src/permissions",
       "targetCommand": ["permission_status", "permission_request", "permission_open_settings"],
       "tests": [
-        "os_permissions.rs: developerPermissions port (10 tests) \u2014 Windows mapping honest",
+        "os_permissions.rs: developerPermissions port (10 tests) — Windows mapping honest",
         "macOS TCC gap documented in module docs"
       ],
       "platforms": {
@@ -544,7 +548,7 @@
         "linux": "not_started"
       },
       "status": "in_progress",
-      "evidence": "os_permissions.rs: developerPermissions port (10 tests) \u2014 Windows mapping honest",
+      "evidence": "os_permissions.rs: developerPermissions port (10 tests) — Windows mapping honest",
       "updatedAt": "2026-09-02"
     },
     {
@@ -595,7 +599,7 @@
       "targetRustModule": "crates/mcode-fs/src/editor_contract",
       "targetCommand": ["editor_open", "editor_save"],
       "tests": [
-        "EditorSurvey: 84 monaco/textmate files classified \u2014 pure renderer, zero Electron deps",
+        "EditorSurvey: 84 monaco/textmate files classified — pure renderer, zero Electron deps",
         "CSP verified: wasm-unsafe-eval + worker-src blob: cover oniguruma + workers",
         "chunk-budget --tauri lane green (75.5 kB shell)",
         "web typecheck baseline parity (21 vs 33 errors)"
@@ -606,7 +610,7 @@
         "linux": "not_started"
       },
       "status": "in_progress",
-      "evidence": "EditorSurvey: 84 monaco/textmate files classified \u2014 pure renderer, zero Electron deps",
+      "evidence": "EditorSurvey: 84 monaco/textmate files classified — pure renderer, zero Electron deps",
       "updatedAt": "2026-09-02"
     },
     {
@@ -621,7 +625,7 @@
       "targetCommand": ["pty_attach", "pty_search_metadata"],
       "tests": [
         "src/renderer/src/desktop/pty-client.test.ts",
-        "docs/migration/TERMINAL_UI_INTEGRATION.md \u00a74 verification plan (transport-factory selection, seq-dedupe, pty smoke E2E)",
+        "docs/migration/TERMINAL_UI_INTEGRATION.md §4 verification plan (transport-factory selection, seq-dedupe, pty smoke E2E)",
         "src/renderer/src/components/terminal-pane/pty-transport-factory.test.ts",
         "src/renderer/src/components/terminal-pane/pty-transport-tauri.test.ts",
         "src-tauri/tests/pty_command_contract.rs"
@@ -637,7 +641,7 @@
         "transport seam = one factory swap at pty-connection.ts:4026 (createIpcPtyTransport -> runtime-selected createLocalPtyTransport), PtyTransport interface unchanged",
         "seq dedupe rule (drop startSeq < processedChars) mapped onto terminal-pty-ack-gate cumulative processedPtyCharTotals; pty_ack_data exposure re-arms Rust credit (PtySession::ack)",
         "typed pty-client (src/renderer/src/desktop/pty-client.ts) + src-tauri pty_spawn/write/resize/kill/has_pty + pty://data / pty://exit already landed (pty-client.test.ts green)",
-        "pane serializers, delivery resync, hidden-delivery gate, viewport authority deferred with the pane-serializer slice (doc \u00a73)",
+        "pane serializers, delivery resync, hidden-delivery gate, viewport authority deferred with the pane-serializer slice (doc §3)",
         "Wave 6: transport seam landed (factory + Tauri transport + dispatcher port + seq-dedupe); pty_ack_data/pty_get_size commands + contract tests; ConPTY exit drain fix"
       ]
     },
