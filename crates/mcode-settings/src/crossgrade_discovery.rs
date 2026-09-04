@@ -164,3 +164,27 @@ mod tests {
         assert!(find_electron_settings_source_with(&env).is_none());
     }
 }
+
+#[cfg(test)]
+mod smoke_probe {
+    /// Manual probe for the crossgrade smoke run: prints discovery output
+    /// under a redirected APPDATA. Run with:
+    /// APPDATA=<fixture> cargo test -p mcode-settings --lib \
+    ///   smoke_probe::discovery_prints -- --nocapture
+    #[test]
+    fn discovery_prints() {
+        let locations = super::discover_electron_data_locations();
+        for location in &locations {
+            println!(
+                "discovered {} markers={:?} has_primary={}",
+                location.path.display(),
+                location.markers,
+                location.has_primary_settings()
+            );
+        }
+        assert!(
+            !locations.is_empty(),
+            "no electron data locations discovered"
+        );
+    }
+}

@@ -277,6 +277,7 @@ enum SmokeTestMode {
     Windowing,
     Filesystem,
     Pty,
+    Crossgrade,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -307,6 +308,10 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
             std::env::var_os("MCODE_TAURI_SMOKE_PTY_MARKER")?;
             std::env::var_os("MCODE_TAURI_SMOKE_PTY_ECHO")?;
             return Some(SmokeTestMode::Pty);
+        }
+        if intent.eq_ignore_ascii_case("crossgrade") {
+            std::env::var_os("MCODE_TAURI_SMOKE_CROSSGRADE_MARKER")?;
+            return Some(SmokeTestMode::Crossgrade);
         }
         Some(SmokeTestMode::Quit)
     }
@@ -366,6 +371,14 @@ fn build_main_window(
         Some(SmokeTestMode::Windowing) => {
             "lifecycle-smoke.html?intent=quit&windowing=true".to_owned()
         }
+        Some(SmokeTestMode::Crossgrade) => {
+            let marker = std::env::var("MCODE_TAURI_SMOKE_CROSSGRADE_MARKER")
+                .expect("crossgrade smoke marker must be configured");
+            format!(
+                "lifecycle-smoke.html?intent=quit&crossgrade=true&marker={}",
+                encode_query_component(&marker)
+            )
+        }
         Some(SmokeTestMode::Filesystem) => {
             let root = std::env::var("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
                 .expect("filesystem smoke root must be configured");
@@ -391,7 +404,11 @@ fn build_main_window(
         .title("MCode")
         .min_inner_size(600.0, 400.0)
         .resizable(true)
-        .visible(smoke_mode.is_none() || smoke_mode == Some(SmokeTestMode::Windowing));
+        .visible(
+            smoke_mode.is_none()
+                || smoke_mode == Some(SmokeTestMode::Windowing)
+                || smoke_mode == Some(SmokeTestMode::Crossgrade),
+        );
 
     let monitor_bounds = monitor_work_areas(app).unwrap_or_else(|error| {
         eprintln!("[window] failed to enumerate monitors: {error}");
@@ -696,6 +713,34 @@ pub fn run() {
                     });
                 }
                 Some(SmokeTestMode::RestartParent) | None => {}
+                Some(SmokeTestMode::Crossgrade) => {
+                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_CROSSGRADE_MARKER")
+                        .expect("crossgrade smoke marker must be configured");
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        // Poll the marker file the renderer writes with its
+                        // own verdict; Rust never writes the marker in this
+                        // mode (SmokeTestMode renderer-verdict discipline).
+                        let mut verdict: Option<String> = None;
+                        for _ in 0..120 {
+                            if let Ok(value) = std::fs::read_to_string(&marker) {
+                                let value = value.trim();
+                                if value == "passed" || value == "renderer-failed" {
+                                    verdict = Some(value.to_owned());
+                                    break;
+                                }
+                            }
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        let passed = verdict.as_deref() == Some("passed");
+                        if let Some(value) = verdict {
+                            eprintln!("[smoke] crossgrade smoke renderer verdict: {value}");
+                        } else {
+                            eprintln!("[smoke] crossgrade smoke marker never reached a verdict");
+                        }
+                        app_handle.exit(i32::from(!passed));
+                    });
+                }
             }
             Ok(())
         })

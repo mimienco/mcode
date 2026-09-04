@@ -116,6 +116,23 @@ pub(crate) fn settings_crossgrade_status() -> CrossgradeStatusDto {
 pub(crate) fn settings_crossgrade_migrate(
     app: AppHandle,
 ) -> Result<CrossgradeResultDto, DesktopCommandError> {
+    // Debug builds honor MCODE_TAURI_SETTINGS_PATH (lib.rs:342-347 discipline):
+    // the migration target is the PARENT of that settings file, not the real
+    // app-data dir — the smoke runs redirect it to a fixture COPY and must
+    // never touch the real profile.
+    #[cfg(debug_assertions)]
+    let target_dir = match std::env::var_os("MCODE_TAURI_SETTINGS_PATH") {
+        Some(path) => std::path::PathBuf::from(path)
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .ok_or_else(|| app_data_error(MIGRATE_OPERATION))?,
+        None => app
+            .path()
+            .app_data_dir()
+            .map_err(|_| app_data_error(MIGRATE_OPERATION))?,
+    };
+    #[cfg(not(debug_assertions))]
     let target_dir = app
         .path()
         .app_data_dir()

@@ -605,7 +605,16 @@ impl RuntimeRpcHost {
         let runtime_id = random_runtime_id();
         let auth_token = random_auth_token();
 
-        let transport = Transport::bind(user_data_path, &runtime_id)?;
+        // Why: `ServerOptions::create` registers the pipe with the tokio
+        // reactor, which requires a runtime context. The setup hook runs on
+        // the main thread OUTSIDE any runtime — bind through the Tauri async
+        // runtime so the pipe (and on POSIX the listener) gets a reactor.
+        // The accept loop then runs on the same runtime (spawn below).
+        let user_data = user_data_path.to_owned();
+        let runtime_id_for_bind = runtime_id.clone();
+        let transport = tauri::async_runtime::block_on(async move {
+            Transport::bind(&user_data, &runtime_id_for_bind)
+        })?;
         #[cfg(unix)]
         let socket_path = transport.socket_path().map(Path::to_path_buf);
 

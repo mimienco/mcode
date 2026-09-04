@@ -12,6 +12,7 @@ const intent: ShutdownIntent = smokeParameters.get('intent') === 'restart' ? 're
 const shouldCheckUpdater = smokeParameters.get('updater') === 'true'
 const shouldCheckWindowing = smokeParameters.get('windowing') === 'true'
 const shouldCheckFilesystem = smokeParameters.get('filesystem') === 'true'
+const shouldCheckCrossgrade = smokeParameters.get('crossgrade') === 'true'
 const desktopInvoke = createDesktopInvoke((command, args) => invoke(command, args))
 const lifecycle = createTauriDesktopAppLifecycleCapability(desktopInvoke, (event, listener) =>
   listen(event, listener)
@@ -120,6 +121,61 @@ void runLifecycleSmoke({
       }
       await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })
       document.getElementById('status')?.replaceChildren('Filesystem smoke passed')
+      return
+    }
+    if (shouldCheckCrossgrade) {
+      // Crossgrade round-trip (D-012 explicit-command surface): status first,
+      // then the full migrate pipeline (plan → stage → verify → commit →
+      // discard) against the fixture COPY configured via
+      // MCODE_TAURI_SETTINGS_PATH + APPDATA overrides at launch. The source
+      // dir is never modified — status is read-only and migrate only copies.
+      // SmokeTestMode discipline: the RENDERER writes the verdict marker via
+      // the fs client; Rust only polls it (pty-smoke pattern).
+      const crossgradeMarker = smokeParameters.get('marker')
+      if (!crossgradeMarker) {
+        throw new Error('crossgrade smoke marker path is missing')
+      }
+      const writeVerdict = (verdict: 'passed' | 'renderer-failed'): Promise<void> =>
+        fs.writeFileAtomic({ filePath: crossgradeMarker, content: verdict })
+      try {
+        const status: unknown = await desktopInvoke('settings_crossgrade_status')
+        const discovered =
+          typeof status === 'object' && status !== null && 'discovered' in status
+            ? status.discovered === true
+            : false
+        if (!discovered) {
+          throw new Error('crossgrade smoke: source not discovered')
+        }
+        const result: unknown = await desktopInvoke('settings_crossgrade_migrate')
+        const migratedKeys =
+          typeof result === 'object' && result !== null && 'migratedKeys' in result
+            ? result.migratedKeys
+            : undefined
+        const telemetryPreserved =
+          typeof result === 'object' && result !== null && 'telemetryPreserved' in result
+            ? result.telemetryPreserved
+            : undefined
+        const stagingDiscarded =
+          typeof result === 'object' && result !== null && 'stagingDiscarded' in result
+            ? result.stagingDiscarded
+            : undefined
+        if (
+          typeof migratedKeys !== 'number' ||
+          migratedKeys <= 0 ||
+          telemetryPreserved !== true ||
+          stagingDiscarded !== true
+        ) {
+          throw new Error(`crossgrade smoke: migrate result invalid: ${JSON.stringify(result)}`)
+        }
+        await writeVerdict('passed')
+        document.getElementById('status')?.replaceChildren('Crossgrade smoke passed')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await writeVerdict('renderer-failed')
+        document.getElementById('status')?.replaceChildren(`Crossgrade smoke failed: ${message}`)
+        throw error
+      }
+      await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })
       return
     }
     if (!shouldCheckUpdater) {
