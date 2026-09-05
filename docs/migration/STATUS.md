@@ -1,6 +1,73 @@
 # Current Migration Status
 
 
+## Wave 34 (2026-09-06) — single-instance wiring, terminalPreview shim, telemetry consent, pty write-unavailable
+
+- HEAD `665d5e5bf6`. Four parallel slices landed and gate-verified green.
+- **Single-instance guard invoked** (closes the PARITY_MATRIX lifecycle
+  note from wave 21): `lib.rs::run()` now calls
+  `mcode_app::single_instance::acquire` through a new
+  `acquire_single_instance_lock` helper (dev-lane skip unless
+  MCODE_E2E_ENFORCE_SINGLE_INSTANCE_LOCK=1, packaged-macOS bypass, `--serve`
+  duplicate fail-open — the single-instance-lock.ts contract verbatim).
+  Already-running exits with the stable code 3. New
+  `release_for_restart()` (LOCK static switched OnceLock →
+  Mutex<Option<InstanceLock>>) is called before BOTH restart paths
+  (`execute_shutdown_request` Restart arm + `execute_downloaded_update`) so
+  the relaunch child can re-acquire the profile mutex. Profile scope =
+  MCODE_TAURI_SETTINGS_PATH parent (debug) else com.mcode.desktop.
+- **terminalPreview shim merged (7/77)**: new
+  `tauri-terminal-preview-client.ts` over the 5 terminal_preview_* commands
+  (typed seams, camelCase boundary); AgentTerminalPreview +
+  preview-grid-claim + preview-terminal-paste route through it; 0
+  window.api.terminalPreview callsites remain. max-lines repair: the
+  appearance effect extracted to `preview-terminal-appearance.ts`
+  (usePreviewTerminalAppearance) — file back under the 400 gate.
+- **telemetry consent commands** (parity row telemetry.diagnostics →
+  in_progress): NEW crate `crates/mcode-diagnostics` — burst-cap token
+  bucket (≤5/session), `derive_opt_in_via` port (first_launch_banner narrow),
+  `set_opt_in_persist` deep-merge write; `telemetry_commands.rs` serves
+  telemetry_get_consent (fail-closed pending_banner) /
+  telemetry_set_consent / telemetry_acknowledge_banner with the silent-ack
+  guard (only while existedBefore && optedIn===null). Honest deviation
+  recorded in the module doc: setOptIn persists without the
+  telemetry_opted_in emission (no PostHog lane in Tauri yet);
+  `telemetry:track` deliberately deferred with the PostHog client slice.
+  mcode-settings gained telemetry_settings()/set_telemetry_opted_in()
+  accessors (deep-merge, siblings preserved).
+- **pty write-unavailable (b-row)**: pty_write error path emits
+  `pty://write-unavailable` {ptyId:String, reason} before returning the
+  error; PtyEventPort extended (Tauri branch only) with the existing
+  dispatcher handler wired — Electron branch untouched. NOTE: this slice
+  landed in the same files but its Rust emit half was re-scoped mid-wave —
+  the dispatcher-side port + tests are green; verify the emit side in
+  pty_commands.rs before marking the b-row consumed.
+- Fourth-party files landed mid-wave by a concurrent agent and folded in
+  after repair: `tauri-app-client.ts` + `tauri-unported-namespace.ts`
+  (bootstrap presence shims for unported namespaces) and
+  `tauri-settings-document-client.ts` +
+  `settings_document_commands.rs` (settings_get/set_document merge-patch
+  surface; compile error repaired: update_persisted_public hands the
+  callback a &mut Map, merge_patch wants &mut Value — bridge via
+  take/merge/replace). The mergeNamespace ui-regression those introduced
+  (existing-first lookup broke performNativePaste) was repaired by
+  restoring spread-merge for `ui` only; shim test 15/15 again.
+- Gates at commit: cargo test --workspace **484 passed / 0 failed** (46
+  suites incl. mcode-diagnostics 13, telemetry contract 12, settings 6 new);
+  clippy 0 warnings workspace-wide (incl. restoring the wave-33
+  ui_smoke_trigger_menu_item generate_handler entry a concurrent edit had
+  dropped); fmt clean; web typecheck 16 errors = the inherited TS6307
+  baseline, zero new; desktop vitest 25 files / 161 passed (routing
+  sources-walk tests need --testTimeout≥600s on this tree — they pass in
+  ~10-40s but the default 30s budget is starved by 7,390 stray tsc-emitted
+  .js files under src/renderer/src; cleanup candidate).
+- shim-coverage 6/77 → 7/77 (fs, notifications, shell, speech,
+  terminalPreview, ui, updater). Ledger: 36/40 todos done; the 4 hard
+  external blockers are unchanged (signing credentials; published artifacts
+  + CI hosts; parity-gated Electron removal; macOS/Linux hosts + device).
+  Not_started rows remaining: workspace.session, agents.execution,
+  browser.emulator, plugins.skills (telemetry.diagnostics now in_progress).
+
 ## Wave 33 (2026-09-05) — ui menu-event bridge shim + menu smoke PASSED
 
 - UI-bridge slice LANDED (`62d518614e`): the 10 app-menu events Rust already
