@@ -1,12 +1,20 @@
 {
   "schemaVersion": 1,
   "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
-  "updatedAt": "2026-09-04",
-  "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
+  "updatedAt": "2026-09-05",
+  "allowedStatuses": [
+    "not_started",
+    "in_progress",
+    "done",
+    "blocked",
+    "accepted_exception"
+  ],
   "features": [
     {
       "id": "desktop.lifecycle",
-      "currentFiles": ["src/main/index.ts"],
+      "currentFiles": [
+        "src/main/index.ts"
+      ],
       "currentBehavior": "App startup, single-instance arbitration, crash handling, orderly shutdown, and headless mode selection.",
       "targetRustModule": "crates/mcode-app/src/lib.rs",
       "targetCommand": [
@@ -57,7 +65,10 @@
     },
     {
       "id": "desktop.windows",
-      "currentFiles": ["src/main/index.ts", "src/main/windows"],
+      "currentFiles": [
+        "src/main/index.ts",
+        "src/main/windows"
+      ],
       "currentBehavior": "Main/popout window creation, restoration, focus, bounds, navigation, and lifecycle events.",
       "targetRustModule": "src-tauri/src/desktop_window.rs",
       "targetCommand": [
@@ -103,10 +114,18 @@
     },
     {
       "id": "desktop.shell-ui",
-      "currentFiles": ["src/main/index.ts", "src/main/menu", "src/main/tray"],
+      "currentFiles": [
+        "src/main/index.ts",
+        "src/main/menu",
+        "src/main/tray"
+      ],
       "currentBehavior": "Menus, tray, shortcuts, dialogs, clipboard, deep links, file associations, and external URLs.",
       "targetRustModule": "src-tauri/src/windows_tray.rs",
-      "targetCommand": ["dialog_open", "dialog_save", "open_external"],
+      "targetCommand": [
+        "dialog_open",
+        "dialog_save",
+        "open_external"
+      ],
       "tests": [
         "src-tauri/src/app_menu.rs unit tests (5): event-name constants byte-match the original, appearance key order, selection/zoom payloads, display-only hint shape, stable error codes"
       ],
@@ -125,15 +144,25 @@
         "left click and Open restore, show, and focus the main window",
         "real Open, left-click, and Quit menu interaction evidence remains pending",
         "tray menu contains Open MCode, separator, and Quit with the packaged default icon and MCode tooltip",
-        "ui_popup_app_menu + Menu::popup(window) (menu.rs:29 ContextMenu) for the TitlebarLeftControls ··· button; WebviewWindow::reload() used for Reload/Force Reload"
-      ]
+        "ui_popup_app_menu + Menu::popup(window) (menu.rs:29 ContextMenu) for the TitlebarLeftControls ··· button; WebviewWindow::reload() used for Reload/Force Reload",
+        "Wave 33 (2026-09-05) menu smoke PASSED twice on the real surface: ui menu-event bridge shim (tauri-ui-bridge-client, 10 events + popupMenu + performNativeSelectionAction) merged into window.api.ui; app_menu.rs gained the missing check-for-updates dispatch arm; debug-only ui_smoke_trigger_menu_item drives the real handle_menu_event dispatcher through 11 item paths; renderer asserts every event exactly once and writes the verdict marker via the fs client. Fix chain found by the run: camelCase arg rename, ACL manifest+capability grants, missing dispatch arm, fixture fs-root seeding."
+      ],
+      "updatedAt": "2026-09-05"
     },
     {
       "id": "workspace.session",
-      "currentFiles": ["src/main", "src/preload/index.ts", "src/renderer/src"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts",
+        "src/renderer/src"
+      ],
       "currentBehavior": "Open, switch, restore, group, and persist local workspace state.",
       "targetRustModule": "crates/mcode-workspace/src/session",
-      "targetCommand": ["workspace_open", "workspace_switch", "workspace_list_recent"],
+      "targetCommand": [
+        "workspace_open",
+        "workspace_switch",
+        "workspace_list_recent"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -152,7 +181,11 @@
       ],
       "currentBehavior": "Settings, app data, workspace history, devices, secrets, identifiers, and Electron upgrade paths.",
       "targetRustModule": "crates/mcode-settings/src/migration",
-      "targetCommand": ["settings_get", "settings_update", "crossgrade_plan"],
+      "targetCommand": [
+        "settings_get",
+        "settings_update",
+        "crossgrade_plan"
+      ],
       "tests": [
         "crates/mcode-settings/src/crossgrade_staging.rs (20 total in crate): build_plan/stage/verify/commit pipeline, resumable by plan hash, idempotent commit, source-untouched invariant, telemetry consent preserved exactly (absent stays absent)",
         "src-tauri crossgrade_commands: settings_crossgrade_status + settings_crossgrade_migrate, typed snake_case codes matching DesktopCommandError shape"
@@ -173,10 +206,17 @@
     },
     {
       "id": "filesystem.scoped",
-      "currentFiles": ["src/main", "src/preload/index.ts"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts"
+      ],
       "currentBehavior": "Workspace-scoped reads/writes, canonicalization, atomic updates, ignores, and path validation.",
       "targetRustModule": "crates/mcode-fs/src/scoped",
-      "targetCommand": ["fs_read", "fs_write_atomic", "fs_list"],
+      "targetCommand": [
+        "fs_read",
+        "fs_write_atomic",
+        "fs_list"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -188,10 +228,16 @@
     },
     {
       "id": "filesystem.watcher",
-      "currentFiles": ["src/main", "config/scripts/runtime-file-watcher-fault-harness.mjs"],
+      "currentFiles": [
+        "src/main",
+        "config/scripts/runtime-file-watcher-fault-harness.mjs"
+      ],
       "currentBehavior": "Isolated native watcher with debounce, recovery, and workspace change propagation.",
       "targetRustModule": "crates/mcode-fs/src/watcher",
-      "targetCommand": ["watch_start", "watch_stop"],
+      "targetCommand": [
+        "watch_start",
+        "watch_stop"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -203,10 +249,18 @@
     },
     {
       "id": "git.repositories",
-      "currentFiles": ["src/main", "src/preload/index.ts", "tests/e2e"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts",
+        "tests/e2e"
+      ],
       "currentBehavior": "Repository detection, status, diff, staging, commits, branches, capabilities, and provider metadata.",
       "targetRustModule": "crates/mcode-git/src/repository",
-      "targetCommand": ["git_status", "git_diff", "git_commit"],
+      "targetCommand": [
+        "git_status",
+        "git_diff",
+        "git_commit"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -225,7 +279,12 @@
       ],
       "currentBehavior": "Create, list, switch, remove, prune, repair, lock, cleanup, and recover worktrees.",
       "targetRustModule": "crates/mcode-git/src/worktree",
-      "targetCommand": ["worktree_create", "worktree_list", "worktree_remove", "worktree_repair"],
+      "targetCommand": [
+        "worktree_create",
+        "worktree_list",
+        "worktree_remove",
+        "worktree_repair"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -237,10 +296,16 @@
     },
     {
       "id": "git.wsl-paths",
-      "currentFiles": ["src/main", "src/shared"],
+      "currentFiles": [
+        "src/main",
+        "src/shared"
+      ],
       "currentBehavior": "Git 2.25 capability rules, Windows paths, long paths, WSL translation, shells, and argument vectors.",
       "targetRustModule": "crates/mcode-git/src/platform_paths",
-      "targetCommand": ["platform_translate_path", "git_capabilities"],
+      "targetCommand": [
+        "platform_translate_path",
+        "git_capabilities"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -252,10 +317,18 @@
     },
     {
       "id": "process.supervisor",
-      "currentFiles": ["src/main", "src/pty-host", "src/relay"],
+      "currentFiles": [
+        "src/main",
+        "src/pty-host",
+        "src/relay"
+      ],
       "currentBehavior": "Spawn, track, signal, cancel, kill trees, recover orphans, and report structured exits.",
       "targetRustModule": "crates/mcode-process/src/supervisor",
-      "targetCommand": ["process_spawn", "process_signal", "process_stop"],
+      "targetCommand": [
+        "process_spawn",
+        "process_signal",
+        "process_stop"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -267,10 +340,19 @@
     },
     {
       "id": "pty.local",
-      "currentFiles": ["src/main", "src/pty-host", "patches"],
+      "currentFiles": [
+        "src/main",
+        "src/pty-host",
+        "patches"
+      ],
       "currentBehavior": "ConPTY/Unix PTY creation, resize, shell profiles, WSL, process groups/job objects, signals, and exits.",
       "targetRustModule": "crates/mcode-pty/src/local",
-      "targetCommand": ["pty_spawn", "pty_resize", "pty_input", "pty_stop"],
+      "targetCommand": [
+        "pty_spawn",
+        "pty_resize",
+        "pty_input",
+        "pty_stop"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -282,10 +364,18 @@
     },
     {
       "id": "pty.streaming",
-      "currentFiles": ["src/preload/index.ts", "src/main", "tests/e2e/terminal-*"],
+      "currentFiles": [
+        "src/preload/index.ts",
+        "src/main",
+        "tests/e2e/terminal-*"
+      ],
       "currentBehavior": "Sequenced output, ACK/backpressure, buffering, reload resync, parking, restoration, and high-output bounds.",
       "targetRustModule": "crates/mcode-pty/src/stream",
-      "targetCommand": ["pty_attach", "pty_ack", "pty_resync"],
+      "targetCommand": [
+        "pty_attach",
+        "pty_ack",
+        "pty_resync"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -297,10 +387,18 @@
     },
     {
       "id": "agents.execution",
-      "currentFiles": ["src/main", "src/renderer/src", "src/shared"],
+      "currentFiles": [
+        "src/main",
+        "src/renderer/src",
+        "src/shared"
+      ],
       "currentBehavior": "Launch and coordinate Claude Code, Codex, Grok, OpenCode, Pi, and parallel agent sessions in worktrees.",
       "targetRustModule": "crates/mcode-agent/src/execution",
-      "targetCommand": ["agent_start", "agent_input", "agent_cancel"],
+      "targetCommand": [
+        "agent_start",
+        "agent_input",
+        "agent_cancel"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -312,10 +410,19 @@
     },
     {
       "id": "ssh.transport",
-      "currentFiles": ["src/main", "src/relay", "tests/e2e/run-ssh-*"],
+      "currentFiles": [
+        "src/main",
+        "src/relay",
+        "tests/e2e/run-ssh-*"
+      ],
       "currentBehavior": "Known-host verification, keys/passphrases, agent, jumps, keepalive, reconnect, exec, remote PTY, and remote FS.",
       "targetRustModule": "crates/mcode-ssh/src/transport",
-      "targetCommand": ["ssh_connect", "ssh_exec", "ssh_open_pty", "ssh_disconnect"],
+      "targetCommand": [
+        "ssh_connect",
+        "ssh_exec",
+        "ssh_open_pty",
+        "ssh_disconnect"
+      ],
       "tests": [
         "crates/mcode-ssh/src/lib.rs (38 unit tests: transport, verifier, store, known_hosts, fingerprint, error, pty_id, known_hosts_source)",
         "src-tauri/tests/ssh_command_contract.rs (13 contract tests: seams, serde shapes, id round-trip, auth DTO)",
@@ -339,7 +446,11 @@
     },
     {
       "id": "ssh.workspaces",
-      "currentFiles": ["src/main", "src/relay", "src/renderer/src"],
+      "currentFiles": [
+        "src/main",
+        "src/relay",
+        "src/renderer/src"
+      ],
       "currentBehavior": "Remote repository/worktree lifecycle, watcher isolation, terminal parking, and live/unverifiable/exited boundaries.",
       "targetRustModule": "crates/mcode-ssh/src/workspace",
       "targetCommand": [
@@ -362,10 +473,17 @@
     },
     {
       "id": "relay.host",
-      "currentFiles": ["src/relay", "src/main"],
+      "currentFiles": [
+        "src/relay",
+        "src/main"
+      ],
       "currentBehavior": "WebSocket relay host, RPC routing, remote subscriptions, agent execution, and headless clients.",
       "targetRustModule": "crates/mcode-relay/src/host",
-      "targetCommand": ["relay_start", "relay_stop", "relay_status"],
+      "targetCommand": [
+        "relay_start",
+        "relay_stop",
+        "relay_status"
+      ],
       "tests": [
         "crates/mcode-wire/tests/relay_serve_integration.rs (4: full handshake+framed round trip, wrong credential rejected, version mismatch reply, graceful teardown) over the real TCP serve loop"
       ],
@@ -387,10 +505,18 @@
     },
     {
       "id": "mobile.pairing",
-      "currentFiles": ["src/relay", "mobile", "src/preload/index.ts"],
+      "currentFiles": [
+        "src/relay",
+        "mobile",
+        "src/preload/index.ts"
+      ],
       "currentBehavior": "QR/device pairing, trusted-device state, encrypted sessions, remote navigation, and terminal streaming.",
       "targetRustModule": "crates/mcode-wire/src/pairing",
-      "targetCommand": ["pairing_create", "pairing_list_devices", "pairing_revoke"],
+      "targetCommand": [
+        "pairing_create",
+        "pairing_list_devices",
+        "pairing_revoke"
+      ],
       "tests": [
         "crates/mcode-wire/src/pairing.rs (8 incl. golden vectors): encode/decode mcode://pair?code= deep links byte-compatible with src/shared/pairing.ts + schema validation (mobile-relay-pairing-offer.ts)"
       ],
@@ -404,7 +530,11 @@
     },
     {
       "id": "wire.protocol",
-      "currentFiles": ["src/relay", "src/shared", "mobile"],
+      "currentFiles": [
+        "src/relay",
+        "src/shared",
+        "mobile"
+      ],
       "currentBehavior": "Versioned messages, IDs, serialization, crypto, handshake, capabilities, and cross-version compatibility.",
       "targetRustModule": "crates/mcode-wire/src/protocol",
       "targetCommand": [],
@@ -423,7 +553,11 @@
     },
     {
       "id": "cli",
-      "currentFiles": ["cli", "src/main", "config/scripts"],
+      "currentFiles": [
+        "cli",
+        "src/main",
+        "config/scripts"
+      ],
       "currentBehavior": "MCode command-line launcher, workspace selection, app activation, and shared service access.",
       "targetRustModule": "crates/mcode-cli/src/main.rs",
       "targetCommand": [],
@@ -440,7 +574,10 @@
     },
     {
       "id": "headless.serve",
-      "currentFiles": ["src/main/index.ts", "src/relay"],
+      "currentFiles": [
+        "src/main/index.ts",
+        "src/relay"
+      ],
       "currentBehavior": "`mcode serve`, relay hosting, RPC, agent execution, lifecycle, and shutdown without a window.",
       "targetRustModule": "crates/mcode-headless/src/server",
       "targetCommand": [],
@@ -464,7 +601,12 @@
       ],
       "currentBehavior": "Stable, RC, hourly, daily, and adhoc discovery/download/apply, signatures, channel changes, rollback, and survival.",
       "targetRustModule": "crates/mcode-updater/src/service.rs",
-      "targetCommand": ["update_get_status", "update_check", "update_download", "update_install"],
+      "targetCommand": [
+        "update_get_status",
+        "update_check",
+        "update_download",
+        "update_install"
+      ],
       "tests": [
         "crates/mcode-updater/tests/configuration_contract.rs",
         "crates/mcode-updater/tests/service_contract.rs",
@@ -504,7 +646,9 @@
       "currentBehavior": "Installers, signing/notarization, manifests, artifact gates, Homebrew, AUR, and release publication.",
       "targetRustModule": "src-tauri/tauri.conf.json",
       "targetCommand": [],
-      "tests": ["src-tauri/tests/updater_capability_contract.rs"],
+      "tests": [
+        "src-tauri/tests/updater_capability_contract.rs"
+      ],
       "platforms": {
         "windows": "in_progress",
         "macos": "not_started",
@@ -519,10 +663,18 @@
     },
     {
       "id": "telemetry.diagnostics",
-      "currentFiles": ["src/main/telemetry", "src/main", "src/preload/index.ts"],
+      "currentFiles": [
+        "src/main/telemetry",
+        "src/main",
+        "src/preload/index.ts"
+      ],
       "currentBehavior": "Opt-in telemetry, crash/feedback export, structured diagnostics, identity, redaction, and release gating.",
       "targetRustModule": "crates/mcode-diagnostics/src/service",
-      "targetCommand": ["diagnostics_export", "telemetry_get_consent", "telemetry_set_consent"],
+      "targetCommand": [
+        "diagnostics_export",
+        "telemetry_get_consent",
+        "telemetry_set_consent"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -534,10 +686,18 @@
     },
     {
       "id": "permissions.native",
-      "currentFiles": ["src/main", "src/preload/index.ts", "resources"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts",
+        "resources"
+      ],
       "currentBehavior": "Filesystem, accessibility, screen capture, keyboard, notifications, and platform permission detection/guidance.",
       "targetRustModule": "crates/mcode-platform/src/permissions",
-      "targetCommand": ["permission_status", "permission_request", "permission_open_settings"],
+      "targetCommand": [
+        "permission_status",
+        "permission_request",
+        "permission_open_settings"
+      ],
       "tests": [
         "os_permissions.rs: developerPermissions port (10 tests) — Windows mapping honest",
         "macOS TCC gap documented in module docs"
@@ -553,10 +713,18 @@
     },
     {
       "id": "voice.sherpa",
-      "currentFiles": ["src/main", "src/preload/index.ts", "resources"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts",
+        "resources"
+      ],
       "currentBehavior": "Speech capture/transcription using Sherpa ONNX resources and platform audio permissions.",
       "targetRustModule": "crates/mcode-voice/src/sherpa",
-      "targetCommand": ["speech_start", "speech_stop", "speech_models"],
+      "targetCommand": [
+        "speech_start",
+        "speech_stop",
+        "speech_models"
+      ],
       "tests": [
         "catalog 4 tests",
         "download 3 tests",
@@ -575,10 +743,18 @@
     },
     {
       "id": "computer.use",
-      "currentFiles": ["src/main", "config/scripts/computer-use-*", "resources"],
+      "currentFiles": [
+        "src/main",
+        "config/scripts/computer-use-*",
+        "resources"
+      ],
       "currentBehavior": "Screen, keyboard, pointer, modifiers, scrolling, target selection, and OS accessibility integration.",
       "targetRustModule": "crates/mcode-computer/src/platform",
-      "targetCommand": ["computer_capture", "computer_input", "computer_targets"],
+      "targetCommand": [
+        "computer_capture",
+        "computer_input",
+        "computer_targets"
+      ],
       "tests": [
         "port path resolved: script-exec only, no Electron APIs (wave-27)",
         "mechanical Rust port remains (computer_desktop_script_exec command)"
@@ -594,10 +770,16 @@
     },
     {
       "id": "editor.monaco",
-      "currentFiles": ["src/renderer/src", "tests/e2e"],
+      "currentFiles": [
+        "src/renderer/src",
+        "tests/e2e"
+      ],
       "currentBehavior": "Monaco editing, TextMate/Oniguruma highlighting, IME, files, diffs, layouts, and restore.",
       "targetRustModule": "crates/mcode-fs/src/editor_contract",
-      "targetCommand": ["editor_open", "editor_save"],
+      "targetCommand": [
+        "editor_open",
+        "editor_save"
+      ],
       "tests": [
         "EditorSurvey: 84 monaco/textmate files classified — pure renderer, zero Electron deps",
         "CSP verified: wasm-unsafe-eval + worker-src blob: cover oniguruma + workers",
@@ -622,7 +804,10 @@
       ],
       "currentBehavior": "xterm WebGL/fallback, ligatures, search, links, clipboard, selection, keyboard, IME, scroll, and restoration.",
       "targetRustModule": "crates/mcode-pty/src/renderer_contract",
-      "targetCommand": ["pty_attach", "pty_search_metadata"],
+      "targetCommand": [
+        "pty_attach",
+        "pty_search_metadata"
+      ],
       "tests": [
         "src/renderer/src/desktop/pty-client.test.ts",
         "docs/migration/TERMINAL_UI_INTEGRATION.md §4 verification plan (transport-factory selection, seq-dedupe, pty smoke E2E)",
@@ -647,10 +832,14 @@
     },
     {
       "id": "rich.content",
-      "currentFiles": ["src/renderer/src"],
+      "currentFiles": [
+        "src/renderer/src"
+      ],
       "currentBehavior": "Tiptap/Markdown, Mermaid, KaTeX, PDF.js, code blocks, links, and safe content rendering.",
       "targetRustModule": "crates/mcode-app/src/content_policy",
-      "targetCommand": ["content_open_external"],
+      "targetCommand": [
+        "content_open_external"
+      ],
       "tests": [
         "Tiptap/Mermaid/KaTeX verified pure renderer npm imports",
         "export.htmlToPdf structured unsupported path landed (wry has no print-to-pdf)",
@@ -667,10 +856,17 @@
     },
     {
       "id": "integrations.providers",
-      "currentFiles": ["src/main", "src/preload/index.ts"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts"
+      ],
       "currentBehavior": "GitHub, GitLab, Bitbucket, Linear, Jira, hosted review, authentication, and provider-neutral UI state.",
       "targetRustModule": "crates/mcode-integrations/src/providers",
-      "targetCommand": ["provider_connect", "provider_request", "provider_disconnect"],
+      "targetCommand": [
+        "provider_connect",
+        "provider_request",
+        "provider_disconnect"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -684,10 +880,17 @@
     },
     {
       "id": "notifications.status",
-      "currentFiles": ["src/main", "src/preload/index.ts", "src/renderer/src"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts",
+        "src/renderer/src"
+      ],
       "currentBehavior": "Native notifications, task/session status, sound, badges, and focus/navigation behavior.",
       "targetRustModule": "crates/mcode-platform/src/notifications",
-      "targetCommand": ["notification_show", "notification_permission"],
+      "targetCommand": [
+        "notification_show",
+        "notification_permission"
+      ],
       "tests": [
         "notification_commands 2 tests",
         "desktop suite tauri-speech/shim 114 tests incl. notification client"
@@ -711,7 +914,10 @@
       ],
       "currentBehavior": "Localization coverage, Geist, Test Bench tokens, dark/light modes, Radix/shadcn components, and keyboard accessibility.",
       "targetRustModule": "crates/mcode-settings/src/appearance",
-      "targetCommand": ["appearance_get_system", "appearance_subscribe"],
+      "targetCommand": [
+        "appearance_get_system",
+        "appearance_subscribe"
+      ],
       "tests": [
         "i18next/react-i18next renderer-only (KEEP in cutover inventory)",
         "SettingsService + appearance settings ported in mcode-settings crate",
@@ -728,10 +934,19 @@
     },
     {
       "id": "plugins.skills",
-      "currentFiles": ["src/main/skills", "src/main", "src/relay", "skills"],
+      "currentFiles": [
+        "src/main/skills",
+        "src/main",
+        "src/relay",
+        "skills"
+      ],
       "currentBehavior": "Plugin/skill discovery, manifests, installation, sharing, bundled assets, pets, and policy boundaries.",
       "targetRustModule": "crates/mcode-extensions/src/service",
-      "targetCommand": ["extension_list", "extension_install", "extension_remove"],
+      "targetCommand": [
+        "extension_list",
+        "extension_install",
+        "extension_remove"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -743,10 +958,18 @@
     },
     {
       "id": "browser.emulator",
-      "currentFiles": ["src/main", "src/preload/index.ts", "src/renderer/src"],
+      "currentFiles": [
+        "src/main",
+        "src/preload/index.ts",
+        "src/renderer/src"
+      ],
       "currentBehavior": "Embedded browser/emulator tabs, popup/window behavior, navigation policy, previews, and developer workflows.",
       "targetRustModule": "crates/mcode-platform/src/webviews",
-      "targetCommand": ["webview_open", "webview_navigate", "webview_close"],
+      "targetCommand": [
+        "webview_open",
+        "webview_navigate",
+        "webview_close"
+      ],
       "tests": [],
       "platforms": {
         "windows": "not_started",
@@ -765,7 +988,11 @@
       ],
       "currentBehavior": "Persist and restore workspaces, tabs, terminals, agents, subscriptions, navigation, and crash/reload state.",
       "targetRustModule": "crates/mcode-settings/src/workspace_session_reconciliation.rs",
-      "targetCommand": ["app_stage_shutdown_checkpoint", "session_restore", "session_reconcile"],
+      "targetCommand": [
+        "app_stage_shutdown_checkpoint",
+        "session_restore",
+        "session_reconcile"
+      ],
       "tests": [
         "crates/mcode-settings/tests/shutdown_checkpoint_contract.rs",
         "src-tauri/tests/shutdown_checkpoint_command_contract.rs",

@@ -142,3 +142,13 @@ No migration command has written to the original repository.
 - Rewrite branch `rewrite/tauri-full` @ `d644ff275d`: wave-24 shim grind (`d0bc03740b`, fs/shell/
   updater namespaces) + smoke fixes (`d644ff275d`, runtime-rpc reactor bind, crossgrade target env,
   Crossgrade smoke mode). Working tree carries only user WIP + gitignored migration docs.
+
+## Wave 33 (2026-09-05) re-verification
+
+- Original HEAD: `5c13ecce88` (branch `rebrand/mcode`) — UNCHANGED from the wave-32 record.
+- Original working tree: 115 dirty paths — identical count to the wave-32 record; user's active
+  WIP continues, all of it preserved; the migration never wrote to the original.
+- Rewrite branch `rewrite/tauri-full` @ `62d518614e`: ui menu-event bridge shim +
+  SmokeTestMode::Menu + check-for-updates dispatch arm + ACL grants (menu smoke PASSED ×2).
+  Note: the user's WIP appears STAGED in the rewrite index (270 files); migration commits use
+  explicit pathspecs so their staged work is never committed or unstaged by migration waves.
