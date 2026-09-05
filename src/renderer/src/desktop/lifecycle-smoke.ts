@@ -6,6 +6,7 @@ import { createTauriDesktopAppLifecycleCapability } from './tauri-desktop-app-li
 import { runLifecycleSmoke } from './lifecycle-smoke-client'
 import { createTauriDesktopWindowCapability } from './tauri-desktop-window-capability'
 import { createTauriFsClient } from './fs-client'
+import { createTauriUiBridgeClient } from './tauri-ui-bridge-client'
 
 const smokeParameters = new URLSearchParams(window.location.search)
 const intent: ShutdownIntent = smokeParameters.get('intent') === 'restart' ? 'restart' : 'quit'
@@ -13,6 +14,7 @@ const shouldCheckUpdater = smokeParameters.get('updater') === 'true'
 const shouldCheckWindowing = smokeParameters.get('windowing') === 'true'
 const shouldCheckFilesystem = smokeParameters.get('filesystem') === 'true'
 const shouldCheckCrossgrade = smokeParameters.get('crossgrade') === 'true'
+const shouldCheckMenu = smokeParameters.get('menu') === 'true'
 const desktopInvoke = createDesktopInvoke((command, args) => invoke(command, args))
 const lifecycle = createTauriDesktopAppLifecycleCapability(desktopInvoke, (event, listener) =>
   listen(event, listener)
@@ -135,7 +137,7 @@ void runLifecycleSmoke({
       if (!crossgradeMarker) {
         throw new Error('crossgrade smoke marker path is missing')
       }
-      const writeVerdict = (verdict: 'passed' | 'renderer-failed'): Promise<void> =>
+      const writeVerdict = (verdict: string): Promise<void> =>
         fs.writeFileAtomic({ filePath: crossgradeMarker, content: verdict })
       try {
         const status: unknown = await desktopInvoke('settings_crossgrade_status')
@@ -171,8 +173,100 @@ void runLifecycleSmoke({
         document.getElementById('status')?.replaceChildren('Crossgrade smoke passed')
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        await writeVerdict('renderer-failed')
+        await writeVerdict(`renderer-failed: ${message}`)
         document.getElementById('status')?.replaceChildren(`Crossgrade smoke failed: ${message}`)
+        throw error
+      }
+      await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })
+      return
+    }
+    if (shouldCheckMenu) {
+      // Menu smoke (app_menu.rs dispatch): subscribe every menu-driven event
+      // through the typed UI bridge, then drive the REAL click dispatcher
+      // (handle_menu_event) through the debug-only ui_smoke_trigger_menu_item
+      // command — the exact path a native muda click takes. The RENDERER
+      // writes the verdict marker via the fs client; Rust only polls it.
+      const menuMarker = smokeParameters.get('marker')
+      if (!menuMarker) {
+        throw new Error('menu smoke marker path is missing')
+      }
+      const writeVerdict = (verdict: string): Promise<void> =>
+        fs.writeFileAtomic({ filePath: menuMarker, content: verdict })
+      try {
+        const ui = createTauriUiBridgeClient(
+          (command, args) => invoke(command, args),
+          (event, listener) => listen(event, listener)
+        )
+        const received: string[] = []
+        const expect = (name: string): void => {
+          if (received.includes(name)) {
+            throw new Error(`menu smoke: duplicate event ${name}`)
+          }
+          received.push(name)
+        }
+        const offs = [
+          ui.onAppMenuPaste(() => expect('paste')),
+          ui.onAppMenuSelectionAction((action) => expect(`selection:${action}`)),
+          ui.onTerminalZoom((direction) => expect(`zoom:${direction}`)),
+          ui.onToggleLeftSidebar(() => expect('sidebar:left')),
+          ui.onToggleRightSidebar(() => expect('sidebar:right')),
+          ui.onToggleStatusBar(() => expect('statusBar')),
+          ui.onToggleAppearanceSetting((key) => expect(`appearance:${key}`)),
+          ui.onCheckForUpdates(() => expect('checkForUpdates'))
+        ]
+        const expected = [
+          'paste',
+          'selection:copy',
+          'selection:select-all',
+          'zoom:in',
+          'zoom:out',
+          'zoom:reset',
+          'sidebar:left',
+          'sidebar:right',
+          'statusBar',
+          'appearance:showTasksButton',
+          'checkForUpdates'
+        ]
+        // Dispatch through the real dispatcher: paste, copy, select-all,
+        // zoom in/out/reset, both sidebars, status bar, one appearance
+        // checkbox, check-for-updates. Undo/redo share the void-event shape
+        // with paste (exercised by the bridge unit test).
+        const items = [
+          'mcode-edit-paste',
+          'mcode-edit-copy',
+          'mcode-edit-select-all',
+          'mcode-view-zoom-in',
+          'mcode-view-zoom-out',
+          'mcode-view-zoom-reset',
+          'mcode-view-sidebar-left',
+          'mcode-view-sidebar-right',
+          'mcode-view-status-bar',
+          'mcode-view-tasks-button',
+          'mcode-help-check-updates'
+        ]
+        for (const item of items) {
+          await desktopInvoke('ui_smoke_trigger_menu_item', { itemId: item })
+        }
+        // All events are emitted synchronously through the Rust dispatcher
+        // and delivered over the Tauri event bus; give the listeners a beat.
+        {
+          const { promise, resolve } = Promise.withResolvers<void>()
+          setTimeout(resolve, 500)
+          await promise
+        }
+        for (const off of offs) {
+          off()
+        }
+        const missing = expected.filter((name) => !received.includes(name))
+        if (missing.length > 0) {
+          throw new Error(`menu smoke: events not received: ${missing.join(', ')}`)
+        }
+        await writeVerdict('passed')
+        document.getElementById('status')?.replaceChildren('Menu smoke passed')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await writeVerdict(`renderer-failed: ${message}`)
+        document.getElementById('status')?.replaceChildren(`Menu smoke failed: ${message}`)
         throw error
       }
       await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })

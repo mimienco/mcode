@@ -33,6 +33,8 @@ mod windows_tray;
 
 use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
 use app_menu::ui_popup_app_menu;
+#[cfg(debug_assertions)]
+use app_menu::ui_smoke_trigger_menu_item;
 pub use app_shutdown_commands::{
     SHUTDOWN_RENDERER_ACK_TIMEOUT, ShutdownTimeoutAction,
     app_abort_unacknowledged_update_install_for, app_acknowledge_shutdown_for,
@@ -278,6 +280,7 @@ enum SmokeTestMode {
     Filesystem,
     Pty,
     Crossgrade,
+    Menu,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -312,6 +315,10 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
         if intent.eq_ignore_ascii_case("crossgrade") {
             std::env::var_os("MCODE_TAURI_SMOKE_CROSSGRADE_MARKER")?;
             return Some(SmokeTestMode::Crossgrade);
+        }
+        if intent.eq_ignore_ascii_case("menu") {
+            std::env::var_os("MCODE_TAURI_SMOKE_MENU_MARKER")?;
+            return Some(SmokeTestMode::Menu);
         }
         Some(SmokeTestMode::Quit)
     }
@@ -379,6 +386,14 @@ fn build_main_window(
                 encode_query_component(&marker)
             )
         }
+        Some(SmokeTestMode::Menu) => {
+            let marker = std::env::var("MCODE_TAURI_SMOKE_MENU_MARKER")
+                .expect("menu smoke marker must be configured");
+            format!(
+                "lifecycle-smoke.html?intent=quit&menu=true&marker={}",
+                encode_query_component(&marker)
+            )
+        }
         Some(SmokeTestMode::Filesystem) => {
             let root = std::env::var("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
                 .expect("filesystem smoke root must be configured");
@@ -407,7 +422,8 @@ fn build_main_window(
         .visible(
             smoke_mode.is_none()
                 || smoke_mode == Some(SmokeTestMode::Windowing)
-                || smoke_mode == Some(SmokeTestMode::Crossgrade),
+                || smoke_mode == Some(SmokeTestMode::Crossgrade)
+                || smoke_mode == Some(SmokeTestMode::Menu),
         );
 
     let monitor_bounds = monitor_work_areas(app).unwrap_or_else(|error| {
@@ -741,6 +757,35 @@ pub fn run() {
                         app_handle.exit(i32::from(!passed));
                     });
                 }
+                Some(SmokeTestMode::Menu) => {
+                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_MENU_MARKER")
+                        .expect("menu smoke marker must be configured");
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        // Poll the marker file the renderer writes with its
+                        // own verdict; Rust never writes the marker in this
+                        // mode (SmokeTestMode renderer-verdict discipline).
+                        let marker = std::path::PathBuf::from(marker);
+                        let mut verdict: Option<String> = None;
+                        for _ in 0..120 {
+                            if let Ok(value) = std::fs::read_to_string(&marker) {
+                                let value = value.trim();
+                                if value == "passed" || value == "renderer-failed" {
+                                    verdict = Some(value.to_owned());
+                                    break;
+                                }
+                            }
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        let passed = verdict.as_deref() == Some("passed");
+                        if let Some(value) = verdict {
+                            eprintln!("[smoke] menu smoke renderer verdict: {value}");
+                        } else {
+                            eprintln!("[smoke] menu smoke marker never reached a verdict");
+                        }
+                        app_handle.exit(i32::from(!passed));
+                    });
+                }
             }
             Ok(())
         })
@@ -850,6 +895,8 @@ pub fn run() {
             ui_speech_feed_audio,
             ui_speech_stop_dictation,
             ui_popup_app_menu,
+            #[cfg(debug_assertions)]
+            ui_smoke_trigger_menu_item,
             settings_crossgrade_status,
             settings_crossgrade_migrate,
         ])

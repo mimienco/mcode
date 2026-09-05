@@ -104,6 +104,7 @@ fn main_window_grants_only_default_and_required_window_mutations() {
             "allow-terminal-preview-fit",
             "allow-terminal-preview-unsubscribe",
             "allow-ui-popup-app-menu",
+            "allow-ui-smoke-trigger-menu-item",
             "allow-settings-crossgrade-status",
             "allow-settings-crossgrade-migrate",
         ])

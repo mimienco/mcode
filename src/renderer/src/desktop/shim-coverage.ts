@@ -6,8 +6,9 @@
  * including `e2e`) is classified as already bridged or still pending.
  *
  * `SHIMMED_NAMESPACES` lists what the shim layer serves natively under
- * Tauri today: the clipboard subset of `ui`, `notifications`, `speech`,
- * and the full `fs` (34 methods), `shell` (12 methods), and `updater`
+ * Tauri today: `ui` (clipboard subset + the app-menu/zoom/toggle/check-
+ * updates event bridge + popupMenu), `notifications`, `speech`, and the
+ * full `fs` (34 methods), `shell` (12 methods), and `updater`
  * (11 methods) namespaces.
  */
 export const ALL_WINDOW_API_NAMESPACES: readonly string[] = Object.freeze([

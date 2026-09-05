@@ -60,6 +60,7 @@
     "allow-developer-permissions-open-settings",
     "allow-developer-permissions-test-local-network-connection",
     "allow-ui-popup-app-menu",
+    "allow-ui-smoke-trigger-menu-item",
     "allow-settings-crossgrade-status",
     "allow-settings-crossgrade-migrate",
     "allow-fs-authorize-external-path",

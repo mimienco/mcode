@@ -130,6 +130,7 @@ fn main() {
             "ui_speech_feed_audio",
             "ui_speech_stop_dictation",
             "ui_popup_app_menu",
+            "ui_smoke_trigger_menu_item",
             "settings_crossgrade_status",
             "settings_crossgrade_migrate",
         ]));

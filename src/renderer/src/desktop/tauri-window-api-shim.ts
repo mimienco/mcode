@@ -15,6 +15,7 @@ import {
 } from './updater-client'
 import { createRuntimeFsClient, createTauriFsClient, type FsApi } from './fs-client'
 import { MCODE_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
+import { createTauriUiBridgeClient } from './tauri-ui-bridge-client'
 
 /**
  * Partial `ui` bridge over the native Tauri clipboard commands. Keyed by the
@@ -83,10 +84,13 @@ export function installTauriWindowApiShim(): void {
   })
 
   window.api = {
-    ...existing,
     ui: {
       ...existing?.ui,
-      ...tauriUiClipboardBridge
+      ...tauriUiClipboardBridge,
+      ...createTauriUiBridgeClient(
+        (command, args) => invoke(command, args),
+        (event, listener) => listen(event, listener)
+      )
     },
     speech: {
       ...existing?.speech,

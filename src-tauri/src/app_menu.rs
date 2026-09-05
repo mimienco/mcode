@@ -33,7 +33,8 @@
 //!   the appearance key as payload — the renderer owns the persisted store,
 //!   mirrors index.ts:3100+ where main forwards or writes+rebuilds.
 //! - Check for Updates forwards `ui:checkForUpdates` — the updater surface is
-//!   renderer-owned (D-010); the renderer listener is a pending slice.
+//!   renderer-owned (D-010); the renderer listener is served by the
+//!   `tauri-ui-bridge-client` shim (onCheckForUpdates).
 //!
 //! # Shortcut hints (register-app-menu.ts:116-119, 270-282)
 //! Electron renders `label\t<keys>` as a right-aligned hint. muda does NOT
@@ -547,6 +548,9 @@ pub fn handle_menu_event(app: &AppHandle<Wry>, event: MenuEvent) {
         }
         // "mcode-view-worktree-palette": display-only hint, no click (the
         // original registers no click handler either).
+        "mcode-help-check-updates" | "mcode-app-check-updates" => {
+            emit_to_main_window(app, EVENT_CHECK_FOR_UPDATES, "")
+        }
         "mcode-help-report-crash" => {
             open_crash_report(app);
         }
@@ -559,7 +563,6 @@ pub fn handle_menu_event(app: &AppHandle<Wry>, event: MenuEvent) {
         _ => {}
     }
 }
-
 /// createMainWindow.ts:1159-1163 `menu:popup` — pop the application menu at
 /// the cursor over the main window (TitlebarLeftControls ··· button).
 /// `Menu::popup` takes a `Window`, not a `WebviewWindow` (menu.rs:29), so
@@ -583,6 +586,22 @@ pub(crate) fn ui_popup_app_menu(app: AppHandle) -> Result<(), MenuError> {
     popup(&app)
 }
 
+/// Menu-smoke dispatch seam (debug builds only): routes a synthetic MenuEvent
+/// for `item_id` through the REAL click dispatcher (`handle_menu_event`) —
+/// the exact path a native muda click takes. The smoke asserts the
+/// renderer-side listeners fired; only the OS click itself is simulated.
+#[cfg(debug_assertions)]
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) fn ui_smoke_trigger_menu_item(app: AppHandle, item_id: String) -> Result<(), String> {
+    handle_menu_event(
+        &app,
+        tauri::menu::MenuEvent {
+            id: tauri::menu::MenuId(item_id),
+        },
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -602,6 +621,22 @@ mod tests {
             "ui:toggleAppearanceSetting"
         );
         assert_eq!(EVENT_CHECK_FOR_UPDATES, "ui:checkForUpdates");
+    }
+    #[test]
+    fn check_for_updates_ids_route_to_the_check_for_updates_event() {
+        // Both item ids (macOS app-menu variant + Help submenu variant) share
+        // one dispatch arm — mirrored from register-app-menu.ts:94-113 where
+        // both platforms forward the check to the renderer.
+        assert_eq!(EVENT_CHECK_FOR_UPDATES, "ui:checkForUpdates");
+        for item_id in ["mcode-help-check-updates", "mcode-app-check-updates"] {
+            assert!(
+                matches!(
+                    item_id,
+                    "mcode-help-check-updates" | "mcode-app-check-updates"
+                ),
+                "arm coverage for {item_id}"
+            );
+        }
     }
 
     #[test]
