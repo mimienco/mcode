@@ -7,9 +7,10 @@
  *
  * `SHIMMED_NAMESPACES` lists what the shim layer serves natively under
  * Tauri today: `ui` (clipboard subset + the app-menu/zoom/toggle/check-
- * updates event bridge + popupMenu), `notifications`, `speech`, and the
- * full `fs` (34 methods), `shell` (12 methods), and `updater`
- * (11 methods) namespaces.
+ * updates event bridge + popupMenu), `notifications`, `speech`,
+ * `terminalPreview` (dashboard pop-out transport), and the full `fs`
+ * (34 methods), `shell` (12 methods), and `updater` (11 methods)
+ * namespaces.
  */
 export const ALL_WINDOW_API_NAMESPACES: readonly string[] = Object.freeze([
   'agentAwake',
@@ -96,6 +97,7 @@ export const SHIMMED_NAMESPACES: readonly string[] = Object.freeze([
   'notifications',
   'shell',
   'speech',
+  'terminalPreview',
   'ui',
   'updater'
 ])

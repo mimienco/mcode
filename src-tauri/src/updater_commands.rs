@@ -400,6 +400,9 @@ pub(crate) fn execute_downloaded_update(app: &AppHandle) -> Result<(), DesktopCo
 
     // The Windows updater exits the process after launching the installer. On macOS and Linux,
     // install returns after replacing the bundle, so the confirmed lifecycle performs the relaunch.
+    // Release the single-instance mutex before the relaunch (see
+    // execute_shutdown_request) so the relaunched process can acquire it.
+    crate::release_single_instance_lock();
     app.request_restart();
     Ok(())
 }

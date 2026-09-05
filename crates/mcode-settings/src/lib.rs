@@ -340,6 +340,52 @@ impl SettingsService {
         })
     }
 
+    /// The persisted `settings.telemetry` block, as raw JSON (consent +
+    /// identity only). `None` means the block is absent — absence is
+    /// preserved, never defaulted (the crossgrade invariant: absent
+    /// consent stays absent). Shape is owned by the consumers
+    /// (`GlobalSettings.telemetry` in the renderer, `mcode-diagnostics`
+    /// in the desktop commands).
+    pub fn telemetry_settings(&self) -> Result<Option<Value>, SettingsServiceError> {
+        let persisted = {
+            let _read_guard = self
+                .write_lock
+                .lock()
+                .map_err(|_| SettingsServiceError::LockPoisoned)?;
+            self.read_persisted()?
+        };
+        let block = persisted
+            .pointer("/settings/telemetry")
+            .filter(|value| !value.is_null());
+        Ok(block.cloned())
+    }
+
+    /// Persist `settings.telemetry.optedIn`, deep-merging like Electron's
+    /// `storeRef.updateSettings({ telemetry })`: sibling fields
+    /// (`installId`, `existedBeforeTelemetryRelease`) survive, and a
+    /// missing telemetry block is created rather than rejected. Never
+    /// touches any other settings key.
+    pub fn set_telemetry_opted_in(
+        &self,
+        opted_in: Option<bool>,
+    ) -> Result<(), SettingsServiceError> {
+        self.update_persisted(|root| {
+            let settings = object_section(root, "settings")?;
+            let telemetry = settings
+                .entry("telemetry")
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+                .ok_or(SettingsServiceError::PersistedSectionMustBeObject(
+                    "settings.telemetry",
+                ))?;
+            telemetry.insert(
+                "optedIn".into(),
+                opted_in.map(Value::Bool).unwrap_or(Value::Null),
+            );
+            Ok(())
+        })
+    }
+
     pub fn stage_shutdown_checkpoint(
         &self,
         checkpoint: ShutdownCheckpoint,
@@ -415,6 +461,21 @@ impl SettingsService {
         enforce_size_limit(bytes.len() as u64)?;
         serde_json::from_slice(&bytes)
             .map_err(|error| SettingsServiceError::Parse(error.to_string()))
+    }
+
+    /// Renderer settings-document surface: whole-document read with the same
+    /// lock + size-limit discipline as every other reader.
+    pub fn read_persisted_public(&self) -> Result<Value, SettingsServiceError> {
+        self.read_persisted()
+    }
+
+    /// Renderer settings-document surface: generic merge-patch write through
+    /// `update_persisted` (same write lock + atomic-file commit).
+    pub fn update_persisted_public(
+        &self,
+        update: impl FnOnce(&mut Map<String, Value>) -> Result<(), SettingsServiceError>,
+    ) -> Result<(), SettingsServiceError> {
+        self.update_persisted(update)
     }
 
     fn write_persisted(&self, persisted: &Value) -> Result<(), SettingsServiceError> {
@@ -881,5 +942,109 @@ fn hex_value(value: u8) -> Option<u8> {
         b'a'..=b'f' => Some(value - b'a' + 10),
         b'A'..=b'F' => Some(value - b'A' + 10),
         _ => None,
+    }
+}
+#[cfg(test)]
+mod telemetry_settings_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn service(dir: &std::path::Path) -> SettingsService {
+        SettingsService::new(dir.join("settings.json"))
+    }
+
+    fn write_initial(path: &std::path::Path, document: Value) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn telemetry_absent_stays_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = service(dir.path());
+        assert_eq!(service.telemetry_settings().unwrap(), None);
+    }
+
+    #[test]
+    fn telemetry_block_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        write_initial(
+            &path,
+            json!({
+                "settings": {
+                    "telemetry": {
+                        "optedIn": null,
+                        "installId": "abc",
+                        "existedBeforeTelemetryRelease": true
+                    }
+                }
+            }),
+        );
+        let service = service(dir.path());
+        let block = service.telemetry_settings().unwrap().unwrap();
+        assert_eq!(block["optedIn"], json!(null));
+        assert_eq!(block["installId"], json!("abc"));
+    }
+
+    #[test]
+    fn set_opted_in_preserves_sibling_telemetry_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        write_initial(
+            &path,
+            json!({
+                "settings": {
+                    "telemetry": {
+                        "optedIn": null,
+                        "installId": "abc",
+                        "existedBeforeTelemetryRelease": true
+                    },
+                    "minimizeToTrayOnClose": true
+                }
+            }),
+        );
+        let service = service(dir.path());
+        service.set_telemetry_opted_in(Some(false)).unwrap();
+
+        let block = service.telemetry_settings().unwrap().unwrap();
+        assert_eq!(block["optedIn"], json!(false));
+        assert_eq!(block["installId"], json!("abc"));
+        assert_eq!(
+            block["existedBeforeTelemetryRelease"],
+            json!(true),
+            "sibling telemetry fields must survive the deep merge"
+        );
+        // Unrelated settings keys untouched.
+        let document: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(document["settings"]["minimizeToTrayOnClose"], json!(true));
+    }
+
+    #[test]
+    fn set_opted_in_creates_missing_telemetry_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = service(dir.path());
+        service.set_telemetry_opted_in(Some(true)).unwrap();
+        let block = service.telemetry_settings().unwrap().unwrap();
+        assert_eq!(block["optedIn"], json!(true));
+    }
+
+    #[test]
+    fn set_opted_in_null_restores_unresolved_banner_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = service(dir.path());
+        service.set_telemetry_opted_in(Some(true)).unwrap();
+        service.set_telemetry_opted_in(None).unwrap();
+        let block = service.telemetry_settings().unwrap().unwrap();
+        assert_eq!(block["optedIn"], json!(null));
+    }
+
+    #[test]
+    fn explicit_json_null_telemetry_reads_as_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        write_initial(&path, json!({ "settings": { "telemetry": null } }));
+        let service = service(dir.path());
+        assert_eq!(service.telemetry_settings().unwrap(), None);
     }
 }

@@ -4,8 +4,6 @@
 //! detection (a second `mcode serve` is a supervisor artifact — fail open),
 //! and the stable already-running exit code 3 that systemd units key off.
 
-use std::sync::OnceLock;
-
 /// single-instance-lock.ts:4 — stable failure message.
 pub const SINGLE_INSTANCE_LOCK_FAILURE_MESSAGE: &str = "[single-instance] Another MCode instance is already running for this userData profile; exiting this launch after requesting the existing window. If no MCode process is running, this may be an Electron/macOS single-instance lock failure.";
 /// single-instance-lock.ts:5.
@@ -19,7 +17,7 @@ struct InstanceLock {
     _mutex: PlatformMutex,
 }
 
-static LOCK: OnceLock<InstanceLock> = OnceLock::new();
+static LOCK: std::sync::Mutex<Option<InstanceLock>> = std::sync::Mutex::new(None);
 
 /// single-instance-lock.ts:18-20 — a duplicate `mcode serve` is a supervisor
 /// artifact, not a user asking for a window; fail open when argv is
@@ -58,14 +56,30 @@ pub fn should_skip_single_instance_lock(
 
 /// Acquire the profile-scoped lock. Returns `Ok(())` when this instance owns
 /// the profile, `Err(already running)` otherwise. The mutex is held for the
-/// process lifetime via the static.
+/// process lifetime via the static — except for a deliberate restart, where
+/// `release_for_restart` hands it back so the relaunch child can acquire it.
 // `Err(())` is a deliberate boolean-shaped outcome (already running), not a
 // missing error type; the caller maps it to the stable exit code 3.
 #[allow(clippy::result_unit_err)]
 pub fn acquire(profile: &str) -> Result<(), ()> {
-    let mutex = PlatformMutex::acquire(profile)?;
-    let _ = LOCK.set(InstanceLock { _mutex: mutex });
+    let mut slot = LOCK.lock().map_err(|_| ())?;
+    if slot.is_some() {
+        // This process already owns the profile.
+        return Ok(());
+    }
+    *slot = Some(InstanceLock {
+        _mutex: PlatformMutex::acquire(profile)?,
+    });
     Ok(())
+}
+
+/// Deliberate-restart handback: drop the process-lifetime guard so the
+/// relaunch child can acquire the same profile mutex. A no-op when the
+/// process never acquired (dev skip / macOS bypass).
+pub fn release_for_restart() {
+    if let Ok(mut slot) = LOCK.lock() {
+        *slot = None;
+    }
 }
 
 /// Platform mutex: named mutex on Windows; a bound TCP listener port is NOT

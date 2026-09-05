@@ -10,6 +10,7 @@ members = [
   "crates/mcode-settings",
   "crates/mcode-voice",
   "crates/mcode-updater",
+  "crates/mcode-diagnostics",
   "src-tauri",
 ]
 resolver = "2"

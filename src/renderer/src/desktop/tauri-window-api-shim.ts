@@ -16,6 +16,9 @@ import {
 import { createRuntimeFsClient, createTauriFsClient, type FsApi } from './fs-client'
 import { MCODE_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
 import { createTauriUiBridgeClient } from './tauri-ui-bridge-client'
+import { tauriTerminalPreviewClient } from './tauri-terminal-preview-client'
+import { createTauriAppClient } from './tauri-app-client'
+import { createUnportedNamespace } from './tauri-unported-namespace'
 
 /**
  * Partial `ui` bridge over the native Tauri clipboard commands. Keyed by the
@@ -34,11 +37,42 @@ const tauriUiClipboardBridge = {
 }
 
 /**
- * Installs a minimal `window.api` shim before the React tree renders when the
- * renderer boots under Tauri (no Electron preload). The clipboard and speech
- * bridges are merged over any existing `window.api`; under Electron this is a
- * no-op.
+ * Merges a plain bridge over an optional existing namespace WITHOUT spreading:
+ * spreading a Proxy client materializes only its own properties and silently
+ * drops every get-trap member (the ui passthrough listeners). The bridge
+ * layer wins over existing (spread precedence); existing answers for
+ * everything the bridge leaves undefined.
  */
+function mergeNamespace(
+  existing: Record<string, unknown> | undefined,
+  bridge: Record<string, unknown>
+): Record<string, unknown> {
+  // Spread semantics `{ ...existing, ...bridge }` WITHOUT materializing the
+  // bridge: spreading a Proxy client would drop every get-trap member (the
+  // ui passthrough listeners). The bridge layer wins over existing for keys
+  // it owns or traps; existing answers for everything the bridge leaves
+  // undefined (a plain-object layer returning undefined must not shadow a
+  // later layer's trap — that is how clipboard used to hide the passthrough).
+  const layers: Record<string, unknown>[] = [bridge, ...(existing ? [existing] : [])]
+  return new Proxy({} as Record<string, unknown>, {
+    get(_target, method: string) {
+      if (typeof method !== 'string') {
+        return undefined
+      }
+      for (const layer of layers) {
+        const value = (layer as Record<string, unknown>)[method]
+        if (value !== undefined) {
+          return value
+        }
+        if (method in layer) {
+          return value
+        }
+      }
+      return undefined
+    }
+  })
+}
+
 export function installTauriWindowApiShim(): void {
   if (!isTauri()) {
     return
@@ -83,15 +117,18 @@ export function installTauriWindowApiShim(): void {
       )
   })
 
-  window.api = {
-    ui: {
-      ...existing?.ui,
-      ...tauriUiClipboardBridge,
-      ...createTauriUiBridgeClient(
+  const shimmedApi = {
+    app: mergeNamespace(
+      existing?.app,
+      createTauriAppClient((command, args) => invoke(command, args))
+    ),
+    ui: mergeNamespace(
+      mergeNamespace(existing?.ui, tauriUiClipboardBridge),
+      createTauriUiBridgeClient(
         (command, args) => invoke(command, args),
         (event, listener) => listen(event, listener)
       )
-    },
+    ),
     speech: {
       ...existing?.speech,
       ...tauriSpeechBridge
@@ -107,6 +144,20 @@ export function installTauriWindowApiShim(): void {
     fs: {
       ...existing?.fs,
       ...fsBridge
+    },
+    terminalPreview: {
+      ...existing?.terminalPreview,
+      ...tauriTerminalPreviewClient
     }
   } as unknown as Window['api']
+  // Any namespace without a native bridge resolves through the presence
+  // shim so bootstrap/effect dereferences cannot crash the React tree.
+  window.api = new Proxy(shimmedApi, {
+    get(target, namespace: string) {
+      if (namespace in target) {
+        return target[namespace as keyof typeof target]
+      }
+      return createUnportedNamespace(namespace)
+    }
+  }) as unknown as Window['api']
 }

@@ -140,7 +140,13 @@ fn execute_shutdown_request(
 ) -> Result<(), DesktopCommandError> {
     match request.intent {
         ShutdownIntent::Quit => app.exit(0),
-        ShutdownIntent::Restart => app.request_restart(),
+        ShutdownIntent::Restart => {
+            // Release the profile-scoped single-instance mutex before the
+            // relaunch child starts, or its acquire would observe us still
+            // holding it (Windows restarts overlap by design).
+            crate::release_single_instance_lock();
+            app.request_restart()
+        }
         ShutdownIntent::UpdateInstall => {
             let result = crate::updater_commands::execute_downloaded_update(app);
             if result.is_err() {

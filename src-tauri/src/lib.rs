@@ -22,10 +22,12 @@ mod notification_commands;
 mod os_permissions;
 mod pty_commands;
 mod runtime_rpc;
+mod settings_document_commands;
 mod shell_commands;
 mod skill_share_deep_link;
 mod speech_commands;
 mod ssh_commands;
+mod telemetry_commands;
 mod terminal_preview;
 mod updater_commands;
 mod updater_extra_commands;
@@ -83,6 +85,7 @@ use pty_commands::{
     kill_all_sessions_for_shutdown, pty_ack_data, pty_get_size, pty_has_pty, pty_kill, pty_resize,
     pty_spawn, pty_write,
 };
+use settings_document_commands::{settings_get_document, settings_set_document};
 use shell_commands::{
     shell_copy_file, shell_open_file_path, shell_open_file_uri, shell_open_in_external_editor,
     shell_open_in_file_manager, shell_open_path, shell_open_url, shell_path_exists,
@@ -102,6 +105,9 @@ pub use ssh_commands::{
 use ssh_commands::{
     ssh_accept_host_key, ssh_close_pty, ssh_connect, ssh_disconnect, ssh_exec, ssh_open_pty,
     ssh_resize_pty, ssh_write_pty,
+};
+use telemetry_commands::{
+    telemetry_acknowledge_banner, telemetry_get_consent, telemetry_set_consent,
 };
 use terminal_preview::{
     terminal_preview_ack, terminal_preview_connect, terminal_preview_fit, terminal_preview_input,
@@ -425,6 +431,19 @@ fn build_main_window(
                 || smoke_mode == Some(SmokeTestMode::Crossgrade)
                 || smoke_mode == Some(SmokeTestMode::Menu),
         );
+    // Debug builds only: expose the WebView2 DevTools protocol so renderer
+    // consoles can be captured for crash triage. MCODE_TAURI_WEBVIEW_REMOTE_
+    // DEBUGGING_PORT opts in; the WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS env
+    // route is not honored once wry sets its own additional_browser_args.
+    #[cfg(debug_assertions)]
+    if let Some(port) = std::env::var("MCODE_TAURI_WEBVIEW_REMOTE_DEBUGGING_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+    {
+        builder = builder.additional_browser_args(&format!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
+        ));
+    }
 
     let monitor_bounds = monitor_work_areas(app).unwrap_or_else(|error| {
         eprintln!("[window] failed to enumerate monitors: {error}");
@@ -497,6 +516,57 @@ fn build_main_window(
     Ok(())
 }
 
+/// Run-mode inputs to the single-instance decision (single-instance-lock.ts
+/// contract): packaged macOS diagnostics bypass, dev-lane skip unless the E2E
+/// enforce env is set, and serve-mode duplicate fail-open.
+fn acquire_single_instance_lock() -> Result<(), ()> {
+    use mcode_app::single_instance;
+    let is_dev = cfg!(debug_assertions);
+    let is_serve_mode = std::env::args().any(|arg| arg == "--serve");
+    let env = |key: &str| std::env::var(key).ok();
+    if single_instance::should_bypass_single_instance_lock(
+        &env,
+        is_dev,
+        is_serve_mode,
+        std::env::consts::OS,
+    ) {
+        return Ok(());
+    }
+    if single_instance::should_skip_single_instance_lock(&env, is_dev, is_serve_mode) {
+        return Ok(());
+    }
+    // The profile scope is the app-data dir; the settings-path env redirect
+    // (MCODE_TAURI_SETTINGS_PATH) is smoke-only and its parent may not exist
+    // yet, so the canonical app-data profile stays the lock scope.
+    let profile = profile_scope_string();
+    single_instance::acquire(&profile)
+}
+
+/// The lock is released only on process exit — except before a deliberate
+/// restart, where the relaunch child must be able to acquire it.
+pub(crate) fn release_single_instance_lock() {
+    mcode_app::single_instance::release_for_restart();
+}
+
+/// Profile scope for the single-instance mutex: the app-data dir as a flat,
+/// backslash-free string (kernel mutex names treat "\" as a prefix
+/// separator; single_instance.rs flattens defensively as well).
+fn profile_scope_string() -> String {
+    // Computed lazily inside acquire via a static default when the Tauri
+    // path API is unavailable this early; run() calls this after the
+    // builder exists, so resolve through the same convention as
+    // settings_path without requiring an AppHandle.
+    if let Some(path) = std::env::var_os("MCODE_TAURI_SETTINGS_PATH")
+        && let Some(parent) = std::path::PathBuf::from(path).parent()
+    {
+        return parent.to_string_lossy().into_owned();
+    }
+    // Stable app-data identity without an AppHandle: the product's
+    // identifier from tauri.conf.json (com.mcode.desktop) — the same scope
+    // tauri::path resolves app_data_dir to.
+    "com.mcode.desktop".to_owned()
+}
+
 pub fn run() {
     let build_lane = if cfg!(debug_assertions) {
         BuildLane::Development
@@ -504,6 +574,20 @@ pub fn run() {
         BuildLane::Production
     };
     let lifecycle = LifecycleService::new(env!("CARGO_PKG_VERSION"), build_lane);
+    // Single-instance arbitration (single-instance-lock.ts port; the
+    // PARITY_MATRIX lifecycle gate flagged the guard as never invoked).
+    // Profile-scoped kernel mutex; a second launch for the same profile
+    // exits with the stable code 3 that service units key off. Dev lane
+    // skips unless the E2E enforce env is set, packaged macOS diagnostics
+    // bypass per the Electron contract, and a duplicate `--serve` launch
+    // fails open (supervisor artifact, not a user asking for a window).
+    if let Err(()) = acquire_single_instance_lock() {
+        eprintln!(
+            "{}",
+            mcode_app::single_instance::SINGLE_INSTANCE_LOCK_FAILURE_MESSAGE
+        );
+        std::process::exit(mcode_app::single_instance::SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE);
+    }
 
     let app = tauri::Builder::default()
         .manage(lifecycle)
@@ -535,6 +619,7 @@ pub fn run() {
                 });
             let native_window_state = NativeWindowState::new(settings.clone(), preferences);
             app.manage(settings);
+            app.manage(telemetry_commands::TelemetryConsentState::new());
             app.manage(native_window_state.clone());
             let smoke_mode = smoke_test_mode();
             if smoke_mode == Some(SmokeTestMode::RestartParent) {
@@ -899,6 +984,11 @@ pub fn run() {
             ui_smoke_trigger_menu_item,
             settings_crossgrade_status,
             settings_crossgrade_migrate,
+            settings_get_document,
+            settings_set_document,
+            telemetry_get_consent,
+            telemetry_set_consent,
+            telemetry_acknowledge_banner,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

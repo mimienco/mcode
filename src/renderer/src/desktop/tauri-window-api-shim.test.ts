@@ -29,7 +29,20 @@ type SpeechBridgeProbe = {
   onPartialTranscript: (callback: (data: unknown) => void) => () => void
 }
 
-type WindowApiProbe = { ui: UiBridgeProbe; speech: SpeechBridgeProbe }
+type TerminalPreviewBridgeProbe = {
+  connect: (ptyId: string, opts?: { scrollbackRows?: number }) => Promise<unknown>
+  input: (ptyId: string, data: string) => Promise<boolean>
+  fit: (ptyId: string, cols: number, rows: number) => Promise<{ cols: number; rows: number } | null>
+  ack: (ptyId: string, bytes: number) => Promise<void>
+  unsubscribe: (ptyId: string) => Promise<void>
+  onData: (callback: (payload: unknown) => void) => () => void
+}
+
+type WindowApiProbe = {
+  ui: UiBridgeProbe
+  speech: SpeechBridgeProbe
+  terminalPreview: TerminalPreviewBridgeProbe
+}
 
 import type { installTauriWindowApiShim } from './tauri-window-api-shim'
 
@@ -93,6 +106,31 @@ describe('tauri-window-api-shim', () => {
     expect(ui.writeClipboardText).toBeTypeOf('function')
     expect(ui.writeTerminalClipboardText).toBeTypeOf('function')
     expect(ui.saveClipboardImageAsTempFile).toBeTypeOf('function')
+  })
+
+  it('installs a terminalPreview bridge over a missing window.api under Tauri', async () => {
+    await installUnderTauri()
+
+    const terminalPreview = apiProbe().terminalPreview
+    expect(terminalPreview.connect).toBeTypeOf('function')
+    expect(terminalPreview.input).toBeTypeOf('function')
+    expect(terminalPreview.fit).toBeTypeOf('function')
+    expect(terminalPreview.ack).toBeTypeOf('function')
+    expect(terminalPreview.unsubscribe).toBeTypeOf('function')
+    expect(terminalPreview.onData).toBeTypeOf('function')
+  })
+
+  it('routes terminalPreview calls through the renamed Rust commands', async () => {
+    const invoke = await installUnderTauri({ seq: 3, chunk: null, snapshot: 'screen' })
+
+    const terminalPreview = apiProbe().terminalPreview
+    await expect(terminalPreview.connect('pty-1')).resolves.toEqual({
+      snapshot: { data: 'screen', cols: 80, rows: 24, seq: 3 },
+      replay: []
+    })
+    await expect(terminalPreview.input('pty-1', 'x')).resolves.toBe(true)
+    expect(invoke).toHaveBeenCalledWith('terminalPreviewConnect', { ptyId: 'pty-1' })
+    expect(invoke).toHaveBeenCalledWith('terminalPreviewInput', { ptyId: 'pty-1', data: 'x' })
   })
 
   it('installs a speech bridge over a missing window.api under Tauri', async () => {

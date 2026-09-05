@@ -175,3 +175,27 @@ test('performNativeSelectionAction falls back to document.execCommand', () => {
     }
   }
 })
+
+test('passthrough listeners map unmapped on* methods onto their preload channels', async () => {
+  const { invoke, listen, emit } = recordedTransport({})
+  const client = createTauriUiBridgeClient(invoke, listen)
+  await flush()
+
+  const received: unknown[] = []
+  const off = (
+    client as unknown as Record<string, (cb: (payload: unknown) => void) => () => void>
+  ).onOpenWorkspaceBoard((payload) => received.push(payload))
+  await flush()
+  emit('ui:openWorkspaceBoard', { board: true })
+  off()
+  emit('ui:openWorkspaceBoard', { late: true })
+  await flush()
+
+  assert.deepEqual(received, [{ board: true }])
+})
+
+test('unknown on* method access returns undefined (no crash)', () => {
+  const { invoke, listen } = recordedTransport({})
+  const client = createTauriUiBridgeClient(invoke, listen) as unknown as Record<string, unknown>
+  assert.equal(client.onNotARealListenerAnywhere, undefined)
+})

@@ -119,7 +119,7 @@ dependencies = [
  "objc2-foundation",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -2966,6 +2966,7 @@ dependencies = [
  "base64 0.22.1",
  "crossbeam-channel",
  "mcode-app",
+ "mcode-diagnostics",
  "mcode-fs",
  "mcode-platform",
  "mcode-process",
@@ -2986,8 +2987,17 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-updater",
+ "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "mcode-diagnostics"
+version = "1.4.178"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -6017,9 +6027,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.26.4"
+version = "0.26.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
+checksum = "b0c85f2c3ef0b1cd58b36682f4b17aaa995f0e5db534d85692b4903abce21f67"
 dependencies = [
  "rustls",
  "tokio",

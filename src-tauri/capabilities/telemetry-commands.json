@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "telemetry-commands",
+  "description": "Explicit telemetry consent command permissions for the primary local MCode window; no default grants.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-telemetry-get-consent",
+    "allow-telemetry-set-consent",
+    "allow-telemetry-acknowledge-banner"
+  ]
+}

@@ -1,18 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
+import { type ITheme, Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
+import { useEffectiveMacOptionAsAlt } from '@/lib/keyboard-layout/use-effective-mac-option-as-alt'
+import { buildPreviewTerminalOptions } from './preview-terminal-options'
 import { subscribeToTerminalUserInput } from '@/components/terminal-pane/terminal-user-input-signal'
 import { composeActiveTerminalTheme } from '@/components/terminal-pane/terminal-appearance'
 import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
 import { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 import { replayPreviewConnectionSnapshot } from './preview-terminal-snapshot-replay'
-import { useEffectiveMacOptionAsAlt } from '@/lib/keyboard-layout/use-effective-mac-option-as-alt'
-import {
-  buildPreviewAppearanceOptions,
-  buildPreviewTerminalOptions
-} from './preview-terminal-options'
-import { syncPreviewTerminalLigatures } from './preview-terminal-ligatures'
+import { usePreviewTerminalAppearance } from './preview-terminal-appearance'
 import { installPreviewTerminalCompatibility } from './preview-terminal-compatibility'
 import { createPreviewClipboardPaster } from './preview-terminal-paste'
 import { installPreviewImeBridge, type PreviewImeBridge } from './preview-terminal-ime-bridge'
@@ -25,6 +22,7 @@ import { installPreviewTerminalKeyHandler } from './preview-terminal-key-handler
 import { createPreviewGridClaim } from './preview-grid-claim'
 import { installPreviewTerminalAppMenuClipboard } from './preview-terminal-app-menu-clipboard'
 import type { TerminalPreviewDataPayload } from '../../../../shared/terminal-preview'
+import { tauriTerminalPreviewClient } from '../../desktop/tauri-terminal-preview-client'
 
 const PREVIEW_SCROLLBACK_ROWS = 24
 // Why: main only ever serializes PREVIEW_SCROLLBACK_ROWS of history into this
@@ -69,17 +67,28 @@ export function AgentTerminalPreview({
   const settingsRef = useRef(settings)
   const macOptionAsAltRef = useRef(macOptionAsAlt)
   const terminalInputRef = useRef(terminalInput)
-  const { terminalTheme, terminalMode } = useMemo(() => {
-    if (!settings) {
-      return { terminalTheme: null, terminalMode: 'dark' as const }
-    }
-    const appearance = resolveEffectiveTerminalAppearance(settings, systemPrefersDark)
-    const theme = composeActiveTerminalTheme(
-      appearance.theme ?? getBuiltinTheme(appearance.themeName),
-      settings
-    )
-    return { terminalTheme: theme, terminalMode: appearance.mode }
-  }, [settings, systemPrefersDark])
+  const appearance = settings
+    ? resolveEffectiveTerminalAppearance(settings, systemPrefersDark)
+    : null
+  // Why: the lifecycle effect below tears down xterm whenever terminalTheme's
+  // identity changes. Keying the memo on the resolved appearance VALUES (not
+  // the settings object reference) keeps unrelated settings writes — or async
+  // hydration — from remounting the terminal.
+  const baseThemeJson = JSON.stringify(
+    appearance ? (appearance.theme ?? getBuiltinTheme(appearance.themeName)) : null
+  )
+  const terminalColorOverrides = settings?.terminalColorOverrides
+  const terminalBackgroundOpacity = settings?.terminalBackgroundOpacity
+  const terminalCursorOpacity = settings?.terminalCursorOpacity
+  const terminalMode = appearance?.mode ?? 'dark'
+  const terminalTheme = useMemo(() => {
+    const baseTheme = JSON.parse(baseThemeJson) as ITheme | null
+    return composeActiveTerminalTheme(baseTheme, {
+      terminalColorOverrides,
+      terminalBackgroundOpacity,
+      terminalCursorOpacity
+    })
+  }, [baseThemeJson, terminalColorOverrides, terminalBackgroundOpacity, terminalCursorOpacity])
   // A null snapshot means no serializer knows this pty (it died or was never
   // spawned this session) — say so instead of painting a silent blank terminal.
   const [ptyGone, setPtyGone] = useState(false)
@@ -189,9 +198,7 @@ export function AgentTerminalPreview({
       writeReplayed(
         payload.data,
         () => {
-          if (!disposed) {
-            void window.api.terminalPreview.ack(ptyId, payload.bytes)
-          }
+          void tauriTerminalPreviewClient.ack(ptyId, payload.bytes)
         },
         true
       )
@@ -268,12 +275,12 @@ export function AgentTerminalPreview({
         if (userInputDisposable ? !signaledUserInput : replayDepth > 0) {
           return
         }
-        void window.api.terminalPreview.input(ptyId, data)
+        void tauriTerminalPreviewClient.input(ptyId, data)
       })
     }
 
     const replayConnection = (
-      connection: Awaited<ReturnType<typeof window.api.terminalPreview.connect>>,
+      connection: Awaited<ReturnType<typeof tauriTerminalPreviewClient.connect>>,
       replaceExisting: boolean,
       requestRefresh: () => void
     ): void => {
@@ -348,7 +355,7 @@ export function AgentTerminalPreview({
         return
       }
       refreshInFlight = true
-      const connection = await window.api.terminalPreview.connect(ptyId, {
+      const connection = await tauriTerminalPreviewClient.connect(ptyId, {
         scrollbackRows: PREVIEW_SCROLLBACK_ROWS
       })
       if (disposed) {
@@ -370,7 +377,7 @@ export function AgentTerminalPreview({
         terminal?.dispose()
         terminal = null
         terminalRef.current = null
-        void window.api.terminalPreview.unsubscribe(ptyId)
+        void tauriTerminalPreviewClient.unsubscribe(ptyId)
         return
       }
       refreshInFlight = false
@@ -387,7 +394,7 @@ export function AgentTerminalPreview({
       pasteClipboardText
     })
 
-    offData = window.api.terminalPreview.onData((payload) => {
+    offData = tauriTerminalPreviewClient.onData((payload) => {
       if (payload.ptyId !== ptyId) {
         return
       }
@@ -413,7 +420,7 @@ export function AgentTerminalPreview({
       disposeImeNativeTextBridge()
       disposeTerminalCompatibility?.()
       disposeKeyHandler?.()
-      void window.api.terminalPreview.unsubscribe(ptyId)
+      void tauriTerminalPreviewClient.unsubscribe(ptyId)
       terminal?.dispose()
       terminalRef.current = null
     }
@@ -422,17 +429,7 @@ export function AgentTerminalPreview({
   // Why: appearance settings must land on the open terminal, and the OS input
   // source can flip Option-as-Alt with no settings change at all. A remount
   // would reconnect the pty and repaint the agent's screen from a new snapshot.
-  useEffect(() => {
-    const terminal = terminalRef.current
-    if (!terminal) {
-      return
-    }
-    Object.assign(
-      terminal.options,
-      buildPreviewAppearanceOptions(settings, macOptionAsAlt === 'true')
-    )
-    syncPreviewTerminalLigatures(terminal, settings)
-  }, [settings, macOptionAsAlt])
+  usePreviewTerminalAppearance(terminalRef, settings, macOptionAsAlt)
 
   return (
     // Why: a size FIXED by the viewport (not shrink-to-fit) + overflow-hidden

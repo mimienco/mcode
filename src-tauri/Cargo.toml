@@ -26,6 +26,7 @@ tauri-build.workspace = true
 unexpected_cfgs = { level = "allow", check-cfg = ["cfg(rust_analyzer)", "cfg(devtools)"] }
 
 [dependencies]
+mcode-diagnostics = { path = "../crates/mcode-diagnostics" }
 mcode-app = { path = "../crates/mcode-app" }
 arboard.workspace = true
 crossbeam-channel = "0.5"
@@ -58,3 +59,6 @@ tauri-plugin-notification = "2"
 base64.workspace = true
 url.workspace = true
 tokio = { version = "1", features = ["sync", "io-util", "time", "rt", "macros", "net", "fs"] }
+
+[dev-dependencies]
+tempfile = "3"

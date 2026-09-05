@@ -133,6 +133,9 @@ fn main() {
             "ui_smoke_trigger_menu_item",
             "settings_crossgrade_status",
             "settings_crossgrade_migrate",
+            "telemetry_get_consent",
+            "telemetry_set_consent",
+            "telemetry_acknowledge_banner",
         ]));
     if let Err(error) = tauri_build::try_build(attributes) {
         println!("{error:#}");
