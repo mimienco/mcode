@@ -107,6 +107,8 @@ fn main_window_grants_only_default_and_required_window_mutations() {
             "allow-ui-smoke-trigger-menu-item",
             "allow-settings-crossgrade-status",
             "allow-settings-crossgrade-migrate",
+            "allow-settings-get-document",
+            "allow-settings-set-document",
         ])
     );
 }

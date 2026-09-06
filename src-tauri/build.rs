@@ -133,6 +133,8 @@ fn main() {
             "ui_smoke_trigger_menu_item",
             "settings_crossgrade_status",
             "settings_crossgrade_migrate",
+            "settings_get_document",
+            "settings_set_document",
             "telemetry_get_consent",
             "telemetry_set_consent",
             "telemetry_acknowledge_banner",

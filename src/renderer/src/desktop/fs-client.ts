@@ -93,7 +93,7 @@ export type FsApiCore = {
   cancelSearchReplace: (args: { requestId: string }) => Promise<void>
   watchWorktree: (args: { worktreePath: string }) => Promise<void>
   unwatchWorktree: (args: { worktreePath: string }) => Promise<void>
-  onFsChanged: (listener: (payload: FsChangedPayload) => void) => Promise<FsWatchSubscription>
+  onFsChanged: (listener: (payload: FsChangedPayload) => void) => () => void
 }
 
 /**
@@ -142,6 +142,27 @@ function stripNullContextFields(error: unknown): unknown {
  * only here; callers receive one typed method per `fs_*` command and every
  * failure is normalized onto `DesktopCommandError`.
  */
+/**
+ * Bridges the preload's synchronous-unsubscribe onFsChanged contract onto
+ * the async Tauri listener arming: payloads flow to the listener only after
+ * arming; the returned unsubscribe works before and after.
+ */
+function syncUnsubscribeFsChanged(arm: () => Promise<FsWatchSubscription>): () => void {
+  let realUnsubscribe: (() => void) | undefined
+  let disposed = false
+  void arm().then((unlisten) => {
+    if (disposed) {
+      unlisten()
+    } else {
+      realUnsubscribe = unlisten
+    }
+  })
+  return () => {
+    disposed = true
+    realUnsubscribe?.()
+  }
+}
+
 export function createTauriFsClient(
   invoke: FsInvoke,
   // The injected event source: Task-C event subscriptions and the guarded
@@ -191,7 +212,7 @@ export function createTauriFsClient(
     unwatchWorktree: ({ worktreePath }) =>
       call('fs_unwatch_worktree', { worktreePath }).then(() => undefined),
     ...createTauriFsExtraMethods(call, listen),
-    onFsChanged: (listener) => subscribeFsChanged(listener, listen)
+    onFsChanged: (listener) => syncUnsubscribeFsChanged(() => subscribeFsChanged(listener, listen))
   }
 }
 
@@ -283,6 +304,7 @@ export function createRuntimeFsClient({
     },
     onLocalLogTailChanged: async (callback) =>
       (await resolveClient()).onLocalLogTailChanged(callback),
-    onFsChanged: async (listener) => (await resolveClient()).onFsChanged(listener)
+    onFsChanged: (listener) =>
+      syncUnsubscribeFsChanged(async () => (await resolveClient()).onFsChanged(listener))
   }
 }

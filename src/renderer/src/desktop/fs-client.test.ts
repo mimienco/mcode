@@ -148,7 +148,7 @@ test('watcher subscription filters non-fs payloads and unsubscription stops deli
   )
 
   const received: FsChangedPayload[] = []
-  const subscription = await client.onFsChanged((payload) => received.push(payload))
+  const subscription = client.onFsChanged((payload) => received.push(payload))
   assert.equal(listeners.length, 1)
 
   listeners[0]?.({
@@ -161,6 +161,8 @@ test('watcher subscription filters non-fs payloads and unsubscription stops deli
   ])
 
   subscription()
+  await Promise.resolve()
+  await Promise.resolve()
   assert.equal(unlistenCalls, 1)
 })
 

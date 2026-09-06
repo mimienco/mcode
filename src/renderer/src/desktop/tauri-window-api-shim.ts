@@ -19,6 +19,12 @@ import { createTauriUiBridgeClient } from './tauri-ui-bridge-client'
 import { tauriTerminalPreviewClient } from './tauri-terminal-preview-client'
 import { createTauriAppClient } from './tauri-app-client'
 import { createUnportedNamespace } from './tauri-unported-namespace'
+import {
+  createSettingsDocumentBridge,
+  createSettingsClient,
+  createKeybindingsClient,
+  createPersistedUiClient
+} from './tauri-settings-document-client'
 
 /**
  * Partial `ui` bridge over the native Tauri clipboard commands. Keyed by the
@@ -117,13 +123,22 @@ export function installTauriWindowApiShim(): void {
       )
   })
 
+  const settingsDocumentBridge = createSettingsDocumentBridge((command, args) =>
+    invoke(command, args)
+  )
+  const settingsBridge = createSettingsClient(settingsDocumentBridge)
+  const keybindingsBridge = createKeybindingsClient(settingsDocumentBridge)
+  const persistedUiBridge = createPersistedUiClient(settingsDocumentBridge)
+
   const shimmedApi = {
     app: mergeNamespace(
       existing?.app,
       createTauriAppClient((command, args) => invoke(command, args))
     ),
+    settings: mergeNamespace(existing?.settings, settingsBridge),
+    keybindings: mergeNamespace(existing?.keybindings, keybindingsBridge),
     ui: mergeNamespace(
-      mergeNamespace(existing?.ui, tauriUiClipboardBridge),
+      mergeNamespace(mergeNamespace(existing?.ui, tauriUiClipboardBridge), persistedUiBridge),
       createTauriUiBridgeClient(
         (command, args) => invoke(command, args),
         (event, listener) => listen(event, listener)

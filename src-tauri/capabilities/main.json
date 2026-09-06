@@ -63,6 +63,8 @@
     "allow-ui-smoke-trigger-menu-item",
     "allow-settings-crossgrade-status",
     "allow-settings-crossgrade-migrate",
+    "allow-settings-get-document",
+    "allow-settings-set-document",
     "allow-fs-authorize-external-path",
     "allow-fs-list-files",
     "allow-fs-list-markdown-documents",
