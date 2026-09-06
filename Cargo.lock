@@ -2975,6 +2975,7 @@ dependencies = [
  "mcode-ssh",
  "mcode-updater",
  "mcode-voice",
+ "mcode-wire",
  "notify",
  "reqwest",
  "rustls",

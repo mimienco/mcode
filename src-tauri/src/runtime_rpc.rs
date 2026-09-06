@@ -53,10 +53,21 @@
 use std::hash::{BuildHasher, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::AsyncBufReadExt;
+
+use mcode_wire::agent_exec::{ExecParams, LaneRegistry};
+
+/// Shared exec-lane registry for `agent.execNonInteractive` /
+/// `agent.cancelExec` over the CLI plane (agent-exec-handler.ts:103-113 —
+/// per-(cwd, operation) lanes so cancel targets only the newest visible
+/// job). One registry per process; lanes are keyed by cwd+operation.
+fn agent_exec_registry() -> &'static LaneRegistry {
+    static REGISTRY: OnceLock<LaneRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(LaneRegistry::new)
+}
 
 use serde::Serialize;
 use serde::ser::SerializeStruct;
@@ -846,6 +857,24 @@ async fn serve_connection<S>(
         if line.trim().is_empty() {
             continue;
         }
+        // agent-exec routes (agent-exec-handler.ts:109-113): these run on the
+        // tokio runtime (spawns + lane watches), so they dispatch here — the
+        // sync build_reply_line seam stays status-only for unit tests.
+        if let Some(method) = parse_method_for_routing(&line, auth_token) {
+            match method.as_str() {
+                "agent.execNonInteractive" | "agent.cancelExec" => {
+                    let reply = dispatch_agent_exec(&line, runtime_id, &method).await;
+                    if write_frame(&mut write_half, &reply.to_line())
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+        }
         let reply_line = build_reply_line(
             &line,
             auth_token,
@@ -861,6 +890,87 @@ async fn serve_connection<S>(
     }
 }
 
+/// Minimal re-parse for method routing (the reply builders re-parse with
+/// full auth semantics; this only classifies the method cheaply).
+fn parse_method_for_routing(line: &str, auth_token: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(line).ok()?;
+    if value.get("authToken")?.as_str()? != auth_token {
+        return None;
+    }
+    value.get("method")?.as_str().map(str::to_owned)
+}
+
+/// agent-exec-handler.ts:85-180 — exec on a lane, cancel by lane. The
+/// success frame mirrors `RpcSuccessFrame` with the ExecResult (or
+/// `{ canceled }`) as the result payload.
+async fn dispatch_agent_exec(request_line: &str, runtime_id: &str, method: &str) -> RpcReply {
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(request_line);
+    let request = match parsed {
+        Ok(value) => value,
+        Err(_) => return failure("unknown", "bad_request", "Invalid JSON request"),
+    };
+    let id = request
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown")
+        .to_owned();
+    let params = request
+        .get("params")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    match method {
+        "agent.execNonInteractive" => {
+            let exec_params: ExecParams = match serde_json::from_value(params) {
+                Ok(value) => value,
+                Err(error) => {
+                    return failure(
+                        &id,
+                        "bad_request",
+                        &format!("Invalid agent.execNonInteractive params: {error}"),
+                    );
+                }
+            };
+            let result =
+                mcode_wire::agent_exec::exec(agent_exec_registry(), &exec_params, None).await;
+            RpcReply::Success(RpcSuccessFrame {
+                id,
+                result: serde_json::to_value(result).unwrap_or(serde_json::Value::Null),
+                runtime_id: runtime_id.to_owned(),
+            })
+        }
+        "agent.cancelExec" => {
+            let cwd = params
+                .get("cwd")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            let operation = params
+                .get("operation")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            let canceled = mcode_wire::agent_exec::cancel(
+                agent_exec_registry(),
+                cwd.as_deref(),
+                operation.as_deref(),
+            );
+            RpcReply::Success(RpcSuccessFrame {
+                id,
+                result: serde_json::json!({ "canceled": canceled }),
+                runtime_id: runtime_id.to_owned(),
+            })
+        }
+        _ => failure(
+            &id,
+            "method_not_found",
+            &format!("Unknown method: {method}"),
+        ),
+    }
+}
+
+enum ReadOutcome {
+    Line(String),
+    TooLarge,
+}
+
 async fn write_frame<W: tokio::io::AsyncWrite + Unpin>(
     write_half: &mut W,
     reply_line: &str,
@@ -868,11 +978,6 @@ async fn write_frame<W: tokio::io::AsyncWrite + Unpin>(
     write_half.write_all(reply_line.as_bytes()).await?;
     write_half.write_all(b"\n").await?;
     write_half.flush().await
-}
-
-enum ReadOutcome {
-    Line(String),
-    TooLarge,
 }
 
 /// Reads one newline-terminated line with the byte cap applied incrementally:
@@ -925,6 +1030,49 @@ mod tests {
 
     fn status_request(id: &str) -> String {
         format!(r#"{{"id":"{id}","authToken":"{TOKEN}","method":"status.get","params":null}}"#)
+    }
+
+    #[tokio::test]
+    async fn agent_exec_noninteractive_returns_structured_result() {
+        let line = format!(
+            r#"{{"id":"exec-1","authToken":"{TOKEN}","method":"agent.execNonInteractive",
+                "params":{{"binary":"cmd","args":["/c","echo","hello-agent"],"operation":"test-op"}}}}"#
+        );
+        let reply = dispatch_agent_exec(&line, RUNTIME_ID, "agent.execNonInteractive").await;
+        let json: Value = serde_json::from_str(&reply.to_line()).expect("valid JSON");
+        assert_eq!(json["id"], "exec-1");
+        assert_eq!(json["ok"], true);
+        // ExecResult: exit_code 0, stdout contains the echoed text.
+        assert_eq!(json["result"]["exitCode"], 0);
+        assert!(
+            json["result"]["stdout"]
+                .as_str()
+                .unwrap_or("")
+                .contains("hello-agent")
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_cancel_exec_reports_missing_lane() {
+        let line = format!(
+            r#"{{"id":"cancel-1","authToken":"{TOKEN}","method":"agent.cancelExec",
+                "params":{{"cwd":"D:/definitely-not-a-lane","operation":"nope"}}}}"#
+        );
+        let reply = dispatch_agent_exec(&line, RUNTIME_ID, "agent.cancelExec").await;
+        let json: Value = serde_json::from_str(&reply.to_line()).expect("valid JSON");
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["result"]["canceled"], false);
+    }
+
+    #[tokio::test]
+    async fn agent_exec_requires_valid_params() {
+        let line = format!(
+            r#"{{"id":"exec-bad","authToken":"{TOKEN}","method":"agent.execNonInteractive","params":{{}}}}"#
+        );
+        let reply = dispatch_agent_exec(&line, RUNTIME_ID, "agent.execNonInteractive").await;
+        let json: Value = serde_json::from_str(&reply.to_line()).expect("valid JSON");
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["error"]["code"], "bad_request");
     }
 
     #[test]
