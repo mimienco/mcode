@@ -616,3 +616,43 @@ honest Retry panes). Gates: workspace 484/0; clippy 0; fmt clean; typecheck
 clean; desktop vitest 25 files / 161 tests (5 consecutive full-dir runs).
 Commit `7c58f79507`. NOTE: vite dev server restart was diagnosis noise
 (stale in-memory module graph), not a product bug.
+
+## Wave 36 (2026-09-05, later) — agent.execNonInteractive + agent.cancelExec routed through the runtime RPC plane
+
+The plan's #2 deep slice (relay/mobile: route agent_exec through serve
+dispatch) is DONE. The headless-host runtime RPC plane answered only
+status.get; `mcode_wire::agent_exec` (lanes, timeout clamp + tree-kill,
+4 MiB stream caps, Windows `.cmd` shim resolution — ported in an earlier
+wave) was unreachable from the running host.
+
+Routing (commit `4f1dbc9a19`, runtime_rpc.rs):
+- `agent_exec_registry()`: process-wide LaneRegistry (OnceLock) —
+  per-(cwd, operation) lanes; cancel targets only the newest visible job.
+- serve_connection dispatches `agent.execNonInteractive` /
+  `agent.cancelExec` BEFORE the sync build_reply_line seam (they run on the
+  tokio runtime; the seam stays status-only and its unit tests are
+  unchanged). Method classification via parse_method_for_routing includes
+  the auth check — mis-authed requests fall through to the seam's
+  unauthorized path (proven live: wrong token → `unauthorized`, no spawn).
+- `dispatch_agent_exec`: ExecParams parse (bad_request on shape errors) →
+  `mcode_wire::agent_exec::exec` → structured ExecResult / `{ canceled }`
+  in the standard success frame (`_meta.runtimeId` stamped).
+- `mcode-wire` added as an mcode-desktop dependency (existed in the
+  workspace but was never linked into the binary).
+
+Evidence — live named-pipe E2E against the running host:
+- `agent.execNonInteractive` cmd /c echo → ok:true, exitCode:0, stdout
+  contains the payload.
+- `agent.cancelExec` on a nonexistent lane → ok:true, canceled:false.
+- Wrong authToken → ok:false, code:'unauthorized' (exec never spawned).
+
+Gates: workspace 487/0 (bar was 484; +3 dispatch seam tests incl. real
+subprocess exec); clippy 0; fmt clean.
+
+Rescope notes (honesty): the boot-probe Retry panes — rateLimits and
+mcodeProfiles — are backend port projects (src/main/rate-limits = 21k lines
+across 8 provider fetchers; mcode-profiles = 8k lines with cloud auth +
+transfer semantics), NOT shim waves. They stay surfaced through the
+presence shim (one console.warn per method, boundary-contained panes) and
+are queued as backend waves. agentStatus (23 inferInterrupt callsites) is
+coupled to the 3.2k-line agent-hooks server state — same classification.
