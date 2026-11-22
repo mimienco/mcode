@@ -11,15 +11,25 @@ export function NativeChatTerminalAttention({
   attention,
   agent,
   onSwitchToTerminal,
+  suppressAlert = false,
   children
 }: {
   attention: TerminalAttention | null
   agent: AgentType
   onSwitchToTerminal?: () => void
+  suppressAlert?: boolean
   children: ReactNode
 }): React.JSX.Element {
   if (!attention) {
     return <>{children}</>
+  }
+
+  if (suppressAlert) {
+    return (
+      <div className="hidden" aria-hidden="true">
+        {children}
+      </div>
+    )
   }
 
   const authRequired = attention === 'agent-auth-required'

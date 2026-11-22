@@ -205,6 +205,12 @@ describe('PiTitlebarExtensionService', () => {
     expect(env.PI_CODING_AGENT_DIR).toBeUndefined()
     expect(env.MCODE_OMP_SOURCE_AGENT_DIR).toBe(piHome)
     expect(env.MCODE_OMP_STATUS_EXTENSION).toBe(join(piHome, 'extensions', 'mcode-agent-status.ts'))
+    const statusSource = readFileSync(join(piHome, 'extensions', 'mcode-agent-status.ts'), 'utf-8')
+    expect(statusSource).toContain("pi.registerCommand?.('mcode-model'")
+    expect(statusSource).toContain("pi.registerCommand?.('mcode-thinking'")
+    expect(statusSource).toContain('function isLiveProcess')
+    expect(statusSource).toContain('process.kill(pid, 0)')
+    expect(statusSource).toContain('&& isLiveProcess(ownerPid)')
     expect(existsSync(sourcePath)).toBe(false)
     expect(existsSync(join(userDataDir, 'omp-agent-overlays'))).toBe(false)
     expect(existsSync(join(piHome, 'history.db'))).toBe(false)
@@ -224,7 +230,10 @@ describe('PiTitlebarExtensionService', () => {
     writeFileSync(join(overlayDir, 'auth.json'), 'legacy token should not overwrite')
     writeFileSync(join(overlayDir, 'settings.json'), '{"overlayOnly":true}')
     writeFileSync(join(overlayDir, '.mcode-pi-overlay-manifest.json'), '{}')
-    writeFileSync(join(overlayDir, 'extensions', 'mcode-agent-status.ts'), 'stale managed extension')
+    writeFileSync(
+      join(overlayDir, 'extensions', 'mcode-agent-status.ts'),
+      'stale managed extension'
+    )
     writeFileSync(join(overlayDir, 'extensions', 'legacy-user-ext.ts'), 'legacy user extension')
     mkdirSync(join(overlayDir, 'extensions', 'legacy-package'), { recursive: true })
     writeFileSync(

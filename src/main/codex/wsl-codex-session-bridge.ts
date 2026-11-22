@@ -103,7 +103,7 @@ export function buildWslCodexSessionBridgeShellCommand(
     '  if ln -- "$source_file" "$target_file"; then',
     '    linked_files=$((linked_files + 1))',
     '  fi',
-    `done < <(find "$source_sessions_root" -type f -name '*.jsonl' -print0 2>/dev/null)`,
+    `done < <(find "$source_sessions_root" -type f \\( -name '*.jsonl' -o -name '*.jsonl.zst' \\) -print0 2>/dev/null)`,
     `printf '{"scannedFiles":%s,"linkedFiles":%s}\\n' "$scanned_files" "$linked_files"`
   ].join('\n')
   return shellCommand

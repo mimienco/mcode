@@ -636,6 +636,40 @@ describe('useNativeChatLiveSession — notFound retry (#8401)', () => {
     expect(latest?.error).toBe('No transcript found')
   })
 
+  it('keeps an interactive OMP chat empty while its first transcript is pending', async () => {
+    vi.useFakeTimers()
+    const transport = getMockTransport('env-1', { autoSnapshot: false })
+    transport.readSession.mockResolvedValue({ error: 'Transcript unavailable', notFound: true })
+
+    await render({
+      paneKey: PANE,
+      agent: 'omp',
+      sessionId: SESSION,
+      runtimeEnvironmentId: 'env-1',
+      allowMissingTranscript: true
+    })
+
+    expect(latest?.status).toBe('empty')
+    expect(latest?.readPhase).toBe('waiting')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70_000)
+    })
+
+    expect(latest?.status).not.toBe('error')
+
+    await act(async () => {
+      transport.emit({
+        type: 'snapshot',
+        messages: [user('u-first', 'hello from native chat')],
+        hasMore: false
+      })
+    })
+
+    expect(latest?.readPhase).toBe('ready')
+    expect(latest?.messages.map((message) => message.id)).toContain('u-first')
+  })
+
   it('renders live-appended content instead of loading while the read is still retrying', async () => {
     vi.useFakeTimers()
     const transport = getMockTransport('env-1', { autoSnapshot: false })

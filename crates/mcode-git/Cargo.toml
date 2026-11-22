@@ -9,5 +9,11 @@ repository.workspace = true
 [dependencies]
 serde.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+mcode-process = { path = "../mcode-process" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"

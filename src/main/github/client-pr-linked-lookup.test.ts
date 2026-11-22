@@ -44,7 +44,7 @@ describe('getPRForBranch', () => {
   it('looks up a linked PR number across PR repo candidates', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [
-        { owner: 'stablyai', repo: 'mcode' },
+        { owner: 'mcode-ide', repo: 'mcode' },
         { owner: 'fork', repo: 'mcode' }
       ],
       headRepo: { owner: 'fork', repo: 'mcode' }

@@ -9,6 +9,7 @@ import {
   GEMINI_SESSION_OPTION_CATALOG
 } from './agent-session-option-catalog-gemini-cursor'
 import { GROK_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-grok'
+import { OMP_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-omp'
 import type {
   AgentSessionOptionCatalog,
   AgentSessionOptionCatalogMap,
@@ -33,7 +34,8 @@ const CATALOGS: AgentSessionOptionCatalogMap = {
   codex: CODEX_SESSION_OPTION_CATALOG,
   gemini: GEMINI_SESSION_OPTION_CATALOG,
   cursor: CURSOR_SESSION_OPTION_CATALOG,
-  grok: GROK_SESSION_OPTION_CATALOG
+  grok: GROK_SESSION_OPTION_CATALOG,
+  omp: OMP_SESSION_OPTION_CATALOG
 }
 
 export function getAgentSessionOptionCatalog(agent: AgentType): AgentSessionOptionCatalog | null {
@@ -81,9 +83,11 @@ export function mergeDiscoveredAuthoritativeModels(
   const inheritedOptions = (seed.find((model) => model.isDefault) ?? seed[0])?.options ?? []
   return discovered.map((disc) => {
     const seedMatch = seed.find((model) => model.id === disc.id)
+    const options =
+      disc.options.length > 0 ? disc.options : (seedMatch?.options ?? inheritedOptions)
     const { isDefault: _seeded, ...merged } = seedMatch
-      ? { ...seedMatch, ...disc, options: seedMatch.options }
-      : { ...disc, options: inheritedOptions }
+      ? { ...seedMatch, ...disc, options }
+      : { ...disc, options }
     // Why: the probe reports which id the CLI defaults to today; a seed flag frozen at
     // release would keep naming the old one after the account's default moves.
     return disc.isDefault ? { ...merged, isDefault: true } : merged

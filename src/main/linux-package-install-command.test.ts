@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { quotePosixQuoteSplice } from '../shared/shell-quoting'
 
 const { statSyncMock } = vi.hoisted(() => ({ statSyncMock: vi.fn() }))
 
@@ -34,38 +35,32 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('quoteForPosixShell', () => {
+describe('quotePosixQuoteSplice', () => {
   it('wraps plain values in single quotes', async () => {
-    const { quoteForPosixShell } = await loadCommandModule()
-    expect(quoteForPosixShell('/tmp/mcode.deb')).toBe("'/tmp/mcode.deb'")
+    expect(quotePosixQuoteSplice('/tmp/mcode.deb')).toBe("'/tmp/mcode.deb'")
   })
 
   it('quotes spaces', async () => {
-    const { quoteForPosixShell } = await loadCommandModule()
-    expect(quoteForPosixShell('/tmp/MCode Setup.deb')).toBe("'/tmp/MCode Setup.deb'")
+    expect(quotePosixQuoteSplice('/tmp/MCode Setup.deb')).toBe("'/tmp/MCode Setup.deb'")
   })
 
   it('neutralizes expansion, command substitution, separators, and double quotes', async () => {
-    const { quoteForPosixShell } = await loadCommandModule()
-    expect(quoteForPosixShell('/tmp/$HOME.deb')).toBe("'/tmp/$HOME.deb'")
-    expect(quoteForPosixShell('/tmp/`id`.deb')).toBe("'/tmp/`id`.deb'")
-    expect(quoteForPosixShell('/tmp/a;rm -rf ~.deb')).toBe("'/tmp/a;rm -rf ~.deb'")
-    expect(quoteForPosixShell('/tmp/"quoted".deb')).toBe('\'/tmp/"quoted".deb\'')
+    expect(quotePosixQuoteSplice('/tmp/$HOME.deb')).toBe("'/tmp/$HOME.deb'")
+    expect(quotePosixQuoteSplice('/tmp/`id`.deb')).toBe("'/tmp/`id`.deb'")
+    expect(quotePosixQuoteSplice('/tmp/a;rm -rf ~.deb')).toBe("'/tmp/a;rm -rf ~.deb'")
+    expect(quotePosixQuoteSplice('/tmp/"quoted".deb')).toBe('\'/tmp/"quoted".deb\'')
   })
 
   it('closes and reopens the quote around a literal single quote', async () => {
-    const { quoteForPosixShell } = await loadCommandModule()
-    expect(quoteForPosixShell("/tmp/it's.deb")).toBe(`'/tmp/it'"'"'s.deb'`)
+    expect(quotePosixQuoteSplice("/tmp/it's.deb")).toBe(`'/tmp/it'"'"'s.deb'`)
   })
 
   it('escapes every single quote in a value', async () => {
-    const { quoteForPosixShell } = await loadCommandModule()
-    expect(quoteForPosixShell("'; rm -rf /; '")).toBe(`''"'"'; rm -rf /; '"'"''`)
+    expect(quotePosixQuoteSplice("'; rm -rf /; '")).toBe(`''"'"'; rm -rf /; '"'"''`)
   })
 
   it('quotes an empty value', async () => {
-    const { quoteForPosixShell } = await loadCommandModule()
-    expect(quoteForPosixShell('')).toBe("''")
+    expect(quotePosixQuoteSplice('')).toBe("''")
   })
 })
 

@@ -89,7 +89,9 @@ class AudioEngine (context: Context) {
     private fun initializeAudio(context:Context) {
         audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        requestAudioFocus()
+        if (!requestAudioFocus()) {
+            Log.w("AudioEngine", "Audio focus denied during initialization; staying paused")
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // Route audio to external device if connected, otherwise route to speaker.
@@ -191,7 +193,7 @@ class AudioEngine (context: Context) {
     }
 
     @SuppressLint("NewApi")
-    private fun requestAudioFocus() {
+    private fun requestAudioFocus(): Boolean {
         val listener = AudioManager.OnAudioFocusChangeListener { focusChange ->
             when (focusChange) {
                 AudioManager.AUDIOFOCUS_LOSS -> {
@@ -232,9 +234,7 @@ class AudioEngine (context: Context) {
             )
         }
 
-        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            throw RuntimeException("Audio focus request failed")
-        }
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -383,16 +383,19 @@ class AudioEngine (context: Context) {
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
-    fun resumeRecordingAndPlayer() {
-        requestAudioFocus()
+    fun resumeRecordingAndPlayer(): Boolean {
+        if (!requestAudioFocus()) {
+            // Stay paused; surface as an interruption so JS state matches the native pause.
+            onAudioInterruptionCallback?.invoke("blocked")
+            return false
+        }
         isRecording = toggleRecording(isRecordingBeforePause)
         audioTrack.play()
+        return true
     }
 
     fun stopPlayback() {
         audioSampleQueue.clear()
-        audioTrack.pause()
-        audioTrack.flush()
         playbackRunning.set(false)
         isPlaying = false
         onOutputVolumeCallback?.invoke(0.0F)

@@ -298,10 +298,6 @@ pub fn validate_record(record: TrustedHostKeyRecord) -> Option<TrustedHostKeyRec
     if crate::fingerprint::fingerprint_of(&key) != record.fingerprint {
         return None;
     }
-    if store_algorithm_name(&record.algorithm) == "ssh-rsa" && !record.algorithm.starts_with("rsa")
-    {
-        return None;
-    }
     Some(record)
 }
 
@@ -381,6 +377,43 @@ mod tests {
             HostKeyStore::lookup(&records, "BUILD-01", 22, "ssh-ed25519", &key),
             StoreOutcome::Match
         );
+    }
+
+    #[test]
+    fn rsa_wire_key_roundtrips_and_matches_each_signature_variant() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in_dir(dir.path());
+        // Public key from a generated 2048-bit RSA pair; no private key is retained.
+        let key = base64::engine::general_purpose::STANDARD.decode(
+            "AAAAB3NzaC1yc2EAAAADAQABAAABAQDi2tLdz2sZU51gcBl8mdgyA5tg1UNiC8jJYZQMRuLvsdD6uXgDjxfmLQAPeBfaG0HrnjiqizjnWeMiQsklFPbwiZfgY9Uz7vjepITJHhHqlmlNhuZ3hzG88EtdXj3L+jiimKb7uo7O24OkS9Gqo4ZBfGis6FLYiCGUJtauH86cMYmjwBkAXjxL5qfoWSe6xPnPXkiygN3Z+fjtphFTnduX/FA099BHOxu2R4m1EfzWykYNbDDGWEC04pwdwvoMVojva3EICnYhFusfzuAbEiGL03c/xTlBNCo4VmeG3naoLkyUMorXXKilHQcIIe+JNjcoKMOwVG+sanVllIKqLc4L"
+        ).unwrap();
+        let fingerprint = crate::fingerprint::fingerprint_of(&key);
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&key);
+        let record = store
+            .accept(
+                "RSA-HOST",
+                2222,
+                "ssh-rsa",
+                &encoded,
+                &fingerprint,
+                "2026-09-07T00:00:00Z".into(),
+            )
+            .unwrap();
+        assert_eq!(record.algorithm, "ssh-rsa");
+        let records = store_in_dir(dir.path()).load().unwrap();
+        assert_eq!(records, vec![record.clone()]);
+        for algorithm in ["ssh-rsa", "rsa-sha2-256", "rsa-sha2-512"] {
+            assert_eq!(
+                HostKeyStore::lookup(&records, "rsa-host", 2222, algorithm, &key),
+                StoreOutcome::Match
+            );
+        }
+        let mut wrong_type = record.clone();
+        wrong_type.algorithm = "ssh-ed25519".into();
+        assert!(validate_record(wrong_type).is_none());
+        let mut wrong_fingerprint = record;
+        wrong_fingerprint.fingerprint = "SHA256:tampered".into();
+        assert!(validate_record(wrong_fingerprint).is_none());
     }
 
     #[test]

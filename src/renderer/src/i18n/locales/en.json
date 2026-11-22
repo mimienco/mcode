@@ -3124,6 +3124,7 @@
             "1ff1c77616": "browser",
             "586d2ac445": "terminal",
             "addSplitPane": "Add split pane",
+            "startingAgent": "Starting {{value0}}…",
             "closePaneColumn": "Close split pane"
           },
           "AiVaultSessionDropLayer": {
@@ -16121,6 +16122,18 @@
         "inputLabel": "Message to agent",
         "runProfile": "Run profile",
         "availableChoices": "Available choices",
+        "connectedModels": "Connected models",
+        "connectedProvidersOnly": "Only models from connected providers are shown.",
+        "contextWindowTokens": "{{value0}} token context window",
+        "freeModel": "Free",
+        "freeOnly": "Free only",
+        "modelCatalogLegend": "CTX · $/1M IN/OUT",
+        "modelPricePerMillion": "{{value0}} per 1M input/output tokens",
+        "modelUnavailable": "Unavailable",
+        "noMatchingModels": "No matching models",
+        "providerConnected": "Connected",
+        "providerNotConnected": "Provider not connected",
+        "searchModels": "Search models or providers",
         "chooseModelFirst": "Choose a model first.",
         "knownModels": "Known models",
         "modelAvailabilityNote": "Codex decides which models your account can select. Open the agent picker to check.",
@@ -16175,6 +16188,10 @@
         "notAgent": {
           "title": "No conversation here",
           "subtitle": "This terminal is not running a recognized coding agent."
+        },
+        "authRequired": {
+          "title": "{{value0}} is not logged in",
+          "subtitle": "Log in to load this conversation and start chatting."
         },
         "empty": {
           "title": "Start a chat with {{value0}}",
@@ -16231,6 +16248,19 @@
           "title": "Codex needs a security review",
           "description": "Review new or changed hooks before Chat can continue.",
           "action": "Review in Terminal"
+        }
+      },
+      "terminalNotice": {
+        "updateComplete": {
+          "title": "Claude Code updated",
+          "description": "{{value0}} features, {{value1}} bugfixes, and {{value2}} other changes.",
+          "changelog": "Changelog"
+        },
+        "updateAvailable": {
+          "title": "Claude Code update available",
+          "manual": "Open Terminal to use the package-manager update command.",
+          "action": "Update Claude",
+          "failed": "Could not open the Claude update terminal."
         }
       },
       "launchPromptNotDelivered": "Not delivered — check the terminal",

@@ -109,6 +109,19 @@ fn main_window_grants_only_default_and_required_window_mutations() {
             "allow-settings-crossgrade-migrate",
             "allow-settings-get-document",
             "allow-settings-set-document",
+            "allow-telemetry-get-consent",
+            "allow-telemetry-set-consent",
+            "allow-telemetry-acknowledge-banner",
+            "allow-agent-status-get-snapshot",
+            "allow-agent-status-infer-interrupt",
+            "allow-agent-status-infer-question-answered",
+            "allow-agent-status-get-migration-unsupported-snapshot",
+            "allow-agent-status-drop",
+            "allow-agent-status-drop-by-tab-prefix",
+            "allow-agent-status-retire-pane-authority",
+            "allow-agent-status-restore-pane-authority",
+            "allow-agent-status-transfer-pane-authority",
+            "allow-agent-hooks-status",
         ])
     );
 }

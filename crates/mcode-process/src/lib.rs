@@ -6,6 +6,7 @@
 
 pub mod descendants;
 pub mod env;
+pub mod exec_tree;
 pub mod handle;
 pub mod job;
 pub mod ladder;

@@ -72,6 +72,21 @@ describe('agent run profile', () => {
     expect(result.agentDefaultArgs.claude).toBe('--permission-mode default')
   })
 
+  it('maps OMP approval presets to its documented launch modes', () => {
+    const result = applyAgentRunProfile({
+      permission: 'auto-edits',
+      interactionMode: 'build',
+      agentDefaultArgs: { omp: '--approval-mode yolo' }
+    })
+
+    expect(result.agentDefaultArgs.omp).toBe('--approval-mode write')
+    expect(getAgentRunProfileCapabilities('omp').permissions).toMatchObject({
+      ask: { kind: 'launch-only' },
+      'auto-edits': { kind: 'launch-only' },
+      bypass: { kind: 'launch-only' }
+    })
+  })
+
   it('preserves free-form overrides instead of rewriting unknown arguments', () => {
     const result = applyAgentRunProfile({
       permission: 'ask',

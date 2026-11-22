@@ -10,6 +10,7 @@ import {
   type GrokAuthReadResult,
   type GrokAuthSession
 } from './grok-auth'
+import { refreshGrokAuthWithCli } from './grok-auth-refresh'
 
 // Why: billing URL and headers must match Grok CLI or xAI rejects the request.
 const GROK_CLI_PROXY_BASE =
@@ -238,27 +239,41 @@ async function fetchMonthlyUsageFallback(
   return { kind: 'window', window: mapMonthlyUsage(config) }
 }
 
-// Why: MCode never runs grok login; it only reads the session file the CLI updates.
+// Why: MCode never runs `grok login` or opens a chat. When the saved access token
+// is stale, the CLI's headless model-list command performs its own locked OAuth
+// rotation before we read the session file again.
 export async function fetchGrokRateLimits(
-  options: { signal?: AbortSignal; authReadResult?: GrokAuthReadResult } = {}
+  options: {
+    signal?: AbortSignal
+    authReadResult?: GrokAuthReadResult
+  } = {}
 ): Promise<ProviderRateLimits> {
-  const readResult = options.authReadResult ?? readGrokAuthSession()
+  let readResult = options.authReadResult ?? readGrokAuthSession()
   if (readResult.status === 'missing') {
     return result('unavailable', 'Not signed in to Grok — run grok login')
   }
   if (readResult.status === 'error') {
     return result('error', readResult.error)
   }
-  const session = readResult.session
+  let session = readResult.session
   if (!isGrokAccessTokenFresh(session)) {
-    // Why: a genuine sign-out returns 'missing' earlier, so reaching here always
-    // means a stored, refreshable session — Grok CLI refreshes the access token
-    // on its next run, so don't tell users to re-run `grok login` (#8497).
-    return result(
-      'error',
-      'Grok sign-in expired — run grok on the computer running MCode; sign in if prompted. No chat message is needed.',
-      { failureKind: 'delegated-refresh-required', source: 'oauth' }
-    )
+    try {
+      // Why: `grok models` performs the CLI's locked, silent OAuth rotation
+      // without starting a chat or requiring an interactive terminal.
+      await refreshGrokAuthWithCli({ signal: options.signal })
+      readResult = readGrokAuthSession()
+      if (readResult.status === 'ok' && isGrokAccessTokenFresh(readResult.session)) {
+        session = readResult.session
+      } else {
+        throw new Error('Grok sign-in remained expired')
+      }
+    } catch {
+      return result(
+        'error',
+        'Grok sign-in could not refresh automatically — run grok on the computer running MCode; sign in if prompted. No chat message is needed.',
+        { failureKind: 'delegated-refresh-required', source: 'oauth' }
+      )
+    }
   }
 
   try {

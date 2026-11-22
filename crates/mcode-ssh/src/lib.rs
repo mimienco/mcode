@@ -19,10 +19,12 @@
 //! an error message.
 
 pub mod error;
+mod exec_output;
 pub mod fingerprint;
 pub mod known_hosts;
 pub mod known_hosts_source;
 pub mod pty_id;
+mod pty_read_state;
 pub mod session;
 pub mod store;
 pub mod transport;

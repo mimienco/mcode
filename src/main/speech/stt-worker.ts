@@ -294,8 +294,18 @@ function handleStop(): void {
       resetOfflineSessionState()
     }
   } catch (err) {
-    if (!isStreaming) {
-      resetOfflineSessionState()
+    // Why: inputFinished has spent the online stream, so a failed final decode
+    // must not leave it installed — a warm worker's next feed would hit a
+    // finished stream. If recovery itself throws, drop the stream so the feed
+    // no-ops instead of crossing the native boundary with a spent stream.
+    try {
+      if (isStreaming) {
+        stream = sherpa.createOnlineStream(recognizer)
+      } else {
+        resetOfflineSessionState()
+      }
+    } catch {
+      stream = null
     }
     parentPort?.postMessage({ type: 'error', error: String(err) })
   } finally {

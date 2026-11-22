@@ -39,9 +39,9 @@ import {
   buildWslCapturedLoginShellCommand,
   buildWslExecArgs,
   buildWslLoginShellCommand,
-  quotePosixShell,
   type WslCapturedLoginShellCommand
 } from '../../shared/wsl-login-shell-command'
+import { quotePosixSingleQuote } from '../../shared/shell-quoting'
 import { UNTRANSLATED_GIT_OUTPUT_ENV } from '../../shared/git-output-locale'
 import { endSubprocessStdin } from '../../shared/subprocess-stdin-write'
 import {
@@ -335,13 +335,13 @@ function resolveCommand(
   const translatedArgs = translateArgsForWsl(args)
   // Why: env on wsl.exe stays Windows-side (WSLENV forwards only named vars), so the locale must ride the command string (issue #7808).
   const localePrefix = command === 'git' ? `${GIT_OUTPUT_LOCALE_SHELL_PREFIX} ` : ''
-  const escapedCommand = quotePosixShell(command)
+  const escapedCommand = quotePosixSingleQuote(command)
   // Why: shell-escape each arg to prevent word splitting / glob expansion inside the bash -c string.
-  const escapedArgs = translatedArgs.map(quotePosixShell)
+  const escapedArgs = translatedArgs.map(quotePosixSingleQuote)
   // Why: prepend `cd <linuxPath> &&` for a UNC cwd; skip it when only a distro override was given (global gh needs no cwd).
   const linuxCwd = cwdWsl?.linuxPath ?? (cwd && wslDistroOverride ? translateArgForWsl(cwd) : null)
   const shellCmd = linuxCwd
-    ? `cd ${quotePosixShell(linuxCwd)} && ${localePrefix}${escapedCommand} ${escapedArgs.join(' ')}`
+    ? `cd ${quotePosixSingleQuote(linuxCwd)} && ${localePrefix}${escapedCommand} ${escapedArgs.join(' ')}`
     : `${localePrefix}${escapedCommand} ${escapedArgs.join(' ')}`
 
   if (command === 'git' && options.wslGitReadEnvironment) {
@@ -505,6 +505,16 @@ function directWslGitExitCode(error: unknown, resolved: ResolvedCommand): number
   }
   const code = (error as { code?: unknown }).code
   return typeof code === 'number' ? code : null
+}
+
+// Why: a numeric exit alone is normal Git control flow (e.g. `check-ignore`
+// exits 1 when nothing matched, `rev-parse --verify` when a ref is absent).
+// Only shell-layer failures -- command not found (127) or not executable
+// (126) -- show the direct environment itself is unusable and justify paying
+// for a login-shell retry.
+function isDirectWslGitCapabilityFailure(error: unknown, resolved: ResolvedCommand): boolean {
+  const code = directWslGitExitCode(error, resolved)
+  return code === 126 || code === 127
 }
 
 function invalidateMissingDirectWslGit(error: unknown, resolved: ResolvedCommand): boolean {
@@ -981,7 +991,7 @@ function shellTokenize(command: string): string[] | null {
 }
 
 function shellQuoteToken(token: string): string {
-  return /^[A-Za-z0-9_@%+=:,./~-]+$/.test(token) ? token : quotePosixShell(token)
+  return /^[A-Za-z0-9_@%+=:,./~-]+$/.test(token) ? token : quotePosixSingleQuote(token)
 }
 
 function containsShellExpansionSyntax(command: string): boolean {
@@ -1114,7 +1124,7 @@ export async function gitExecFileAsync(
       try {
         result = await capture(resolved)
       } catch (error) {
-        if (directWslGitExitCode(error, resolved) !== null && !options.signal?.aborted) {
+        if (isDirectWslGitCapabilityFailure(error, resolved) && !options.signal?.aborted) {
           const wasMissing = invalidateMissingDirectWslGit(error, resolved)
           result = await capture(resolveGitCommand(args, effectiveOptions, true))
           // Why: matching failures can be normal Git control flow; only a successful login retry proves the direct environment was insufficient.

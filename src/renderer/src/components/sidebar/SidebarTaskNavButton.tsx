@@ -17,6 +17,11 @@ import { translate } from '@/i18n/i18n'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { getTaskPresetQuery } from '../../../../shared/task-preset-query'
 import {
+  cancelAppPagePrefetch,
+  prefetchAppPageNow,
+  scheduleAppPagePrefetch
+} from '@/app-shell/app-page-chunks'
+import {
   normalizeVisibleTaskProviders,
   restoreAvailableDefaultTaskProvider,
   resolveVisibleTaskProvider
@@ -158,6 +163,16 @@ export function SidebarTaskNavButton(): React.JSX.Element | null {
     resolvedDefaultTaskSource
   ])
 
+  const handlePointerEnter = React.useCallback(() => {
+    scheduleAppPagePrefetch('tasks')
+    handlePrefetch()
+  }, [handlePrefetch])
+
+  const handleFocus = React.useCallback(() => {
+    prefetchAppPageNow('tasks')
+    handlePrefetch()
+  }, [handlePrefetch])
+
   const hideTasksButton = React.useCallback(() => {
     void updateSettings({ showTasksButton: false })
   }, [updateSettings])
@@ -177,10 +192,12 @@ export function SidebarTaskNavButton(): React.JSX.Element | null {
             if (!canBrowseTasks) {
               return
             }
+            prefetchAppPageNow('tasks')
             openTaskPage()
           }}
-          onPointerEnter={handlePrefetch}
-          onFocus={handlePrefetch}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={() => cancelAppPagePrefetch('tasks')}
+          onFocus={handleFocus}
           aria-disabled={!canBrowseTasks}
           aria-current={tasksActive ? 'page' : undefined}
           data-contextual-tour-target="sidebar-tasks"

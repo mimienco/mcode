@@ -2147,6 +2147,7 @@ export class RuntimeFileCommands {
       })
     }
     return performReplace({
+      store: this.host.requireStore(),
       rootPath: target.worktree.path,
       query: params.query,
       replacement: params.replacement,

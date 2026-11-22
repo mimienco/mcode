@@ -2,10 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { ALL_WINDOW_API_NAMESPACES, SHIMMED_NAMESPACES, computeShimCoverage } from './shim-coverage'
 
 describe('shim-coverage', () => {
-  it('tracks exactly the 77 namespaces the renderer touches', () => {
-    expect(ALL_WINDOW_API_NAMESPACES).toHaveLength(77)
+  it('tracks exactly the 78 namespaces the renderer touches', () => {
+    expect(ALL_WINDOW_API_NAMESPACES).toHaveLength(78)
     expect(ALL_WINDOW_API_NAMESPACES).toContain('e2e')
     expect(ALL_WINDOW_API_NAMESPACES).toContain('speech')
+    expect(ALL_WINDOW_API_NAMESPACES).toContain('agentHooks')
+  })
+
+  it('serves exactly ten namespaces natively, including agentStatus and agentHooks', () => {
+    expect(SHIMMED_NAMESPACES).toHaveLength(10)
+    expect(SHIMMED_NAMESPACES).toContain('session')
+    expect(SHIMMED_NAMESPACES).toContain('agentStatus')
+    expect(SHIMMED_NAMESPACES).toContain('agentHooks')
   })
 
   it('keeps both lists sorted and duplicate-free', () => {
@@ -26,6 +34,11 @@ describe('shim-coverage', () => {
     expect(coverage.pending).not.toContain('fs')
     expect(coverage.pending).not.toContain('shell')
     expect(coverage.pending).not.toContain('updater')
+    expect(coverage.pending).not.toContain('session')
+    expect(coverage.pending).not.toContain('agentStatus')
+    expect(coverage.pending).not.toContain('agentHooks')
+    expect(coverage.covered).toContain('agentStatus')
+    expect(coverage.covered).toContain('agentHooks')
   })
 
   it('leaves every other namespace pending', () => {

@@ -1,3 +1,4 @@
+import { createPtySmokeOutputTracker } from './pty-smoke-output'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { createTauriFsClient } from './fs-client'
@@ -81,16 +82,13 @@ try {
     rejectExit = reject
   })
 
-  let sawEcho = false
+  const trackOutput = createPtySmokeOutputTracker(echo)
   const sawExit: PtyExitPayload[] = []
   const unsubscribeData = await client.onData((payload: PtyDataPayload) => {
-    if (sawEcho) {
-      return
-    }
-    if (payload.chunks.some((chunk) => chunk.data.includes(echo))) {
-      sawEcho = true
-      resolveEcho()
-    }
+    const output = trackOutput(payload)
+    // Credit every delivered UTF-16 unit, including final controls after the echo.
+    void client.ackData(payload.id, output.processedChars).catch(rejectExit)
+    if (output.sawEcho) resolveEcho()
   })
   const unsubscribeExit = await client.onExit((payload: PtyExitPayload) => {
     sawExit.push(payload)
@@ -109,9 +107,6 @@ try {
   // before the first output bytes flow.
   await settle(echoPromise, 60_000, 'pty echo')
 
-  // Optional capability probes: ackData/getSize may not exist yet while the
-  // sibling migration lands them. Their absence is not a smoke failure.
-  await client.ackData?.(spawned.id, echo.length)
   const size = await client.getSize?.(spawned.id)
   if (size !== null && size !== undefined && (!(size.cols > 0) || !(size.rows > 0))) {
     rejectExit(new Error(`pty getSize returned invalid size ${JSON.stringify(size)}`))

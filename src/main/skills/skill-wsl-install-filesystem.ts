@@ -63,7 +63,7 @@ const CREATE_ALIAS_SCRIPT = [
 const ALIAS_TARGET_SCRIPT = [
   'set -eu',
   '[ -L "$2" ] || exit 0',
-  '[ "$(readlink -f -- "$1")" = "$(readlink -f -- "$2")" ] && printf yes'
+  'if [ "$(readlink -f -- "$1")" = "$(readlink -f -- "$2")" ]; then printf yes; else printf no; fi'
 ].join('\n')
 
 export class WslSkillInstallFilesystem implements SkillInstallFilesystem {

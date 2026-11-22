@@ -64,6 +64,30 @@ On Windows, conhost keeps the output pipe open after the child process exits, so
 
 Evidence: crates/mcode-pty/src/session.rs (`child_exited`, `drain_after_child_exit_and_cause`, `SharedMaster::close`), src-tauri/src/pty_commands.rs (`spawn_pty_forwarder` child-exit poll + drain-after-close branch).
 
+## D-012 (2026-09-04): Crossgrade is an explicit-command surface
+
+Status: accepted (recorded late; the decision shipped with the crossgrade smoke in wave 32).
+
+Settings discovery and migrate are invoked as named Tauri commands (`settings_crossgrade_status`, `settings_crossgrade_migrate`), not as a silent first-launch side effect. The renderer drives the round-trip; Rust only polls the verdict marker.
+
+## D-013 (2026-09-07): agentStatus hook endpoint + pipeline port to Rust
+
+Status: accepted.
+
+The agentStatus hook endpoint and pipeline port to Rust in `crates/mcode-agent-status` plus `src-tauri` (`agent_status_http.rs`, `agent_status_commands.rs`). There is no TypeScript sidecar: the original pipeline is Node-builtins-only with zero Electron coupling (`server.ts:1-4`, `agent-hook-listener.ts:3-4`), and the wire contract is a stable loopback form-POST (`installer-utils.ts:236-276`) so installed CLI hooks keep working unchanged against the Tauri listener.
+
+Wave-37 provider tranche: claude-family + pi/omp/prime-agent + devin + kimi. Other hook sources return a typed `NormalizeError::UnsupportedProvider` and fail-open 204 until wave 38.
+
+Deviations (honest, not accidental):
+
+- Stop transcript scan deferred — hook_payload uses `last_assistant_message` only (see `claude.rs` `extract_claude_tool_fields` comment).
+- `ObservationSequencer` omitted: nothing reads it (STA-4293); renderer tolerates a missing `observation` field. Observations are `None`.
+- Homedir via `USERPROFILE`/`HOME`, not `os.homedir()`.
+- `agentHooks` statuses for unported providers return honest `state: "skipped"` with detail `"not yet ported to Tauri (wave 38)"` rather than a fabricated `installed`/`not_installed`.
+- `/statusline/claude` is accepted and ignored (204); rateLimits wiring is wave 38.
+
+Next id: D-014.
+
 ## Pending decisions
 
 - PTY crate/FFI strategy after behavior and throughput spikes on all platforms.

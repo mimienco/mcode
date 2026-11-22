@@ -2,18 +2,21 @@
  * Coverage ledger for the Tauri `window.api` shim migration: every
  * `window.api.<namespace>` the renderer touches (extracted with
  * `grep -rEoh "window\.api\.[a-zA-Z_][a-zA-Z0-9_]*" src/renderer
- * --include=*.ts --include=*.tsx | cut -d. -f3 | sort -u`, exactly 77
- * including `e2e`) is classified as already bridged or still pending.
- *
+ * --include=*.ts --include=*.tsx | cut -d. -f3 | sort -u`, plus `agentHooks`
+ * from the preload surface, exactly 78 including `e2e`) is classified as
+ * already bridged or still pending.
  * `SHIMMED_NAMESPACES` lists what the shim layer serves natively under
- * Tauri today: `ui` (clipboard subset + the app-menu/zoom/toggle/check-
- * updates event bridge + popupMenu), `notifications`, `speech`,
+ * Tauri today: `agentHooks` / `agentStatus` (hook install status + live
+ * pane-status events), `ui` (clipboard subset + the app-menu/zoom/toggle/
+ * check-updates event bridge + popupMenu), `notifications`, `session`
+ * (durable async get/set/patch/flush plus workspace navigation), `speech`,
  * `terminalPreview` (dashboard pop-out transport), and the full `fs`
  * (34 methods), `shell` (12 methods), and `updater` (11 methods)
  * namespaces.
  */
 export const ALL_WINDOW_API_NAMESPACES: readonly string[] = Object.freeze([
   'agentAwake',
+  'agentHooks',
   'agentStatus',
   'agentTrust',
   'aiVault',
@@ -93,8 +96,11 @@ export const ALL_WINDOW_API_NAMESPACES: readonly string[] = Object.freeze([
 ])
 
 export const SHIMMED_NAMESPACES: readonly string[] = Object.freeze([
+  'agentHooks',
+  'agentStatus',
   'fs',
   'notifications',
+  'session',
   'shell',
   'speech',
   'terminalPreview',

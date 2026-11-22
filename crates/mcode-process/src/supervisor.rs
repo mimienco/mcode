@@ -156,6 +156,14 @@ impl ProcessSupervisor {
     /// environment policy, and spawns with the platform death-safety wiring
     /// (Job Object on Windows, process group on POSIX) applied at spawn.
     pub fn spawn(&mut self, spec: ProcessSpec) -> Result<Spawned, SupervisorError> {
+        self.spawn_with_assignment(spec, crate::job::assign_to_job)
+    }
+
+    fn spawn_with_assignment(
+        &mut self,
+        spec: ProcessSpec,
+        assign: impl FnOnce(&Option<crate::job::JobObject>, u32) -> Result<(), SupervisorError>,
+    ) -> Result<Spawned, SupervisorError> {
         spec.validate()?;
         let handle = ProcessHandle::next(self.next_handle);
         self.next_handle += 1;
@@ -166,6 +174,11 @@ impl ProcessSupervisor {
             .or_insert_with(|| "C".to_string());
 
         let mut cmd = std::process::Command::new(&spec.program);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
         cmd.args(&spec.args);
         if let Some(cwd) = &spec.cwd {
             cmd.current_dir(cwd);
@@ -178,13 +191,18 @@ impl ProcessSupervisor {
         let job = crate::job::pre_spawn_job_object(&spec)?;
         crate::job::pre_spawn_group(&spec, &mut cmd);
 
-        let child = cmd.spawn().map_err(|e| SupervisorError::SpawnFailed {
+        let mut child = cmd.spawn().map_err(|e| SupervisorError::SpawnFailed {
             source: e.to_string(),
         })?;
 
         let pid = child.id();
         let pgid = crate::job::capture_spawn_time_pgid(pid);
-        crate::job::assign_to_job(&job, pid)?;
+        if let Err(error) = assign(&job, pid) {
+            crate::ladder::force_kill(pid, job.as_ref(), pgid, handle);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
 
         let entry = ProcessEntry {
             handle,
@@ -345,6 +363,7 @@ impl Drop for ProcessSupervisor {
 
 impl ProcessEntry {
     fn record_exit(&mut self, observation: ExitObservation) {
+        drop(self.job.take());
         self.state = ProcessState::Exited {
             code: observation.exit_code,
             signal: observation.signal,
@@ -412,6 +431,44 @@ mod tests {
     }
 
     #[test]
+    fn failed_job_assignment_reaps_spawned_child_before_returning_error() {
+        let mut supervisor = ProcessSupervisor::new();
+        let observed_pid = std::cell::Cell::new(None);
+        let error = SupervisorError::SpawnFailed {
+            source: "injected assignment failure".into(),
+        };
+        let result = supervisor.spawn_with_assignment(long_running_spec(30), |_, pid| {
+            observed_pid.set(Some(pid));
+            Err(error.clone())
+        });
+        assert!(matches!(result, Err(ref actual) if actual == &error));
+        assert!(supervisor.entries.is_empty());
+        let pid = observed_pid.get().unwrap();
+        #[cfg(unix)]
+        {
+            assert_eq!(unsafe { libc::kill(pid as libc::pid_t, 0) }, -1);
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::ESRCH)
+            );
+        }
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Threading::{
+                GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            };
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if !process.is_null() {
+                let mut code = 259;
+                let queried = GetExitCodeProcess(process, &mut code);
+                windows_sys::Win32::Foundation::CloseHandle(process);
+                assert_ne!(queried, 0);
+                assert_ne!(code, 259);
+            }
+        }
+    }
+
+    #[test]
     fn spawn_exits_with_requested_code() {
         let mut sup = ProcessSupervisor::new();
         let spawned = sup.spawn(exit_code_spec(7)).expect("spawn");
@@ -426,6 +483,7 @@ mod tests {
             }
         );
         assert_eq!(snapshot.cause, Some(ExitCause::Exited { exit_code: 7 }));
+        assert!(sup.entries[&spawned.handle].job.is_none());
     }
 
     #[test]

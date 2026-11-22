@@ -30,6 +30,8 @@ export type NotificationEventSource =
 
 export type NotificationDispatchRequest = {
   source: NotificationEventSource
+  /** Test-only: mute the native toast while the renderer plays one deterministic audible cue. */
+  suppressSystemSound?: boolean
   notificationId?: string
   /** Why: useful for fast native failures, but macOS can still drop notifications after 'show'. */
   requireDisplayConfirmation?: boolean
@@ -84,6 +86,13 @@ export type NotificationSoundResult = {
     | 'read-failed'
     | 'playback-failed'
     | 'deduped'
+}
+
+export type NotificationSoundPlaybackOptions = {
+  force?: boolean
+  volume?: number
+  /** Use a bundled cue when the selected setting delegates sound to the OS. */
+  systemFallback?: boolean
 }
 
 export type NotificationSoundDataResult =

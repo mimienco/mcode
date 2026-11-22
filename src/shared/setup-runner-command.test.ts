@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildSetupRunnerCommand,
   getSetupRunnerCommandPlatformForPath,
-  nativeWindowsPathToPosixShellPath,
   resolveSetupRunnerCommand
 } from './setup-runner-command'
+import { nativeWindowsPathToPosixShellPath } from './wsl-paths'
 
 describe('buildSetupRunnerCommand', () => {
   it('uses bash for WSL UNC runner scripts regardless of host casing', () => {

@@ -51,6 +51,16 @@ function newScid(): string {
   return (randomBytes(4).readUInt32BE(0) & 0x7fffffff).toString(16).padStart(8, '0')
 }
 
+// Serial -> local port of the adb forward this module created, so teardown
+// paths can reap exactly their own tunnel instead of `forward --remove-all`
+// (which would also kill forwards registered by the user or other tooling).
+const knownForwards = new Map<string, number>()
+
+export function knownScrcpyForwardPort(serial: string): number | null {
+  const port = knownForwards.get(serial)
+  return port === undefined ? null : port
+}
+
 // A live scrcpy session: owns the server process, the adb tunnel, and the video
 // + control sockets. Created via ScrcpyStreamSession.start().
 export class ScrcpyStreamSession {
@@ -115,6 +125,7 @@ export class ScrcpyStreamSession {
       this.port = allocated
       emulatorProbe('scrcpy.forward.port', { serial, port: this.port })
     }
+    knownForwards.set(this.options.serial, this.port)
   }
 
   private spawnServer(): void {
@@ -274,6 +285,11 @@ export class ScrcpyStreamSession {
     this.server?.kill()
     void this.options
       .runner(this.options.sdk.adb, scrcpyRemoveForwardArgs(this.options.serial, this.port))
+      .then(() => {
+        if (knownForwards.get(this.options.serial) === this.port) {
+          knownForwards.delete(this.options.serial)
+        }
+      })
       .catch(() => {})
     this.callbacks.onClose()
   }

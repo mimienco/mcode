@@ -69,7 +69,7 @@ describe('parseCmdJTaskSourceUrl', () => {
     expect(parseCmdJTaskSourceUrl('https://github.com/mcode-ide/mcode/issues/14198')).toEqual({
       provider: 'github',
       link: {
-        slug: { owner: 'stablyai', repo: 'mcode', host: 'github.com' },
+        slug: { owner: 'mcode-ide', repo: 'mcode', host: 'github.com' },
         type: 'issue',
         number: 14198
       }
@@ -77,7 +77,7 @@ describe('parseCmdJTaskSourceUrl', () => {
     expect(parseCmdJTaskSourceUrl('https://github.com/mcode-ide/mcode/pull/12789')).toEqual({
       provider: 'github',
       link: {
-        slug: { owner: 'stablyai', repo: 'mcode', host: 'github.com' },
+        slug: { owner: 'mcode-ide', repo: 'mcode', host: 'github.com' },
         type: 'pr',
         number: 12789
       }
@@ -285,7 +285,7 @@ describe('matchWorktreePaletteTaskUrl', () => {
   })
 
   it('normalizes host case, port, and owner case before comparing GitHub identities', () => {
-    const intent = parseCmdJTaskSourceUrl('https://GHE.Example.com:8443/StablyAI/MCode/pull/12789')
+    const intent = parseCmdJTaskSourceUrl('https://GHE.Example.com:8443/MCode-IDE/MCode/pull/12789')
     expect(
       matchWorktreePaletteTaskUrl({
         worktree: makeWorktree({ linkedPR: 12789 }),

@@ -6,10 +6,15 @@
     "../src/renderer/src/**/*.tsx",
     "../src/preload/api-types.ts",
     "../src/preload/api/**/*",
-    "../src/shared/**/*"
+    "../src/shared/**/*",
+    "../package.json",
+    "../src/renderer/src/**/*.json",
+    "../src/shared/**/*.json"
   ],
   "compilerOptions": {
     "composite": true,
+    "outDir": "../out/tsc-web",
+    "rootDir": "..",
     "jsx": "react-jsx",
     "paths": {
       "@renderer/*": ["../src/renderer/src/*"],

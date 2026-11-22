@@ -166,7 +166,7 @@ function createHarness(args: {
       on(name: string, handler: HookHandler) {
         target[name] = handler
       }
-    })
+    } as never)
   }
   registerInto(handlers)
 

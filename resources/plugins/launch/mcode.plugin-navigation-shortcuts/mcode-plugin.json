@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
-  "id": "mcode-navigation-shortcuts",
-  "publisher": "stablyai",
+  "id": "plugin-navigation-shortcuts",
+  "publisher": "mcode",
   "name": "MCode Navigation Shortcuts",
   "version": "1.0.0",
   "description": "Command aliases and optional shortcuts for frequent MCode views.",

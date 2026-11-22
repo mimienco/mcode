@@ -152,3 +152,15 @@ No migration command has written to the original repository.
   SmokeTestMode::Menu + check-for-updates dispatch arm + ACL grants (menu smoke PASSED ×2).
   Note: the user's WIP appears STAGED in the rewrite index (270 files); migration commits use
   explicit pathspecs so their staged work is never committed or unstaged by migration waves.
+
+## Wave 37 (2026-09-07) re-verification
+
+- Original HEAD: `5c13ecce886c829c353e4d218aecd3678839d96d` (branch `rebrand/mcode`) —
+  UNCHANGED from the wave-33/24 record; no migration session wrote to `D:\ADE\orca`.
+- Original working tree: 115 dirty paths — identical count to the wave-24 baseline; all of it
+  is user work and was left untouched.
+- Rewrite branch `rewrite/tauri-full` @ `999d4b4e85` (wave-37 handoff commit) plus uncommitted
+  wave-37 work in the working tree (`crates/mcode-agent-status`, `src-tauri` agent_status_*,
+  renderer `tauri-agent-*-client.ts`). User WIP is unstaged (not the 370-file staged set the
+  handoff described — index was clean at this re-verification); commits still use explicit
+  pathspecs.

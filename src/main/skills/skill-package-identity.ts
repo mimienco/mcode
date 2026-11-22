@@ -278,11 +278,21 @@ export async function observeSkillPackage(
   }
 
   await visit(packageRoot, 0)
+  // Why: the depth-first walk emits a directory's children before later
+  // sibling files, which is not the strict full-string order
+  // parseSkillPackageManifest enforces ('docs/readme.md' before 'docs.md'
+  // here, while byte-wise 'docs.md' < 'docs/readme.md'). Snapshot matching
+  // compares index-by-index, so re-sort both lists into the canonical
+  // code-unit order before digesting or returning them.
+  const sortedFiles = [...files].sort((left, right) => compareCodeUnits(left.path, right.path))
+  const sortedTreeEntries = [...treeEntries].sort((left, right) =>
+    compareCodeUnits(left.path, right.path)
+  )
   return {
-    files,
-    observedDigest: skillPackageDigest(files),
-    observedGitTreeSha: skillPackageGitTreeSha(treeEntries),
-    treeEntries
+    files: sortedFiles,
+    observedDigest: skillPackageDigest(sortedFiles),
+    observedGitTreeSha: skillPackageGitTreeSha(sortedTreeEntries),
+    treeEntries: sortedTreeEntries
   }
 }
 

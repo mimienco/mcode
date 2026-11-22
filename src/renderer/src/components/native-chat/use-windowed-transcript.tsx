@@ -57,7 +57,11 @@ export function ShowEarlierInWindowButton({
 }: {
   count: number
   onClick: () => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (count <= 0) {
+    return null
+  }
+
   return (
     <div className="flex justify-center py-1">
       <button

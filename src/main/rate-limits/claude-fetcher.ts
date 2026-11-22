@@ -1213,19 +1213,27 @@ export async function fetchManagedAccountUsage(
     }
   }
 
-  // Why: refresh+persist an expiring token now so inactive accounts' single-use refresh tokens stay fresh for a later switch-in (persist failure is non-fatal).
+  // Why: refresh+persist an expiring token now so inactive accounts' single-use
+  // refresh tokens stay fresh for a later switch-in (persist failure is
+  // non-fatal). The per-account rotation lock plus the stored-blob re-read keep
+  // this mutually safe with a concurrent activation-triggered refresh.
   let token = parseOAuthCredentialsJson(credentialsJson, 'credentials-file').token
   if (isOauthTokenExpiring(credentialsJson)) {
-    const refreshed = await refreshClaudeOauthCredentials(credentialsJson)
+    const refreshed = await refreshClaudeOauthCredentials(credentialsJson, Date.now(), {
+      lockKey: account.id,
+      readStoredCredentials: () => readManagedCredentialsJson(location),
+      persistCredentials: async (json) => {
+        try {
+          await writeManagedCredentialsJson(location, json)
+        } catch {
+          // Keep the refreshed token in memory; next poll refreshes again if the write failed.
+        }
+      }
+    })
     if (options.signal?.aborted) {
       return abortedClaudeRateLimitResult()
     }
     if (refreshed) {
-      try {
-        await writeManagedCredentialsJson(location, refreshed)
-      } catch {
-        // Keep the refreshed token in memory; next poll refreshes again if the write failed.
-      }
       credentialsJson = refreshed
       token = parseOAuthCredentialsJson(refreshed, 'credentials-file').token
     }

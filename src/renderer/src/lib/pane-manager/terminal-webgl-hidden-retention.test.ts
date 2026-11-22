@@ -52,17 +52,17 @@ describe('terminal-webgl-hidden-retention', () => {
 
   it('evicts the least-recently-hidden owner over the context cap', () => {
     const ownerA = {}
-    const panesA = [createPane(), createPane(), createPane()]
+    const panesA = Array.from({ length: 10 }, () => createPane())
     const addonsA = panesA.map((pane) => pane.webglAddon)
     suspendPaneRendering(panesA, retentionFor(ownerA, panesA))
 
     const ownerB = {}
-    const panesB = [createPane(), createPane(), createPane()]
+    const panesB = Array.from({ length: 10 }, () => createPane())
     suspendPaneRendering(panesB, retentionFor(ownerB, panesB))
 
-    // A(3) + B(3) fits the cap of 6; C(2) forces A out.
+    // A(10) + B(10) fits the cap of 24; C(5) forces A out.
     const ownerC = {}
-    const panesC = [createPane(), createPane()]
+    const panesC = Array.from({ length: 5 }, () => createPane())
     suspendPaneRendering(panesC, retentionFor(ownerC, panesC))
 
     expect(panesA.every((pane) => pane.webglAddon === null)).toBe(true)
@@ -76,16 +76,16 @@ describe('terminal-webgl-hidden-retention', () => {
 
   it('re-suspending an owner refreshes its LRU position', () => {
     const ownerA = {}
-    const panesA = [createPane(), createPane(), createPane()]
+    const panesA = Array.from({ length: 10 }, () => createPane())
     suspendPaneRendering(panesA, retentionFor(ownerA, panesA))
     const ownerB = {}
-    const panesB = [createPane(), createPane(), createPane()]
+    const panesB = Array.from({ length: 10 }, () => createPane())
     suspendPaneRendering(panesB, retentionFor(ownerB, panesB))
 
     // Touch A again: B becomes the eviction candidate.
     suspendPaneRendering(panesA, retentionFor(ownerA, panesA))
     const ownerC = {}
-    const panesC = [createPane()]
+    const panesC = Array.from({ length: 5 }, () => createPane())
     suspendPaneRendering(panesC, retentionFor(ownerC, panesC))
 
     expect(panesB.every((pane) => pane.webglAddon === null)).toBe(true)
@@ -99,9 +99,17 @@ describe('terminal-webgl-hidden-retention', () => {
     expect(retainedHiddenWebglOwnerCountForTest()).toBe(0)
   })
 
+  it('retains a dense hidden workspace for an immediate switch-back', () => {
+    const owner = {}
+    const panes = Array.from({ length: 15 }, () => createPane())
+    suspendPaneRendering(panes, retentionFor(owner, panes))
+    expect(retainedHiddenWebglOwnerCountForTest()).toBe(1)
+    expect(panes.every((pane) => pane.webglAddon != null)).toBe(true)
+  })
+
   it('does not retain a single owner wider than the whole cap', () => {
     const owner = {}
-    const panes = Array.from({ length: 7 }, () => createPane())
+    const panes = Array.from({ length: 25 }, () => createPane())
     const addons = panes.map((pane) => pane.webglAddon)
     suspendPaneRendering(panes, retentionFor(owner, panes))
     expect(retainedHiddenWebglOwnerCountForTest()).toBe(0)
@@ -114,11 +122,11 @@ describe('terminal-webgl-hidden-retention', () => {
     const owner = {}
     const panes = [createPane()]
     suspendPaneRendering(panes, retentionFor(owner, panes))
-    resumePaneRendering(panes, owner)
+    expect(resumePaneRendering(panes, owner)).toBe(false)
     expect(retainedHiddenWebglOwnerCountForTest()).toBe(0)
     expect(panes[0].webglAddon).not.toBeNull()
     expect(panes[0].webglAttachmentDeferred).toBe(false)
-    // Released owner no longer counts toward the cap: three more 3-pane owners fit.
+    // Released owner no longer counts toward the cap: two more owners fit.
     const others = [{}, {}]
     for (const other of others) {
       const otherPanes = [createPane(), createPane(), createPane()]

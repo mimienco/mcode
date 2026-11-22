@@ -52,9 +52,27 @@ describe('selectNativeChatViewState', () => {
   // A known session working with nothing to show is a transcript that has not
   // flushed yet (#11032), so hold loading rather than flash the empty state.
   it('holds loading for a known session working before its transcript flushes', () => {
-    expect(selectNativeChatViewState(session({ messages: [], status: 'working' })).kind).toBe(
-      'loading'
-    )
+    expect(
+      selectNativeChatViewState(session({ messages: [], status: 'working' }), {
+        transcriptSettled: false
+      }).kind
+    ).toBe('loading')
+  })
+
+  it('lets a terminal blocker replace loading when the transcript cannot progress', () => {
+    expect(
+      selectNativeChatViewState(session({ messages: [], status: 'loading' }), {
+        transcriptSettled: true
+      }).kind
+    ).toBe('empty')
+  })
+
+  it('stops loading when a known working session has a settled empty transcript', () => {
+    expect(
+      selectNativeChatViewState(session({ messages: [], status: 'working' }), {
+        transcriptSettled: true
+      }).kind
+    ).toBe('empty')
   })
 
   // Why status, not view state: the composer reads session.status, so the pane

@@ -29,9 +29,9 @@ pub struct StatusEntry {
     /// Working-tree state, same alphabet plus `?` (untracked) and `!`
     /// (ignored) in the untracked entry form.
     pub worktree_status: char,
-    /// Repository-relative path (renames: the source).
+    /// Repository-relative path (renames: the destination).
     pub path: String,
-    /// Rename/copy target when applicable.
+    /// Rename/copy source when applicable.
     pub path_orig: Option<String>,
 }
 
@@ -51,7 +51,7 @@ pub struct StatusResult {
 
 impl StatusResult {
     pub fn is_clean(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.is_empty() && self.untracked.is_empty() && self.conflicts.is_empty()
     }
 }
 
@@ -113,8 +113,15 @@ impl Repo {
                 // Linked worktree: `.git` file says `gitdir: <path>`.
                 let contents =
                     std::fs::read_to_string(&dotgit).map_err(|_| GitError::GitNotARepository)?;
-                if let Some(gitdir) =
-                    parse_gitdir_file(&contents).filter(|gitdir| gitdir.join("HEAD").is_file())
+                if let Some(gitdir) = parse_gitdir_file(&contents)
+                    .map(|gitdir| {
+                        if gitdir.is_absolute() {
+                            gitdir
+                        } else {
+                            dir.join(gitdir)
+                        }
+                    })
+                    .filter(|gitdir| gitdir.join("HEAD").is_file())
                 {
                     return Ok(Self {
                         root: dir.to_path_buf(),
@@ -179,7 +186,10 @@ impl Repo {
         if paths.is_empty() {
             return Ok(());
         }
-        let mut args: Vec<&OsStr> = vec![OsStr::new(if add { "add" } else { "reset" })];
+        let mut args: Vec<&OsStr> = vec![
+            OsStr::new("--literal-pathspecs"),
+            OsStr::new(if add { "add" } else { "reset" }),
+        ];
         args.push(OsStr::new("--"));
         for p in paths {
             args.push(p.as_os_str());
@@ -190,12 +200,8 @@ impl Repo {
     /// Commit staged changes; message comes through the argv vector, never a
     /// shell string. `allow_empty` maps to `--allow-empty`.
     pub fn commit(&self, message: &str, allow_empty: bool) -> Result<String, GitError> {
-        let mut args: Vec<&OsStr> = vec![
-            OsStr::new("commit"),
-            OsStr::new("-m"),
-            OsStr::new(message),
-            OsStr::new("--no-verify"),
-        ];
+        let mut args: Vec<&OsStr> =
+            vec![OsStr::new("commit"), OsStr::new("-m"), OsStr::new(message)];
         if allow_empty {
             args.push(OsStr::new("--allow-empty"));
         }
@@ -212,7 +218,11 @@ impl Repo {
         if paths.is_empty() {
             return Ok(());
         }
-        let mut args: Vec<&OsStr> = vec![OsStr::new("checkout"), OsStr::new("--")];
+        let mut args: Vec<&OsStr> = vec![
+            OsStr::new("--literal-pathspecs"),
+            OsStr::new("checkout"),
+            OsStr::new("--"),
+        ];
         for p in paths {
             args.push(p.as_os_str());
         }
@@ -222,7 +232,11 @@ impl Repo {
     /// Unified diff for the given paths (or the whole tree when `paths` is
     /// empty). Path list bounds the output with `--`.
     pub fn diff(&self, format: DiffFormat, paths: &[&Path]) -> Result<String, GitError> {
-        let mut args: Vec<&OsStr> = vec![OsStr::new("diff")];
+        let mut args: Vec<&OsStr> = vec![
+            OsStr::new("--literal-pathspecs"),
+            OsStr::new("diff"),
+            OsStr::new("--no-ext-diff"),
+        ];
         match format {
             DiffFormat::Unstaged => {}
             DiffFormat::Staged => args.push(OsStr::new("--cached")),
@@ -258,6 +272,7 @@ impl Repo {
         if ff_only {
             args.push(OsStr::new("--ff-only"));
         }
+        args.push(OsStr::new("--"));
         args.push(OsStr::new(remote));
         args.push(OsStr::new(branch));
         self.run(TimeoutClass::Network, &args).map(|_| ())
@@ -269,6 +284,7 @@ impl Repo {
         if set_upstream {
             args.push(OsStr::new("--set-upstream"));
         }
+        args.push(OsStr::new("--"));
         args.push(OsStr::new(remote));
         let refspec = format!("{branch}:{branch}");
         args.push(OsStr::new(&refspec));
@@ -308,13 +324,25 @@ impl Repo {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
-        let mut args: Vec<&OsStr> = vec![OsStr::new("check-ignore"), OsStr::new("--")];
+        let args: Vec<&OsStr> = vec![
+            OsStr::new("check-ignore"),
+            OsStr::new("-z"),
+            OsStr::new("--stdin"),
+        ];
+        let mut input = Vec::new();
         for p in paths {
-            args.push(p.as_os_str());
+            input.extend_from_slice(p.as_os_str().as_encoded_bytes());
+            input.push(0);
         }
-        let out = self.run(TimeoutClass::Fast, &args)?;
+        let out = self.runner()?.run_accepting_exit_codes(
+            &self.root,
+            TimeoutClass::Fast.duration(),
+            &args,
+            &[0, 1],
+            Some(&input),
+        )?;
         Ok(String::from_utf8_lossy(&out)
-            .lines()
+            .split('\0')
             .filter(|l| !l.is_empty())
             .map(PathBuf::from)
             .collect())
@@ -394,20 +422,12 @@ fn is_bare_gitdir(dir: &Path) -> bool {
 pub fn parse_status_v2(raw: &[u8]) -> Result<StatusResult, GitError> {
     let mut result = StatusResult::default();
     let text = String::from_utf8_lossy(raw);
-    let mut entries = text.split('\0').flat_map(|chunk| {
-        // Branch header lines arrive inside one NUL chunk but are
-        // newline-separated; flatten them into individual records.
-        if chunk.starts_with("# ") {
-            Box::new(chunk.lines()) as Box<dyn Iterator<Item = &str>>
-        } else {
-            Box::new(std::iter::once(chunk)) as Box<dyn Iterator<Item = &str>>
-        }
-    });
+    let mut entries = text.split('\0');
     while let Some(record) = entries.next() {
         if record.is_empty() {
             continue;
         }
-        let mut fields = record.split(' ');
+        let mut fields = record.splitn(if record.starts_with("2 ") { 10 } else { 9 }, ' ');
         let kind = fields.next().unwrap_or("");
         match kind {
             "1" => {
@@ -440,11 +460,7 @@ pub fn parse_status_v2(raw: &[u8]) -> Result<StatusResult, GitError> {
                 // With `--null`, the renamed path is this field and the
                 // original path is the NEXT NUL chunk.
                 let path = fields.next().unwrap_or("").to_string();
-                let orig_chunk = if xy.starts_with('R') || xy.starts_with('C') {
-                    entries.next().map(|o| o.to_string())
-                } else {
-                    None
-                };
+                let orig_chunk = entries.next().map(str::to_owned);
                 if !path.is_empty() {
                     result.entries.push(StatusEntry {
                         index_status,
@@ -456,7 +472,7 @@ pub fn parse_status_v2(raw: &[u8]) -> Result<StatusResult, GitError> {
             }
             "u" => {
                 // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
-                let mut parts = record.split(' ');
+                let mut parts = record.splitn(11, ' ');
                 parts.next(); // 'u'
                 // Skip XY/sub/m1/m2/m3/mW/h1/h2/h3 (9 fields after 'u').
                 for _ in 0..9 {
@@ -473,28 +489,30 @@ pub fn parse_status_v2(raw: &[u8]) -> Result<StatusResult, GitError> {
                 }
             }
             "?" => {
-                let path = record.strip_prefix("? ").unwrap_or("").trim();
+                let path = record.strip_prefix("? ").unwrap_or("");
                 if !path.is_empty() {
                     result.untracked.push(path.to_string());
                 }
             }
             "#" => {
-                // Branch header lines: `# branch.oid …`, `# branch.head …`,
-                // `# branch.upstream …`, `# branch.ab +N -M`.
-                if let Some(value) = record.strip_prefix("# branch.head ") {
-                    result.branch = Some(value.trim().to_string());
-                } else if let Some(value) = record.strip_prefix("# branch.upstream ") {
-                    result.upstream = Some(value.trim().to_string());
-                } else if let Some(value) = record.strip_prefix("# branch.ab ") {
-                    let mut nums = value.split_whitespace();
-                    let ahead = nums
-                        .next()
-                        .and_then(|v| v.trim_start_matches('+').parse().ok());
-                    let behind = nums
-                        .next()
-                        .and_then(|v| v.trim_start_matches('-').parse().ok());
-                    result.ahead = ahead;
-                    result.behind = behind;
+                for record in record.lines() {
+                    // Branch header lines: `# branch.oid …`, `# branch.head …`,
+                    // `# branch.upstream …`, `# branch.ab +N -M`.
+                    if let Some(value) = record.strip_prefix("# branch.head ") {
+                        result.branch = Some(value.trim().to_string());
+                    } else if let Some(value) = record.strip_prefix("# branch.upstream ") {
+                        result.upstream = Some(value.trim().to_string());
+                    } else if let Some(value) = record.strip_prefix("# branch.ab ") {
+                        let mut nums = value.split_whitespace();
+                        let ahead = nums
+                            .next()
+                            .and_then(|v| v.trim_start_matches('+').parse().ok());
+                        let behind = nums
+                            .next()
+                            .and_then(|v| v.trim_start_matches('-').parse().ok());
+                        result.ahead = ahead;
+                        result.behind = behind;
+                    }
                 }
             }
             _ => {}
@@ -566,6 +584,12 @@ pub fn parse_history(raw: &[u8]) -> Result<Vec<CommitInfo>, GitError> {
 
 /// Lexical containment helper reused by the worktree service.
 pub fn path_contains(root: &Path, candidate: &Path) -> bool {
+    if candidate
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return false;
+    }
     let root_comps: Vec<_> = root.components().collect();
     let cand_comps: Vec<_> = candidate.components().collect();
     if cand_comps.len() < root_comps.len() {
@@ -578,7 +602,9 @@ pub fn path_contains(root: &Path, candidate: &Path) -> bool {
             (Component::Prefix(pr), Component::Prefix(pc)) => {
                 pr.as_os_str().eq_ignore_ascii_case(pc.as_os_str())
             }
-            (Component::Normal(nr), Component::Normal(nc)) => nr.eq_ignore_ascii_case(nc),
+            (Component::Normal(nr), Component::Normal(nc)) if cfg!(windows) => {
+                nr.eq_ignore_ascii_case(nc)
+            }
             _ => r == c,
         })
 }
@@ -586,6 +612,39 @@ pub fn path_contains(root: &Path, candidate: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_preserves_literal_filenames_in_all_record_kinds() {
+        let status = parse_status_v2(
+            b"1 .M N... 100644 100644 100644 abc def  file with spaces \0\
+2 R. N... 100644 100644 100644 abc def R100 new name\0# old\nname\0\
+?  loose file \0\
+u AU N... 000000 000000 000000 000 000 000 000 conflict name\0",
+        )
+        .unwrap();
+        assert_eq!(status.entries[0].path, " file with spaces ");
+        assert_eq!(status.entries[1].path, "new name");
+        assert_eq!(status.entries[1].path_orig.as_deref(), Some("# old\nname"));
+        assert_eq!(status.untracked, [" loose file "]);
+        assert_eq!(status.conflicts, ["conflict name"]);
+        assert!(
+            !StatusResult {
+                untracked: vec!["new".into()],
+                ..StatusResult::default()
+            }
+            .is_clean()
+        );
+    }
+
+    #[test]
+    fn containment_rejects_parent_traversal() {
+        assert!(!path_contains(
+            Path::new("/repo"),
+            Path::new("/repo/../outside")
+        ));
+        #[cfg(unix)]
+        assert!(!path_contains(Path::new("/repo"), Path::new("/Repo/file")));
+    }
 
     #[test]
     fn parses_gitdir_file() {

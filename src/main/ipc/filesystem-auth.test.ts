@@ -1,6 +1,6 @@
 import type * as NodePath from 'node:path'
 import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
@@ -13,7 +13,9 @@ import type { GitWorktreeInfo } from '../../shared/worktree/types'
 import {
   AUTHORIZED_EXTERNAL_PATHS_MAX,
   authorizeExternalPath,
+  authorizeRendererExternalPath,
   isPathAllowed,
+  PATH_ACCESS_DENIED_MESSAGE,
   resolveAuthorizedPath
 } from './filesystem-auth'
 import { isDescendantOrEqual, validateGitRelativeFilePath } from './filesystem-path-containment'
@@ -380,5 +382,30 @@ describe('filesystem-auth authorized external path bound', () => {
     expect(isPathAllowed(path, emptyStore)).toBe(false)
     authorizeExternalPath(path)
     expect(isPathAllowed(path, emptyStore)).toBe(true)
+  })
+})
+
+describe('authorizeRendererExternalPath eligibility', () => {
+  const emptyStore = makeStore([])
+  const allowedStore = makeStore([repo])
+
+  it('rejects an arbitrary out-of-root path without granting it', async () => {
+    const arbitrary = resolve('/renderer-grant-arbitrary/secret.jsonl')
+    await expect(authorizeRendererExternalPath(arbitrary, emptyStore)).rejects.toThrow(
+      PATH_ACCESS_DENIED_MESSAGE
+    )
+    expect(isPathAllowed(arbitrary, emptyStore)).toBe(false)
+  })
+
+  it('admits a path under an allowed root and grants its descendants', async () => {
+    const inside = resolve(join(repo.path, 'src', 'index.ts'))
+    await expect(authorizeRendererExternalPath(inside, allowedStore)).resolves.toBeUndefined()
+    expect(isPathAllowed(inside, emptyStore)).toBe(true)
+  })
+
+  it('admits an AI Vault transcript path even though it sits outside every allowed root', async () => {
+    const transcript = join(homedir(), '.claude', 'projects', 'proj', 'session.jsonl')
+    await expect(authorizeRendererExternalPath(transcript, emptyStore)).resolves.toBeUndefined()
+    expect(isPathAllowed(resolve(transcript), emptyStore)).toBe(true)
   })
 })

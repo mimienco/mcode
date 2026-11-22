@@ -1,8 +1,9 @@
-import { readFile, writeFile, rename } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { net } from 'electron'
 import { extractOAuthClientCredentials } from './gemini-cli-oauth-extractor'
+import { writeFileAtomically } from '../codex-accounts/fs-utils'
 
 const API_TIMEOUT_MS = 10_000
 const OAUTH_CREDS_PATH = path.join(homedir(), '.gemini', 'oauth_creds.json')
@@ -78,9 +79,7 @@ export async function readGeminiCredentials(): Promise<GeminiCredentials | null>
 }
 
 export async function saveGeminiCredentials(creds: GeminiCredentials): Promise<void> {
-  const tmpPath = `${OAUTH_CREDS_PATH}.${process.pid}.tmp`
-  await writeFile(tmpPath, JSON.stringify(creds, null, 2), 'utf-8')
-  await rename(tmpPath, OAUTH_CREDS_PATH)
+  writeFileAtomically(OAUTH_CREDS_PATH, JSON.stringify(creds, null, 2), { mode: 0o600 })
 }
 
 export type RefreshTokenResult = {

@@ -1,9 +1,8 @@
 import {
   buildInstallRgMessage as buildSharedInstallRgMessage,
-  buildRipgrepRequiredMessage as buildSharedRipgrepRequiredMessage,
-  detectInstallCommand,
-  detectLinuxInstallCommandFromOsRelease
-} from '../shared/quick-open-install-rg'
+  buildRipgrepRequiredMessage as buildSharedRipgrepRequiredMessage
+} from '../shared/quick-open-install-rg-node'
+import { detectInstallCommand, detectLinuxInstallCommandFromOsRelease } from '../shared/quick-open-install-rg'
 
 export { detectInstallCommand, detectLinuxInstallCommandFromOsRelease }
 

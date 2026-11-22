@@ -272,22 +272,11 @@ function collectGitPackageFiles(treeSha, name, entries, blobs) {
 
 // Why: snapshot matching compares files by array index, so every producer —
 // working-tree walk, git history, and runtime observation — must emit one
-// canonical order. This mirrors the sorted depth-first filesystem walk.
-function compareManifestPaths(left, right) {
-  const leftParts = left.split('/')
-  const rightParts = right.split('/')
-  const shared = Math.min(leftParts.length, rightParts.length)
-  for (let index = 0; index < shared; index += 1) {
-    const order = compareCodeUnits(leftParts[index], rightParts[index])
-    if (order !== 0) {
-      return order
-    }
-  }
-  return leftParts.length - rightParts.length
-}
-
+// canonical order: the strict full-string code-unit order that
+// parseSkillPackageManifest enforces ('docs.md' sorts before
+// 'docs/readme.md', unlike a per-directory depth-first walk).
 function sortManifestFiles(files) {
-  return [...files].sort((left, right) => compareManifestPaths(left.path, right.path))
+  return [...files].sort((left, right) => compareCodeUnits(left.path, right.path))
 }
 
 function packageDigest(files) {

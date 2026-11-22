@@ -93,6 +93,19 @@
     "allow-shell-pick-image",
     "allow-shell-pick-repo-icon-image",
     "allow-shell-pick-audio",
-    "allow-shell-copy-file"
+    "allow-shell-copy-file",
+    "allow-telemetry-get-consent",
+    "allow-telemetry-set-consent",
+    "allow-telemetry-acknowledge-banner",
+    "allow-agent-status-get-snapshot",
+    "allow-agent-status-infer-interrupt",
+    "allow-agent-status-infer-question-answered",
+    "allow-agent-status-get-migration-unsupported-snapshot",
+    "allow-agent-status-drop",
+    "allow-agent-status-drop-by-tab-prefix",
+    "allow-agent-status-retire-pane-authority",
+    "allow-agent-status-restore-pane-authority",
+    "allow-agent-status-transfer-pane-authority",
+    "allow-agent-hooks-status"
   ]
 }

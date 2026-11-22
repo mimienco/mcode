@@ -3,12 +3,10 @@ import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeGlobalWindowsRuntimeDefault
 } from '../../../../shared/project-execution-runtime'
-import {
-  quotePowerShellLiteral,
-  quotePowerShellNativeArgument
-} from '../../../../shared/powershell-native-argument'
+import { quotePowerShellNativeArgument } from '../../../../shared/powershell-native-argument'
+import { quotePowerShellString } from '../../../../shared/shell-quoting'
 import { buildWslLoginShellCommand } from '../../../../shared/wsl-login-shell-command'
-import { isWslShellName } from '../../../../shared/local-windows-terminal-runtime'
+import { isWslExecutable } from '../../../../shared/wsl-paths'
 import { resolveWindowsShellStartupFamily } from '../../../../shared/windows-terminal-shell'
 import { getProjectAgentSkillTerminalShellOverride } from '@/lib/project-skill-runtime'
 import { useAppStore } from '@/store'
@@ -138,7 +136,7 @@ export function buildSkillSetupTerminalCommand(
   currentPlatform = getSkillCommandPlatform()
 ): string {
   // Why: the created tab is authoritative when project runtime replaces the requested shell.
-  const wslNative = isWslShellName(effectiveShell)
+  const wslNative = isWslExecutable(effectiveShell)
     ? decodeWslSetupTerminalCommand(copiedCommand)
     : null
   if (wslNative) {
@@ -159,7 +157,7 @@ export function buildSkillSetupTerminalCommand(
 
 function buildPowerShellWslSkillCommand(command: string, runtime: LocalAgentRuntime): string {
   const distroArg = runtime.wslDistro?.trim()
-    ? ` -d ${quotePowerShellLiteral(runtime.wslDistro.trim())}`
+    ? ` -d ${quotePowerShellString(runtime.wslDistro.trim())}`
     : ''
   // Why: encoding preserves the user's configured login-shell PATH across the Windows argv boundary.
   const encodedScript = encodeWslLoginShellScript(command)

@@ -31,8 +31,17 @@ type BoundedClient = {
 
 // Why: a sink that never accepts a write and never drains retains producer bytes, so the queue saturates
 // while every individual frame stays comfortably inside the per-frame capacity.
-function makeSaturatingClient(highWaterMark: number): BoundedClient {
-  const client = makeBoundedClient(highWaterMark)
+function makeSaturatingClient(highWaterMark: number): BoundedClient & { flushDrain: () => void } {
+  const client = makeBoundedClient(highWaterMark) as BoundedClient & { flushDrain: () => void }
+  // Why: keep the latest registered callback (do not clear on invoke) so re-arms during a pump
+  // remain invocable by later flushes.
+  let drainCallback: (() => void) | undefined
+  client.options.waitWriteDrain = (callback) => {
+    drainCallback = callback
+  }
+  client.flushDrain = () => {
+    drainCallback?.()
+  }
   client.write = (data: Buffer) => {
     client.frames.push(Buffer.from(data))
     return false
@@ -362,7 +371,7 @@ describe('RelayDispatcher bounded-capacity degradation', () => {
     }
   })
 
-  it('sendResponse substitutes a JSON-RPC error instead of closing when the legacy lane rejects', async () => {
+  it('sendResponse delivers a frameable oversized result instead of closing', async () => {
     const primary = makeBoundedClient(65536)
     const bounded = new RelayDispatcher(primary.write, primary.options)
     try {
@@ -374,17 +383,71 @@ describe('RelayDispatcher bounded-capacity degradation', () => {
       expect(primary.frames).toHaveLength(1)
       const response = decodePayload(primary.frames[0]) as unknown as {
         id: number
-        error: { code: number; message: string }
+        result?: { paths: string }
+        error?: { code: number; message: string }
       }
       expect(response.id).toBe(77)
-      expect(response.error.code).toBe(RelayErrorCode.ResponseOverCapacity)
-      expect(response.error.message).toBe('Relay response exceeded the bounded transport capacity')
+      expect(response.result?.paths).toBe('x'.repeat(3 * 1024 * 1024))
+      expect(response.error).toBeUndefined()
     } finally {
       bounded.dispose()
     }
   })
 
-  it('settles the response fence as failed when the substitute error replaces the result', async () => {
+  it('sendResponse substitutes a JSON-RPC error when retained bytes leave the legacy lane no room', async () => {
+    const primary = makeSaturatingClient(65536)
+    const bounded = new RelayDispatcher(primary.write, primary.options)
+    const settlements: SinkWriteSettlement[] = []
+    try {
+      // Why: the legacy lane only rejects when other lanes' retention plus its own frame
+      // exceeds DISPATCHER_LEGACY_RESPONSE_QUEUE_MAX_BYTES.
+      const stalledId = bounded.activeClientIds()[0]
+      while (
+        bounded.publishProducerNotification(stalledId, 'fs.changed', {
+          events: ['x'.repeat(40_000)]
+        })
+      ) {
+        // Saturate producer retention on the stalled client.
+      }
+
+      bounded.onRequest('fs.listFiles', async (_params, context) => {
+        context.onResponseSettled?.((result) => settlements.push(result))
+        return { paths: 'x'.repeat(15 * 1024 * 1024) }
+      })
+      bounded.feed(encodeJsonRpcFrame({ jsonrpc: '2.0', id: 77, method: 'fs.listFiles' }, 1, 0))
+      await vi.advanceTimersByTimeAsync(0)
+      // Why: a saturated sink releases one parked write per drain cycle, so the substitute
+      // (queued on the control lane) only reaches the wire after repeated drains.
+      const findSubstitute = (): Buffer | undefined =>
+        primary.frames.find((frame) => {
+          try {
+            const payload = decodePayload(frame) as { id?: number; error?: { code: number } }
+            return payload.id === 77 && payload.error?.code === RelayErrorCode.ResponseOverCapacity
+          } catch {
+            return false
+          }
+        })
+      for (let cycle = 0; cycle < 128 && !findSubstitute(); cycle++) {
+        primary.flushDrain()
+        await vi.advanceTimersByTimeAsync(0)
+      }
+      expect(findSubstitute()).toBeDefined()
+      // Why: the substitute itself settles its fence on the drain cycle after it ships.
+      primary.flushDrain()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(primary.closes).toBe(0)
+      expect(settlements).toHaveLength(1)
+      expect(settlements[0]).toEqual({
+        ok: false,
+        error: new Error('Relay response exceeded the bounded transport capacity')
+      })
+    } finally {
+      bounded.dispose()
+    }
+  })
+
+  it('settles the response fence as delivered when a frameable oversized result ships', async () => {
     const primary = makeBoundedClient(65536)
     const bounded = new RelayDispatcher(primary.write, primary.options)
     try {
@@ -398,11 +461,7 @@ describe('RelayDispatcher bounded-capacity degradation', () => {
 
       expect(primary.closes).toBe(0)
       expect(settlements).toHaveLength(1)
-      // The peer got a capacity error, not the result — the fence must not claim delivery.
-      expect(settlements[0]).toEqual({
-        ok: false,
-        error: new Error('Relay response exceeded the bounded transport capacity')
-      })
+      expect(settlements[0]).toEqual({ ok: true })
     } finally {
       bounded.dispose()
     }
@@ -441,7 +500,7 @@ describe('RelayDispatcher bounded-capacity degradation', () => {
     }
   })
 
-  it('sendResponse settles an already-failed oversized response without closing', async () => {
+  it('sendResponse delivers an oversized thrown error without closing', async () => {
     const primary = makeBoundedClient(65536)
     const bounded = new RelayDispatcher(primary.write, primary.options)
     try {
@@ -458,8 +517,8 @@ describe('RelayDispatcher bounded-capacity degradation', () => {
         error: { code: number; message: string }
       }
       expect(response.id).toBe(78)
-      expect(response.error.code).toBe(RelayErrorCode.ResponseOverCapacity)
-      expect(response.error.message).toBe('Relay response exceeded the bounded transport capacity')
+      expect(response.error.code).toBe(-32000)
+      expect(response.error.message).toBe('x'.repeat(3 * 1024 * 1024))
     } finally {
       bounded.dispose()
     }

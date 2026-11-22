@@ -42,6 +42,7 @@ describe('performReplace', () => {
     extra: Partial<Parameters<typeof performReplace>[0]> = {}
   ) =>
     performReplace({
+      store: {} as never,
       rootPath: root,
       query: 'foo',
       replacement: 'bar',
@@ -157,11 +158,14 @@ describe('registerFilesystemSearchReplaceHandlers', () => {
       options: {},
       targets: [{ filePath: '/remote/repo/a.ts', relativePath: 'a.ts' }]
     }
+    // Why: the remote host owns authorization; the local path resolver must not run
+    // for this request. Earlier local-path tests legitimately call the shared hoisted
+    // mock, so assert no NEW calls rather than an absolute zero.
+    const resolveCallsBefore = resolveAuthorizedPathMock.mock.calls.length
     await expect(handler({ sender: { id: 1 } }, args)).resolves.toBe(summary)
     expect(requireSshFilesystemProviderMock).toHaveBeenCalledWith('conn-1')
     expect(provider.searchReplace).toHaveBeenCalledWith(args)
-    // Why: the remote host owns authorization; the local path resolver must not run.
-    expect(resolveAuthorizedPathMock).not.toHaveBeenCalled()
+    expect(resolveAuthorizedPathMock.mock.calls).toHaveLength(resolveCallsBefore)
   })
 
   it('fails closed when the paired host predates replace support', async () => {

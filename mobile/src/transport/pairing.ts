@@ -1,4 +1,8 @@
 import { PairingOfferSchema, type PairingOffer } from './types'
+import {
+  PAIRING_CODE_MAX_CHARACTERS,
+  PAIRING_INPUT_MAX_CHARACTERS
+} from '../../../src/shared/mobile-pairing-protocol-limits'
 
 // Why: this file mirrors src/shared/pairing.ts (which is covered by CI
 // vitest) but uses atob/btoa because Metro/Hermes don't ship Node's
@@ -6,6 +10,9 @@ import { PairingOfferSchema, type PairingOffer } from './types'
 // the other.
 
 export function decodePairingUrl(url: string): PairingOffer | null {
+  if (url.length > PAIRING_INPUT_MAX_CHARACTERS) {
+    return null
+  }
   try {
     const code = extractPairingCodeFromUrl(url)
     if (!code) {
@@ -53,6 +60,9 @@ export function extractPairingCodeFromUrl(url: string): string | null {
 // string so the paste-pair flow can take whichever the user actually
 // copied from desktop.
 export function parsePairingCode(input: string): PairingOffer | null {
+  if (input.length > PAIRING_INPUT_MAX_CHARACTERS) {
+    return null
+  }
   const trimmed = input.trim()
   if (!trimmed) {
     return null
@@ -68,8 +78,17 @@ export function parsePairingCode(input: string): PairingOffer | null {
 }
 
 function decodePairingBase64(base64url: string): PairingOffer {
-  // Why: desktop intentionally strips base64 padding from QR payloads. Some
-  // mobile JS runtimes reject unpadded atob input, so restore it before decode.
+  // Why: reject oversized or wrong-charset payloads before atob so hostile
+  // QR/paste input can't reach the decoder.
+  if (
+    base64url.length === 0 ||
+    base64url.length > PAIRING_CODE_MAX_CHARACTERS ||
+    !/^[A-Za-z0-9+/_-]+={0,2}$/.test(base64url)
+  ) {
+    throw new Error('Invalid pairing code')
+  }
+  // Why: desktop strips base64 padding from QR payloads; some mobile JS
+  // runtimes reject unpadded atob input, so restore it before decode.
   const base64 = padBase64(base64url.replace(/-/g, '+').replace(/_/g, '/'))
   const json = atob(base64)
   return PairingOfferSchema.parse(JSON.parse(json))

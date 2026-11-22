@@ -524,7 +524,6 @@ export function installWebPreloadApi(): void {
   activeEnvironment = readStoredWebRuntimeEnvironment()
   const webWindow = window as unknown as { __MCODE_WEB_CLIENT__?: boolean }
   webWindow.__MCODE_WEB_CLIENT__ = true
-  window.electron = createFallbackProxy(['electron']) as Window['electron']
   window.api = withFallback(createWebPreloadApi(), []) as PreloadApi
 }
 

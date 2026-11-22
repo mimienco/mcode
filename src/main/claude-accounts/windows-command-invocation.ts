@@ -1,19 +1,8 @@
+import { quoteCmdToken } from '../../shared/shell-quoting'
 export type WindowsCommandInvocation = {
   command: string
   args: string[]
   windowsVerbatimArguments: true
-}
-
-function quoteCmdToken(value: string): string {
-  if (/[\r\n"]/.test(value)) {
-    throw new Error('Windows command tokens cannot contain quotes or line breaks.')
-  }
-  const crtEscaped = value.replace(
-    /(\\*)$/,
-    (_match, backslashes: string) => `${backslashes}${backslashes}`
-  )
-  // Percent expansion still runs inside quotes, so briefly leave the quoted span to escape it.
-  return `"${crtEscaped.replace(/%/g, '"^%"')}"`
 }
 
 export function buildWindowsCommandInvocation(

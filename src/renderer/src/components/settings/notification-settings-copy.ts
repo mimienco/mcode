@@ -77,22 +77,26 @@ export async function sendNotificationSettingsTestNotification(
 
   const result = await window.api.notifications.dispatch({
     source: 'test',
-    requireDisplayConfirmation: true
+    requireDisplayConfirmation: true,
+    suppressSystemSound: true
   })
   if (result.delivered) {
-    const soundResult =
-      notificationSettings.customSoundId !== 'system'
-        ? await window.api.notifications.playSound({
-            force: true,
-            volume: volumeDraft
-          })
-        : null
-    if (notificationSettings.customSoundId !== 'system' && soundResult && !soundResult.played) {
+    const soundResult = await window.api.notifications.playSound({
+      force: true,
+      volume: volumeDraft,
+      systemFallback: notificationSettings.customSoundId === 'system'
+    })
+    if (!soundResult.played) {
       toast.error(
-        translate(
-          'auto.components.settings.NotificationsPane.98d70fb261',
-          'Custom notification sound could not be played'
-        )
+        notificationSettings.customSoundId === 'system'
+          ? translate(
+              'auto.components.settings.NotificationsPane.0fadad17ce',
+              'Notification sound could not be played'
+            )
+          : translate(
+              'auto.components.settings.NotificationsPane.98d70fb261',
+              'Custom notification sound could not be played'
+            )
       )
       return 'delivered'
     }

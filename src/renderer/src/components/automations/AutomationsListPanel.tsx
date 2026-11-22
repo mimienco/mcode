@@ -31,6 +31,7 @@ import type {
 import { AutomationListTableHeader } from './AutomationListTableHeader'
 import { AutomationListToolbar } from './AutomationListToolbar'
 import { indexLatestAutomationRuns } from './automation-list-last-run'
+import { prefetchAutomationEditorDialog } from './automation-editor-dialog-chunk'
 
 type AutomationsListPanelProps = {
   hasListItems: boolean
@@ -144,6 +145,8 @@ export function AutomationsListPanel({
               <button
                 key={template.id}
                 type="button"
+                onPointerEnter={() => void prefetchAutomationEditorDialog().catch(() => {})}
+                onFocus={() => void prefetchAutomationEditorDialog().catch(() => {})}
                 onClick={() => openCreateDialog(template)}
                 className="rounded-md border border-border/70 bg-background px-3 py-2 text-left shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
@@ -160,6 +163,8 @@ export function AutomationsListPanel({
               type="button"
               variant="outline"
               className="mt-1 w-full justify-start"
+              onPointerEnter={() => void prefetchAutomationEditorDialog().catch(() => {})}
+              onFocus={() => void prefetchAutomationEditorDialog().catch(() => {})}
               onClick={() => openCreateDialog()}
             >
               <Plus className="size-4" />

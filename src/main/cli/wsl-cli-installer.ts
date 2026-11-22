@@ -15,9 +15,9 @@ import {
   getPosixDirname,
   getWslBridgeMarker,
   getWslLauncherMarker,
-  parseManagedLauncherTarget,
-  quoteShell
+  parseManagedLauncherTarget
 } from './wsl-cli-scripts'
+import { quotePosixQuoteSplice } from '../../shared/shell-quoting'
 
 const MANAGED_MARKER = getWslLauncherMarker()
 const BRIDGE_MANAGED_MARKER = getWslBridgeMarker()
@@ -215,12 +215,12 @@ export class WslCliInstaller {
       this.distro as string,
       [
         'set -euo pipefail',
-        `mkdir -p ${quoteShell(status.pathDirectory as string)}`,
-        `mkdir -p ${quoteShell(getPosixDirname(getBridgePathFromCommandPath(status.commandPath)))}`,
+        `mkdir -p ${quotePosixQuoteSplice(status.pathDirectory as string)}`,
+        `mkdir -p ${quotePosixQuoteSplice(getPosixDirname(getBridgePathFromCommandPath(status.commandPath)))}`,
         buildRegistrationLockPrelude(status.commandPath),
-        `command_tmp=${quoteShell(`${status.commandPath}.tmp`)}.$$`,
-        `bridge_path=${quoteShell(getBridgePathFromCommandPath(status.commandPath))}`,
-        `legacy_command_path=${quoteShell(
+        `command_tmp=${quotePosixQuoteSplice(`${status.commandPath}.tmp`)}.$$`,
+        `bridge_path=${quotePosixQuoteSplice(getBridgePathFromCommandPath(status.commandPath))}`,
+        `legacy_command_path=${quotePosixQuoteSplice(
           `${getPosixDirname(status.commandPath)}/${LEGACY_WSL_COMMAND_NAME}`
         )}`,
         'bridge_tmp="${bridge_path}.tmp.$$"',
@@ -232,7 +232,7 @@ export class WslCliInstaller {
         '  result=$?',
         '  set +e',
         '  if [ "$committed" -ne 1 ]; then',
-        `    if [ "$bridge_had_original" -eq 1 ]; then mv -f "$bridge_backup" ${quoteShell(getBridgePathFromCommandPath(status.commandPath))}; elif [ "$bridge_touched" -eq 1 ]; then rm -f ${quoteShell(getBridgePathFromCommandPath(status.commandPath))}; fi`,
+        `    if [ "$bridge_had_original" -eq 1 ]; then mv -f "$bridge_backup" ${quotePosixQuoteSplice(getBridgePathFromCommandPath(status.commandPath))}; elif [ "$bridge_touched" -eq 1 ]; then rm -f ${quotePosixQuoteSplice(getBridgePathFromCommandPath(status.commandPath))}; fi`,
         '  fi',
         '  rm -f "$command_tmp" "$bridge_tmp" "$bridge_backup"',
         '  exit "$result"',
@@ -256,10 +256,10 @@ export class WslCliInstaller {
           getBridgePathFromCommandPath(status.commandPath),
           BRIDGE_MANAGED_MARKER
         ),
-        `if [ -f ${quoteShell(getBridgePathFromCommandPath(status.commandPath))} ]; then cp -p ${quoteShell(getBridgePathFromCommandPath(status.commandPath))} "$bridge_backup"; bridge_had_original=1; fi`,
-        `mv -f "$bridge_tmp" ${quoteShell(getBridgePathFromCommandPath(status.commandPath))}`,
+        `if [ -f ${quotePosixQuoteSplice(getBridgePathFromCommandPath(status.commandPath))} ]; then cp -p ${quotePosixQuoteSplice(getBridgePathFromCommandPath(status.commandPath))} "$bridge_backup"; bridge_had_original=1; fi`,
+        `mv -f "$bridge_tmp" ${quotePosixQuoteSplice(getBridgePathFromCommandPath(status.commandPath))}`,
         'bridge_touched=1',
-        `mv -f "$command_tmp" ${quoteShell(status.commandPath)}`,
+        `mv -f "$command_tmp" ${quotePosixQuoteSplice(status.commandPath)}`,
         'committed=1',
         'rm -f "$bridge_backup"',
         // Why: the command was renamed to avoid GNOME MCode; remove only the
@@ -282,7 +282,7 @@ export class WslCliInstaller {
       // startup reconciliation as opt-in proof, silently undoing this removal.
       await this.run(
         this.distro as string,
-        ['set -euo pipefail', buildManagedLegacyRemoveCommand(quoteShell(legacyCommandPath))].join(
+        ['set -euo pipefail', buildManagedLegacyRemoveCommand(quotePosixQuoteSplice(legacyCommandPath))].join(
           '\n'
         )
       )
@@ -363,7 +363,7 @@ export class WslCliInstaller {
       (
         await this.run(
           this.distro,
-          `case ":$PATH:" in *:${quoteShell(pathDirectory)}:*) printf yes ;; *) printf no ;; esac`
+          `case ":$PATH:" in *:${quotePosixQuoteSplice(pathDirectory)}:*) printf yes ;; *) printf no ;; esac`
         )
       ).trim() === 'yes'
 
@@ -383,14 +383,14 @@ export class WslCliInstaller {
     const output = await this.run(
       distro,
       [
-        `if [ -L ${quoteShell(commandPath)} ]; then`,
+        `if [ -L ${quotePosixQuoteSplice(commandPath)} ]; then`,
         '  printf __MCODE_NOT_FILE__',
-        `elif [ ! -e ${quoteShell(commandPath)} ]; then`,
+        `elif [ ! -e ${quotePosixQuoteSplice(commandPath)} ]; then`,
         '  printf __MCODE_MISSING__',
-        `elif [ ! -f ${quoteShell(commandPath)} ]; then`,
+        `elif [ ! -f ${quotePosixQuoteSplice(commandPath)} ]; then`,
         '  printf __MCODE_NOT_FILE__',
         'else',
-        `  cat ${quoteShell(commandPath)}`,
+        `  cat ${quotePosixQuoteSplice(commandPath)}`,
         'fi'
       ].join('\n')
     )
@@ -503,7 +503,7 @@ function buildEncodedWslBashCommand(command: string): string {
   // Why: raw multiline heredocs can be flattened while crossing wsl.exe's
   // Windows command-line boundary. Send one shell-safe line and decode inside WSL.
   const encoded = Buffer.from(command, 'utf8').toString('base64')
-  return `set -o pipefail; printf %s ${quoteShell(encoded)} | base64 -d | bash`
+  return `set -o pipefail; printf %s ${quotePosixQuoteSplice(encoded)} | base64 -d | bash`
 }
 
 export const _internals = {

@@ -1,10 +1,10 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import {
-  closeSync,
+  linkSync,
   mkdirSync,
-  openSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -140,32 +140,54 @@ export class AgentSessionClaimSigner {
   }
 }
 
+// Why: publish via a fully-written temp file hard-linked into place — the key
+// path can never hold a torn short file, and EEXIST keeps a concurrent starter
+// from replacing an already-claimed key (mirrors fs-utils' no-overwrite publish).
+function createCoordinationKeyFile(keyPath: string, candidate: Buffer): boolean {
+  const tmpPath = `${keyPath}.tmp-${process.pid}`
+  try {
+    writeFileSync(tmpPath, candidate, { mode: 0o600 })
+    try {
+      linkSync(tmpPath, keyPath)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error
+      }
+      return false
+    }
+  } finally {
+    rmSync(tmpPath, { force: true })
+  }
+}
+
 export function loadAgentSessionClaimSigner(
   profileDirectory: string,
   authorityDomainId: string
 ): AgentSessionClaimSigner {
   const keyPath = join(profileDirectory, COORDINATION_KEY_FILE)
   mkdirSync(dirname(keyPath), { recursive: true })
-  let key: Buffer
+  let key: Buffer | undefined
   try {
     key = readFileSync(keyPath)
   } catch {
+    // Missing key — create it below.
+  }
+  if (key === undefined || key.length !== COORDINATION_KEY_BYTES) {
+    if (key !== undefined) {
+      // Why: our own historical non-atomic write could leave a truncated key
+      // that wedged every startup behind agent_session_ownership_unknown;
+      // heal it like e2ee-keypair.ts regenerates malformed files.
+      rmSync(keyPath, { force: true })
+    }
     const candidate = randomBytes(COORDINATION_KEY_BYTES)
-    let fd: number | null = null
-    try {
-      fd = openSync(keyPath, 'wx', 0o600)
-      writeFileSync(fd, candidate)
+    if (createCoordinationKeyFile(keyPath, candidate)) {
       key = candidate
-    } catch {
+    } else {
+      // Another process claimed the key first; use theirs.
       key = readFileSync(keyPath)
-    } finally {
-      if (fd !== null) {
-        closeSync(fd)
-      }
     }
   }
-  // Why: a replaced/corrupt key could make a surviving owner look absent;
-  // refuse authority instead of silently minting an incomparable namespace.
   if (key.length !== COORDINATION_KEY_BYTES) {
     throw new Error('agent_session_ownership_unknown')
   }

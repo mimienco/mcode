@@ -1,4 +1,5 @@
 export {
+  createNativeChatToolFoldCache,
   foldToolMessages,
   pairToolBlocks,
   splitNativeChatBlocks,

@@ -1,6 +1,4 @@
-export function quotePosixShell(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`
-}
+import { quotePosixSingleQuote } from './shell-quoting'
 
 /**
  * Build `wsl.exe` argv that hands a POSIX script to the guest byte-for-byte.
@@ -20,7 +18,7 @@ export function buildWslExecArgs(
 }
 
 export function buildWslLoginShellCommand(command: string): string {
-  const quotedCommand = quotePosixShell(command)
+  const quotedCommand = quotePosixSingleQuote(command)
   return [
     '_mcode_wsl_shell=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)',
     'if [ -z "$_mcode_wsl_shell" ] || [ ! -x "$_mcode_wsl_shell" ]; then',
@@ -79,10 +77,10 @@ export function buildWslCapturedLoginShellCommand(
     endMarker: end,
     command: buildWslLoginShellCommand(
       [
-        `printf %s ${quotePosixShell(begin)}`,
+        `printf %s ${quotePosixSingleQuote(begin)}`,
         command,
         '_mcode_capture_status=$?',
-        `printf %s ${quotePosixShell(end)}`,
+        `printf %s ${quotePosixSingleQuote(end)}`,
         'exit $_mcode_capture_status'
       ].join('\n')
     ),

@@ -6,6 +6,7 @@ import {
   type AiVaultSessionTitlesResult
 } from '../../shared/ai-vault-session-title'
 import { resolveAiVaultSessionTitlesInBackground } from './session-scanner-background'
+import { isTranscriptPathInsideAgentRoots } from './session-transcript-path-gate'
 
 const TRANSCRIPT_PATH_MAX_LENGTH = 32_768
 
@@ -42,5 +43,22 @@ export async function resolveLocalAiVaultSessionTitles(
       deduped.set(key, normalized)
     }
   }
-  return resolveAiVaultSessionTitlesInBackground([...deduped.values()], signal)
+  // Why: transcriptPath is renderer-supplied; anything outside the agent's
+  // known session roots degrades to the id-only shape before any reader can
+  // stat or open it.
+  const gated = await Promise.all(
+    [...deduped.values()].map(async (request): Promise<AiVaultSessionTitleRequest> => {
+      if (
+        !request.transcriptPath ||
+        (await isTranscriptPathInsideAgentRoots({
+          agent: request.agent,
+          filePath: request.transcriptPath
+        }))
+      ) {
+        return request
+      }
+      return { agent: request.agent, sessionId: request.sessionId }
+    })
+  )
+  return resolveAiVaultSessionTitlesInBackground(gated, signal)
 }

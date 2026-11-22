@@ -20,6 +20,10 @@ use crossbeam_channel::{Receiver, Sender};
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+#[path = "watcher_lifecycle_tests.rs"]
+mod lifecycle_tests;
+
 /// Default trailing-edge debounce (spec §5, `filesystem-watch-batch-window.ts`).
 pub const DEBOUNCE: Duration = Duration::from_millis(150);
 /// Max-wait flush so a continuous event stream cannot starve the batch (spec §5).
@@ -250,7 +254,33 @@ pub struct WatcherService {
     active_watchers: Arc<AtomicUsize>,
     pending: Arc<Mutex<HashMap<String, PendingBatch>>>,
     unwatchable: Arc<Mutex<std::collections::VecDeque<String>>>,
-    shutdowns: Mutex<HashMap<String, Sender<()>>>,
+    subscriptions: Mutex<HashMap<String, NativeSubscription>>,
+}
+
+#[derive(Debug)]
+struct NativeSubscription {
+    owners: HashSet<u64>,
+    shutdown: Sender<()>,
+    thread: thread::JoinHandle<()>,
+}
+
+impl NativeSubscription {
+    fn stop(self) {
+        let _ = self.shutdown.send(());
+        let _ = self.thread.join();
+    }
+}
+
+impl Drop for WatcherService {
+    fn drop(&mut self) {
+        let subscriptions = self.subscriptions.get_mut().expect("subscriptions lock");
+        for subscription in subscriptions.values() {
+            let _ = subscription.shutdown.try_send(());
+        }
+        for (_, subscription) in subscriptions.drain() {
+            let _ = subscription.thread.join();
+        }
+    }
 }
 
 impl WatcherService {
@@ -263,7 +293,7 @@ impl WatcherService {
             active_watchers: Arc::new(AtomicUsize::new(0)),
             pending: Arc::new(Mutex::new(HashMap::new())),
             unwatchable: Arc::new(Mutex::new(std::collections::VecDeque::new())),
-            shutdowns: Mutex::new(HashMap::new()),
+            subscriptions: Mutex::new(HashMap::new()),
         };
         (service, receiver)
     }
@@ -277,7 +307,7 @@ impl WatcherService {
             active_watchers: Arc::new(AtomicUsize::new(0)),
             pending: Arc::new(Mutex::new(HashMap::new())),
             unwatchable: Arc::new(Mutex::new(std::collections::VecDeque::new())),
-            shutdowns: Mutex::new(HashMap::new()),
+            subscriptions: Mutex::new(HashMap::new()),
         };
         (service, receiver)
     }
@@ -307,8 +337,25 @@ impl WatcherService {
     /// Reaching [`MAX_WATCHERS`] returns an error, and the caller is expected
     /// to retry when capacity frees (spec §5 bounded capacity semantics). An
     /// unreadable root marks the LRU cache and errors.
-    pub fn subscribe(&self, root: &Path, _window_id: u64) -> Result<(), crate::scope::FsError> {
+    pub fn subscribe(&self, root: &Path, window_id: u64) -> Result<(), crate::scope::FsError> {
         let normalized_root = normalize_drive_case(root);
+        let key = normalized_root.to_string_lossy().into_owned();
+        let mut subscriptions = self.subscriptions.lock().expect("subscriptions lock");
+        if let Some(subscription) = subscriptions.get_mut(&key)
+            && !subscription.thread.is_finished()
+        {
+            subscription.owners.insert(window_id);
+            return Ok(());
+        }
+        // Preserve the other owners when retrying a failed native watcher.
+        let mut owners = match subscriptions.remove(&key) {
+            Some(subscription) => {
+                let owners = subscription.owners.clone();
+                subscription.stop();
+                owners
+            }
+            None => HashSet::new(),
+        };
         if fs::metadata(&normalized_root).is_err() {
             self.mark_unwatchable(&normalized_root);
             return Err(crate::scope::FsError::NotFound);
@@ -316,40 +363,43 @@ impl WatcherService {
         if self.active_watchers.load(Ordering::SeqCst) >= MAX_WATCHERS {
             return Err(crate::scope::FsError::Io("watcher capacity reached".into()));
         }
-        let key = normalized_root.to_string_lossy().into_owned();
-
-        // Repeated subscribe for the same root replaces the pump state; the
-        // registry keeps one watcher per root shared by many windows (spec §5
-        // per-sender ownership lives in `unsubscribe` bookkeeping).
-        {
-            let mut pending = self.pending.lock().expect("pending lock");
-            if pending.contains_key(&key) {
-                pending.remove(&key);
+        self.active_watchers.fetch_add(1, Ordering::SeqCst);
+        match self.spawn_native(&normalized_root, key.clone()) {
+            Ok(mut subscription) => {
+                owners.insert(window_id);
+                subscription.owners = owners;
+                subscriptions.insert(key, subscription);
+                Ok(())
+            }
+            Err(error) => {
+                self.active_watchers.fetch_sub(1, Ordering::SeqCst);
+                self.mark_unwatchable(&normalized_root);
+                Err(error)
             }
         }
-
-        self.active_watchers.fetch_add(1, Ordering::SeqCst);
-        let watcher_result = self.spawn_native(&normalized_root, key.clone());
-        if watcher_result.is_err() {
-            self.active_watchers.fetch_sub(1, Ordering::SeqCst);
-            self.mark_unwatchable(&normalized_root);
-        }
-        watcher_result
     }
 
-    /// Drops `window_id`'s ownership of `root`; when the last owner leaves
-    /// the native watcher is torn down (spec §5 per-sender unsubscribe).
-    pub fn unsubscribe(&self, root: &Path, _window_id: u64) {
+    /// Drops only this window's ownership; the last owner stops the pump.
+    pub fn unsubscribe(&self, root: &Path, window_id: u64) {
         let key = normalize_drive_case(root).to_string_lossy().into_owned();
-        let sender = self.shutdowns.lock().expect("shutdowns lock").remove(&key);
-        if let Some(sender) = sender {
-            // The pump thread exits and drops the native watcher; the
-            // capacity slot frees when the thread lands.
-            let _ = sender.send(());
+        let mut subscriptions = self.subscriptions.lock().expect("subscriptions lock");
+        let Some(subscription) = subscriptions.get_mut(&key) else {
+            return;
+        };
+        if !subscription.owners.remove(&window_id) || !subscription.owners.is_empty() {
+            return;
+        }
+        if let Some(subscription) = subscriptions.remove(&key) {
+            // Serialize teardown with a new subscription to this same root.
+            subscription.stop();
         }
     }
 
-    fn spawn_native(&self, root: &Path, root_key: String) -> Result<(), crate::scope::FsError> {
+    fn spawn_native(
+        &self,
+        root: &Path,
+        root_key: String,
+    ) -> Result<NativeSubscription, crate::scope::FsError> {
         let (notify_tx, notify_rx) =
             crossbeam_channel::unbounded::<notify::Result<notify::Event>>();
         let mut watcher = notify::RecommendedWatcher::new(
@@ -372,11 +422,7 @@ impl WatcherService {
         let root_for_thread = root.to_path_buf();
         let active = Arc::clone(&self.active_watchers);
         let (pump_tx, pump_rx) = crossbeam_channel::bounded::<()>(1);
-        self.shutdowns
-            .lock()
-            .expect("shutdowns lock")
-            .insert(root_key.clone(), pump_tx);
-        thread::Builder::new()
+        let thread = thread::Builder::new()
             .name(format!("mcode-fs-watcher-{root_key}"))
             .spawn(move || {
                 let _keep_watcher = watcher;
@@ -390,11 +436,16 @@ impl WatcherService {
                     window,
                     &mut shutdown,
                 );
+                pending.lock().expect("pending lock").remove(&root_key);
                 drop(_keep_watcher);
                 active.fetch_sub(1, Ordering::SeqCst);
             })
             .map_err(|error| crate::scope::FsError::Io(error.to_string()))?;
-        Ok(())
+        Ok(NativeSubscription {
+            owners: HashSet::new(),
+            shutdown: pump_tx,
+            thread,
+        })
     }
 }
 
@@ -422,7 +473,10 @@ fn pump(
             None => Some(Duration::from_millis(200)),
         };
         if let Some(receiver) = shutdown
-            && !receiver.is_empty()
+            && !matches!(
+                receiver.try_recv(),
+                Err(crossbeam_channel::TryRecvError::Empty)
+            )
         {
             flush(root, &root_key, pending, emitter, &mut batch_open);
             return;

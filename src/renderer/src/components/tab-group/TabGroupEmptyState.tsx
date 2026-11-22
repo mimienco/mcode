@@ -1,5 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { ArrowRight, FileText, Globe, Settings2, Smartphone, SquareTerminal } from 'lucide-react'
+import {
+  ArrowRight,
+  FileText,
+  Globe,
+  LoaderCircle,
+  Settings2,
+  Smartphone,
+  SquareTerminal
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { getAgentCatalog } from '@/lib/agent-catalog'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -19,6 +27,18 @@ import type { TabGroupWorkspaceTemplateId } from './tab-group-workspace-template
 import './tab-group-empty-state.css'
 
 const MAX_TABS_PER_AGENT = 10
+const AGENT_LAUNCH_BATCH_SIZE = 2
+
+function waitForAnimationFrame(): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  window.requestAnimationFrame(() => resolve())
+  return promise
+}
+
+async function waitForNextPaint(): Promise<void> {
+  await waitForAnimationFrame()
+  await waitForAnimationFrame()
+}
 
 type SurfaceTile = {
   id: string
@@ -54,10 +74,15 @@ export default function TabGroupEmptyState({
   )
   const openSettingsPage = useAppStore((state) => state.openSettingsPage)
   const openSettingsTarget = useAppStore((state) => state.openSettingsTarget)
+  const clearPendingWorkspaceLaunchGroups = useAppStore(
+    (state) => state.clearPendingWorkspaceLaunchGroups
+  )
+  const createEmptyGridGroups = useAppStore((state) => state.createEmptyGridGroups)
   const [sessionCounts, setSessionCounts] = useState<Record<string, number>>({})
   const [selectedTemplateId, setSelectedTemplateId] =
     useState<TabGroupWorkspaceTemplateId>('research')
   const [isStartingTemplate, setIsStartingTemplate] = useState(false)
+  const [isStartingAgents, setIsStartingAgents] = useState(false)
 
   const entries = useMemo(
     () =>
@@ -87,39 +112,91 @@ export default function TabGroupEmptyState({
   }, [])
 
   const launchSelectedAgents = useCallback(() => {
-    let lastTabId: string | null = null
+    if (isStartingAgents || selectedSessionCount === 0) {
+      return
+    }
+    const selectedAgents: TuiAgent[] = []
     for (const { agent } of launchEntries) {
       const count = sessionCounts[agent] ?? 0
-      if (count === 0) {
-        continue
-      }
-      const label = getEmptyStateAgentLabel(agent)
       for (let index = 0; index < count; index += 1) {
-        const result = launchAgentInNewTab({
-          agent,
-          worktreeId,
-          groupId,
-          launchSource: 'tab_bar_quick_launch'
-        })
-        if (!result) {
-          toast.error(
-            translate(
-              'auto.components.tab.bar.QuickLaunchButton.465e432ef1',
-              'Could not build launch command for {{value0}}.',
-              { value0: label }
-            )
-          )
-          break
-        }
-        if (result.tabId) {
-          lastTabId = result.tabId
-        }
+        selectedAgents.push(agent)
       }
     }
-    if (lastTabId) {
-      onActivateTerminal(lastTabId)
+
+    setIsStartingAgents(true)
+    let targetGroupIds: string[] | null = null
+    const launch = async (): Promise<void> => {
+      await waitForNextPaint()
+      targetGroupIds = createEmptyGridGroups(worktreeId, groupId, selectedAgents)
+      if (!targetGroupIds) {
+        toast.error(
+          translate(
+            'auto.components.tab.group.TabGroupEmptyState.templateSplitFailed',
+            'Could not create the workspace split.'
+          )
+        )
+        return
+      }
+
+      let lastTabId: string | null = null
+      for (let batchStart = 0; batchStart < selectedAgents.length; ) {
+        const batchEnd = Math.min(batchStart + AGENT_LAUNCH_BATCH_SIZE, selectedAgents.length)
+        const completedGroupIds: string[] = []
+        for (let index = batchStart; index < batchEnd; index += 1) {
+          const agent = selectedAgents[index]
+          const targetGroupId = targetGroupIds[index]
+          const result = launchAgentInNewTab({
+            agent,
+            worktreeId,
+            groupId: targetGroupId,
+            launchSource: 'tab_bar_quick_launch'
+          })
+          if (!result) {
+            completedGroupIds.push(targetGroupId)
+            toast.error(
+              translate(
+                'auto.components.tab.bar.QuickLaunchButton.465e432ef1',
+                'Could not build launch command for {{value0}}.',
+                { value0: getEmptyStateAgentLabel(agent) }
+              )
+            )
+            continue
+          }
+          if (result.tabId) {
+            lastTabId = result.tabId
+            completedGroupIds.push(targetGroupId)
+          }
+        }
+        clearPendingWorkspaceLaunchGroups(completedGroupIds)
+        batchStart = batchEnd
+        if (batchStart < selectedAgents.length) {
+          await waitForAnimationFrame()
+        }
+      }
+      if (lastTabId) {
+        onActivateTerminal(lastTabId)
+      }
     }
-  }, [groupId, launchEntries, onActivateTerminal, sessionCounts, worktreeId])
+    void launch()
+      .catch((error) => {
+        if (targetGroupIds) {
+          clearPendingWorkspaceLaunchGroups(targetGroupIds)
+        }
+        console.error('Failed to start workspace agents', error)
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => setIsStartingAgents(false))
+  }, [
+    clearPendingWorkspaceLaunchGroups,
+    createEmptyGridGroups,
+    groupId,
+    isStartingAgents,
+    launchEntries,
+    onActivateTerminal,
+    selectedSessionCount,
+    sessionCounts,
+    worktreeId
+  ])
 
   const openInstallPage = useCallback((agent: TuiAgent) => {
     const homepageUrl = getAgentCatalog().find((entry) => entry.id === agent)?.homepageUrl
@@ -171,18 +248,19 @@ export default function TabGroupEmptyState({
 
   const startTemplate = useCallback(
     async (templateId: TabGroupWorkspaceTemplateId) => {
-      if (!templateAgent || isStartingTemplate) {
+      if (!templateAgent || isStartingTemplate || isStartingAgents) {
         return
       }
       setSelectedTemplateId(templateId)
       setIsStartingTemplate(true)
       try {
+        await waitForNextPaint()
         await onUseTemplate(templateId, templateAgent)
       } finally {
         setIsStartingTemplate(false)
       }
     },
-    [isStartingTemplate, onUseTemplate, templateAgent]
+    [isStartingAgents, isStartingTemplate, onUseTemplate, templateAgent]
   )
 
   return (
@@ -193,7 +271,7 @@ export default function TabGroupEmptyState({
       <div className="m-auto grid w-full max-w-[1280px] gap-3 animate-in fade-in slide-in-from-bottom-3 duration-300 motion-reduce:animate-none @min-[860px]/empty-state:grid-cols-[minmax(310px,0.36fr)_minmax(0,1fr)]">
         <TabGroupEmptyStateTemplateRail
           selectedTemplateId={selectedTemplateId}
-          isStartingTemplate={isStartingTemplate}
+          isStartingTemplate={isStartingTemplate || isStartingAgents}
           onSelectTemplate={setSelectedTemplateId}
           onUseTemplate={(templateId) => {
             void startTemplate(templateId)
@@ -307,7 +385,8 @@ export default function TabGroupEmptyState({
             <Button
               type="button"
               data-start-workspace
-              disabled={selectedSessionCount === 0 || isStartingTemplate}
+              disabled={selectedSessionCount === 0 || isStartingTemplate || isStartingAgents}
+              aria-busy={isStartingAgents}
               onClick={launchSelectedAgents}
               className="min-w-36 @min-[860px]/empty-state:h-12 @min-[860px]/empty-state:min-w-48 @min-[860px]/empty-state:text-base"
             >
@@ -316,7 +395,7 @@ export default function TabGroupEmptyState({
                 'Start workspace'
               )}
               <span className="readout text-xs opacity-75">{selectedSessionCount}</span>
-              <ArrowRight />
+              {isStartingAgents ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}
             </Button>
           </footer>
         </main>

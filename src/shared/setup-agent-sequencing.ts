@@ -1,6 +1,7 @@
 import { encodePowerShellCommand } from './powershell-command-encoding'
+import { nativeWindowsPathToPosixShellPath } from './wsl-paths'
+import { quotePosixSafeChars, quotePowerShellString } from './shell-quoting'
 import {
-  nativeWindowsPathToPosixShellPath,
   resolveSetupRunnerCommand,
   type SetupRunnerCommandPlatform,
   type SetupRunnerCommandShell,
@@ -88,9 +89,9 @@ export function createSequencedSetupAgentCommands(args: {
 }
 
 function buildPosixSetupCommand(setupCommand: string, markerPath: string, nonce: string): string {
-  const marker = quotePosixArg(markerPath)
-  const tmp = quotePosixArg(`${markerPath}.tmp`)
-  const nonceValue = quotePosixArg(nonce)
+  const marker = quotePosixSafeChars(markerPath)
+  const tmp = quotePosixSafeChars(`${markerPath}.tmp`)
+  const nonceValue = quotePosixSafeChars(nonce)
 
   const script = [
     `rm -f ${marker} ${tmp} 2>/dev/null`,
@@ -101,7 +102,7 @@ function buildPosixSetupCommand(setupCommand: string, markerPath: string, nonce:
     'exit "$status"'
   ].join('; ')
 
-  return `bash -lc ${quotePosixArg(script)}`
+  return `bash -lc ${quotePosixSafeChars(script)}`
 }
 
 function buildPosixStartupScript(
@@ -110,9 +111,9 @@ function buildPosixStartupScript(
   nonce: string,
   waitTimeoutSeconds: number
 ): string {
-  const marker = quotePosixArg(markerPath)
-  const tmp = quotePosixArg(`${markerPath}.tmp`)
-  const nonceValue = quotePosixArg(nonce)
+  const marker = quotePosixSafeChars(markerPath)
+  const tmp = quotePosixSafeChars(`${markerPath}.tmp`)
+  const nonceValue = quotePosixSafeChars(nonce)
   const timeout = Math.max(1, Math.floor(waitTimeoutSeconds))
   const startupSuccessCommand = buildPosixStartupSuccessCommand(startupCommand)
   // Why: the PTY launch path feeds this command through an interactive shell,
@@ -147,7 +148,7 @@ function buildPosixStartupSuccessCommand(startupCommand: string): string {
     hasUnquotedPosixCommandSeparator(startupCommand) ||
     hasLeadingPosixEnvAssignment(startupCommand)
   ) {
-    return `eval ${quotePosixArg(startupCommand)}; exit "$?"`
+    return `eval ${quotePosixSafeChars(startupCommand)}; exit "$?"`
   }
   return `exec ${startupCommand}`
 }
@@ -266,17 +267,6 @@ function buildWindowsStartupCommand(
 
 function encodePowerShellInvocation(script: string): string {
   return `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${encodePowerShellCommand(script)}`
-}
-
-function quotePosixArg(value: string): string {
-  if (/^[A-Za-z0-9_./:-]+$/.test(value)) {
-    return value
-  }
-  return `'${value.replace(/'/g, `'\\''`)}'`
-}
-
-function quotePowerShellString(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
 }
 
 export function getSetupAgentSequenceShellForTests(

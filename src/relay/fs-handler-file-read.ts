@@ -1,4 +1,4 @@
-import { open, readFile, stat } from 'node:fs/promises'
+import { open, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { extname } from 'node:path'
 import type { RelayDispatcher, RequestContext } from './dispatcher'
@@ -14,29 +14,42 @@ import {
 } from './fs-handler-utils'
 
 export async function readRelayFileContent(filePath: string) {
-  const stats = await stat(filePath)
-  const mimeType = IMAGE_MIME_TYPES[extname(filePath).toLowerCase()]
-  const sizeLimit = mimeType ? MAX_PREVIEWABLE_BINARY_SIZE : MAX_TEXT_FILE_SIZE
-  if (stats.size > sizeLimit) {
-    throw new Error(
-      `File too large: ${(stats.size / 1024 / 1024).toFixed(1)}MB exceeds ${sizeLimit / 1024 / 1024}MB limit`
-    )
-  }
+  // Why one handle: a stat() then readFile() races a file that grows between the
+  // two opens, so the cap never bounds what actually gets buffered. Stat and read
+  // the same descriptor, then re-check the bytes we are about to keep.
+  const handle = await open(filePath)
+  try {
+    const stats = await handle.stat()
+    const mimeType = IMAGE_MIME_TYPES[extname(filePath).toLowerCase()]
+    const sizeLimit = mimeType ? MAX_PREVIEWABLE_BINARY_SIZE : MAX_TEXT_FILE_SIZE
+    if (stats.size > sizeLimit) {
+      throw new Error(
+        `File too large: ${(stats.size / 1024 / 1024).toFixed(1)}MB exceeds ${sizeLimit / 1024 / 1024}MB limit`
+      )
+    }
 
-  if (mimeType) {
-    const buffer = await readFile(filePath)
-    return { content: buffer.toString('base64'), isBinary: true, isImage: true, mimeType }
-  }
+    if (mimeType) {
+      const buffer = await handle.readFile()
+      return { content: buffer.toString('base64'), isBinary: true, isImage: true, mimeType }
+    }
 
-  if (stats.size > BINARY_PROBE_BYTES && (await isBinaryFilePrefix(filePath))) {
-    return { content: '', isBinary: true }
-  }
+    if (stats.size > BINARY_PROBE_BYTES && (await isBinaryFilePrefix(filePath))) {
+      return { content: '', isBinary: true }
+    }
 
-  const buffer = await readFile(filePath)
-  if (isBinaryBuffer(buffer)) {
-    return { content: '', isBinary: true }
+    const buffer = await handle.readFile()
+    if (buffer.length > sizeLimit) {
+      throw new Error(
+        `File too large: ${(buffer.length / 1024 / 1024).toFixed(1)}MB exceeds ${sizeLimit / 1024 / 1024}MB limit`
+      )
+    }
+    if (isBinaryBuffer(buffer)) {
+      return { content: '', isBinary: true }
+    }
+    return { content: buffer.toString('utf-8'), isBinary: false }
+  } finally {
+    await handle.close()
   }
-  return { content: buffer.toString('utf-8'), isBinary: false }
 }
 
 export type StreamMetadata = {

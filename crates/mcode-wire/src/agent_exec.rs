@@ -10,12 +10,13 @@
 //! `.cmd` shims wrap the real process); structured ExecResult instead of
 //! throwing.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::process::Stdio;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tokio::io::AsyncWriteExt;
+use mcode_process::exec_tree::ExecTree;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 /// agent-exec-handler.ts:9.
@@ -54,18 +55,20 @@ pub struct ExecParams {
     #[serde(default)]
     pub timeout_ms: Option<u64>,
     #[serde(default)]
-    pub env: Option<Vec<(String, String)>>,
+    pub env: Option<BTreeMap<String, String>>,
     #[serde(default)]
     pub operation: Option<String>,
 }
 
 /// agent-exec-handler.ts:85 — one visible non-interactive job per cwd+operation.
 pub fn lane_key(cwd: Option<&str>, operation: Option<&str>) -> String {
-    format!(
-        "{}\u{0}{}",
+    serde_json::to_string(&[
+        operation
+            .filter(|value| !value.is_empty())
+            .unwrap_or("default"),
         cwd.unwrap_or_default(),
-        operation.unwrap_or_default()
-    )
+    ])
+    .expect("string tuple serializes")
 }
 
 fn clamp_timeout(requested: Option<u64>) -> u64 {
@@ -75,7 +78,35 @@ fn clamp_timeout(requested: Option<u64>) -> u64 {
 }
 
 pub struct LaneRegistry {
-    in_flight: Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>,
+    in_flight: Mutex<HashMap<String, LaneEntry>>,
+}
+
+struct LaneEntry {
+    identity: Arc<()>,
+    sender: tokio::sync::watch::Sender<bool>,
+}
+
+pub struct LaneLease<'a> {
+    registry: &'a LaneRegistry,
+    key: String,
+    identity: Arc<()>,
+    receiver: tokio::sync::watch::Receiver<bool>,
+}
+
+impl Drop for LaneLease<'_> {
+    fn drop(&mut self) {
+        let mut entries = self
+            .registry
+            .in_flight
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if entries
+            .get(&self.key)
+            .is_some_and(|entry| Arc::ptr_eq(&entry.identity, &self.identity))
+        {
+            entries.remove(&self.key);
+        }
+    }
 }
 
 impl Default for LaneRegistry {
@@ -92,33 +123,67 @@ impl LaneRegistry {
     }
 
     /// Registers the lane; canceling any prior job (agent-exec-handler.ts:223-231).
-    pub fn register(&self, key: &str) -> tokio::sync::watch::Receiver<bool> {
+    pub fn register(&self, key: &str) -> LaneLease<'_> {
         let (tx, rx) = tokio::sync::watch::channel(false);
+        let identity = Arc::new(());
         if let Some(prior) = self
             .in_flight
             .lock()
-            .expect("lane lock")
-            .insert(key.to_string(), tx)
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(
+                key.to_string(),
+                LaneEntry {
+                    identity: identity.clone(),
+                    sender: tx,
+                },
+            )
         {
-            let _ = prior.send(true);
+            prior.sender.send_replace(true);
         }
-        rx
+        LaneLease {
+            registry: self,
+            key: key.to_owned(),
+            identity,
+            receiver: rx,
+        }
     }
 
     /// agent-exec-handler.ts:47-58 — cancel resolves `{ canceled: true }` only
     /// when a job is live.
     pub fn cancel(&self, key: &str) -> bool {
-        match self.in_flight.lock().expect("lane lock").get(key) {
-            Some(tx) => {
-                let _ = tx.send(true);
+        match self
+            .in_flight
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(key)
+        {
+            Some(entry) => {
+                entry.sender.send_replace(true);
                 true
             }
             None => false,
         }
     }
+}
 
-    pub fn release(&self, key: &str) {
-        self.in_flight.lock().expect("lane lock").remove(key);
+async fn wait_for_cancel(receiver: Option<tokio::sync::watch::Receiver<bool>>) {
+    if let Some(mut receiver) = receiver {
+        loop {
+            if *receiver.borrow_and_update() {
+                return;
+            }
+            if receiver.changed().await.is_err() {
+                break;
+            }
+        }
+    }
+    std::future::pending::<()>().await;
+}
+
+fn spawn_failure(error: impl ToString) -> ExecResult {
+    ExecResult {
+        spawn_error: Some(error.to_string()),
+        ..ExecResult::default()
     }
 }
 
@@ -136,13 +201,11 @@ pub async fn exec(
         };
     }
     let timeout = Duration::from_millis(clamp_timeout(params.timeout_ms));
-    let lane = if params.cwd.is_some() {
+    let lane = if params.cwd.as_deref().is_some_and(|cwd| !cwd.is_empty()) {
         Some(lane_key(params.cwd.as_deref(), params.operation.as_deref()))
     } else {
         None
     };
-    let cancel_rx = lane.as_ref().map(|key| registry.register(key));
-
     let mut command = Command::new(&params.binary);
     command
         .args(&params.args)
@@ -150,81 +213,100 @@ pub async fn exec(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    #[cfg(windows)]
-    {
-        // windowsHide: true — no console window for headless CLIs.
-        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-    if let Some(cwd) = &params.cwd {
+    if let Some(cwd) = params.cwd.as_ref().filter(|cwd| !cwd.is_empty()) {
         command.current_dir(cwd);
     }
     for (key, value) in params.env.iter().flatten() {
         command.env(key, value);
     }
 
+    let prepared_tree = match ExecTree::prepare(command.as_std_mut()) {
+        Ok(tree) => tree,
+        Err(error) => return spawn_failure(error),
+    };
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
-            if let Some(key) = &lane {
-                registry.release(key);
-            }
-            return ExecResult {
-                spawn_error: Some(error.to_string()),
-                ..ExecResult::default()
-            };
+            return spawn_failure(error);
         }
     };
 
-    // Stdin: staged diff or hook payload.
-    if let Some(mut stdin) = child.stdin.take() {
-        let payload = params.stdin.clone().unwrap_or_default();
-        tokio::spawn(async move {
-            let _ = stdin.write_all(payload.as_bytes()).await;
-            let _ = stdin.shutdown().await;
-        });
+    // Drop tree ownership before dropping the child, whose reaping could release its pid.
+    let mut tree = prepared_tree;
+    if let Err(error) = tree.attach(child.id().expect("newly spawned child has pid")) {
+        tree.terminate();
+        let _ = child.start_kill();
+        let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
+        return spawn_failure(error);
     }
-
-    let deadline = tokio::time::sleep(timeout);
-    tokio::pin!(deadline);
-    let mut canceled_by_lane = false;
-
-    let result = tokio::select! {
-        _ = &mut deadline => ExecResult {
-            timed_out: true,
-            ..ExecResult::default()
-        },
-        output = child.wait_with_output() => match output {
-            Ok(output) => ExecResult {
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-                exit_code: output.status.code(),
-                timed_out: false,
-                canceled: None,
-                spawn_error: None,
-            },
-            Err(error) => ExecResult {
-                spawn_error: Some(error.to_string()),
-                ..ExecResult::default()
-            },
-        },
+    let lease = lane.as_ref().map(|key| registry.register(key));
+    let canceled = async {
+        tokio::select! {
+            _ = wait_for_cancel(lease.as_ref().map(|lease| lease.receiver.clone())) => {},
+            _ = wait_for_cancel(extra_canceled_rx) => {},
+        }
     };
-
-    // Lane cancel after completion resolves canceled=true (the TS handler
-    // marks canceled when cancel raced the exit).
-    if let Some(rx) = cancel_rx {
-        canceled_by_lane = *rx.borrow();
+    let stdin = child.stdin.take();
+    let write_stdin = async {
+        if let Some(mut stdin) = stdin {
+            let _ = stdin
+                .write_all(params.stdin.as_deref().unwrap_or_default().as_bytes())
+                .await;
+            let _ = stdin.shutdown().await;
+        }
+    };
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let mut stdout_bytes = Vec::new();
+    let mut stderr_bytes = Vec::new();
+    let mut stdout_chunk = [0_u8; 16 * 1024];
+    let mut stderr_chunk = [0_u8; 16 * 1024];
+    let mut stdout_closed = false;
+    let mut stderr_closed = false;
+    let mut stdin_closed = false;
+    let mut result = ExecResult::default();
+    let deadline = tokio::time::sleep(timeout);
+    tokio::pin!(deadline, canceled, write_stdin);
+    loop {
+        tokio::select! {
+            biased;
+            _ = &mut canceled => { result.canceled = Some(true); break; },
+            _ = &mut deadline => { result.timed_out = true; break; },
+            read = stdout.read(&mut stdout_chunk), if !stdout_closed => {
+                match read {
+                    Ok(0) => stdout_closed = true,
+                    Ok(count) if stdout_bytes.len() + count <= MAX_OUTPUT_BYTES => stdout_bytes.extend_from_slice(&stdout_chunk[..count]),
+                    Ok(_) => break,
+                    Err(error) => { result.spawn_error = Some(error.to_string()); break; },
+                }
+            },
+            read = stderr.read(&mut stderr_chunk), if !stderr_closed => {
+                match read {
+                    Ok(0) => stderr_closed = true,
+                    Ok(count) if stderr_bytes.len() + count <= MAX_OUTPUT_BYTES => stderr_bytes.extend_from_slice(&stderr_chunk[..count]),
+                    Ok(_) => break,
+                    Err(error) => { result.spawn_error = Some(error.to_string()); break; },
+                }
+            },
+            _ = &mut write_stdin, if !stdin_closed => stdin_closed = true,
+            // Delay reaping until inherited pipes close so tree termination retains pid ownership.
+            status = child.wait(), if stdout_closed && stderr_closed => {
+                match status {
+                    Ok(status) => { result.exit_code = status.code(); tree.disarm(); },
+                    Err(error) => result.spawn_error = Some(error.to_string()),
+                }
+                break;
+            },
+        }
     }
-    if let Some(rx) = extra_canceled_rx {
-        canceled_by_lane = canceled_by_lane || *rx.borrow();
+    tree.terminate();
+    if result.exit_code.is_none() {
+        let _ = child.start_kill();
+        let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
     }
-    if let Some(key) = &lane {
-        registry.release(key);
-    }
-
-    ExecResult {
-        canceled: canceled_by_lane.then_some(true),
-        ..result
-    }
+    result.stdout = String::from_utf8_lossy(&stdout_bytes).into_owned();
+    result.stderr = String::from_utf8_lossy(&stderr_bytes).into_owned();
+    result
 }
 
 /// agent-exec-handler.ts:47-58 — cancel a live lane; `false` when none.
@@ -338,5 +420,43 @@ mod tests {
         assert!(!registry.cancel(&lane_key(Some("x"), None)));
         let _rx = registry.register(&lane_key(Some("x"), None));
         assert!(registry.cancel(&lane_key(Some("x"), None)));
+    }
+
+    #[test]
+    fn old_lane_completion_cannot_unregister_its_replacement() {
+        let registry = LaneRegistry::new();
+        let key = lane_key(Some("x"), None);
+        let old = registry.register(&key);
+        let newest = registry.register(&key);
+        assert!(*old.receiver.borrow());
+        assert!(!*newest.receiver.borrow());
+        drop(old);
+        assert!(registry.cancel(&key));
+        assert!(*newest.receiver.borrow());
+        drop(newest);
+        assert!(!registry.cancel(&key));
+    }
+
+    #[test]
+    fn default_operation_aliases_match_electron() {
+        assert_eq!(
+            lane_key(Some("x"), None),
+            lane_key(Some("x"), Some("default"))
+        );
+        assert_eq!(lane_key(Some("x"), None), lane_key(Some("x"), Some("")));
+    }
+
+    #[test]
+    fn existing_environment_object_wire_shape_round_trips() {
+        let value = serde_json::json!({"binary":"agent", "env":{"CODEX_HOME":"/managed/account", "PATH":"/managed/bin"}});
+        let params: ExecParams = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            params.env.as_ref().unwrap()["CODEX_HOME"],
+            "/managed/account"
+        );
+        assert_eq!(
+            serde_json::to_value(params).unwrap()["env"],
+            serde_json::json!({"CODEX_HOME":"/managed/account", "PATH":"/managed/bin"})
+        );
     }
 }

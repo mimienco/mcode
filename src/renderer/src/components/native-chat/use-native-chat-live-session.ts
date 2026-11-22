@@ -37,6 +37,9 @@ export type UseNativeChatLiveSessionArgs = {
   enabled?: boolean
   /** Changes only when the user explicitly retries the current transcript source. */
   refreshKey?: number
+  /** Interactive terminal sessions may report their identity before creating a
+   *  transcript. Keep that pre-turn state usable while the watcher waits. */
+  allowMissingTranscript?: boolean
 }
 
 /** A live session plus the older-history pagination controls the view needs. */
@@ -47,9 +50,8 @@ export type NativeChatLiveSession = NativeChatSession & {
   loadingEarlier: boolean
   /** Grow the read window to page in older history (scrolled-to-top trigger). */
   loadEarlier: () => void
-  /** Raw initial-read phase. `status` is not a substitute: a live 'working' hook
-   *  outranks (and so hides) 'loading', which would let a consumer deciding from
-   *  an empty list treat an in-flight transcript as real history. */
+  /** Raw initial-read phase. `waiting` is an interactive pre-transcript session;
+   *  `status` is not a substitute because live work can outrank `loading`. */
   readPhase: ReadState['phase']
 }
 
@@ -66,8 +68,14 @@ function nextSubscriptionId(): string {
 // Why: a new session's transcript can take minutes to appear on disk (#8401).
 const NOTFOUND_RETRY_WINDOW_MS = 60_000
 
+// Why: PERF-08 — nativeChat:appended fires once per stream chunk; bursts
+// coalesce into one trailing state update (leading edge still paints the first
+// chunk immediately). Terminal lifecycle frames bypass it.
+const APPEND_FLUSH_THROTTLE_MS = 120
+
 export type ReadState =
   | { phase: 'loading' }
+  | { phase: 'waiting' }
   | { phase: 'ready'; messages: NativeChatMessage[] }
   | { phase: 'error'; error: string }
 
@@ -95,7 +103,8 @@ export function useNativeChatLiveSession(
     transcriptPath,
     runtimeEnvironmentId,
     enabled = true,
-    refreshKey = 0
+    refreshKey = 0,
+    allowMissingTranscript = false
   } = args
   // Stable per owner id so a re-render without an owner flip keeps the same transport and doesn't re-subscribe.
   const transport = useMemo(
@@ -133,7 +142,8 @@ export function useNativeChatLiveSession(
     agent,
     sessionId,
     transcriptPath ?? null,
-    refreshKey
+    refreshKey,
+    allowMissingTranscript
   ])
   const retainedSourceKeyRef = useRef(sourceKey)
 
@@ -192,10 +202,20 @@ export function useNativeChatLiveSession(
             return
           }
           if (result && 'error' in result) {
-            // A not-yet-flushed transcript: stay in 'loading' and retry with backoff instead of a permanent error (#8401).
-            if (result.notFound && Date.now() - retryStartedAt < NOTFOUND_RETRY_WINDOW_MS) {
-              retryTimer.schedule(attempt, () => loadSession(attempt + 1))
-              return
+            // A not-yet-flushed transcript retries with backoff instead of becoming a permanent error (#8401).
+            if (result.notFound) {
+              if (allowMissingTranscript) {
+                setRead((current) => (current.phase === 'waiting' ? current : { phase: 'waiting' }))
+              }
+              if (Date.now() - retryStartedAt < NOTFOUND_RETRY_WINDOW_MS) {
+                retryTimer.schedule(attempt, () => loadSession(attempt + 1))
+                return
+              }
+              if (allowMissingTranscript) {
+                // The main-process subscription keeps polling indefinitely and
+                // will replace this waiting state when the first JSONL appears.
+                return
+              }
             }
             setRead({ phase: 'error', error: result.error })
             return
@@ -213,6 +233,25 @@ export function useNativeChatLiveSession(
     }
 
     loadSession(0)
+
+    // PERF-08: appends accumulate here until the throttle paints them; a
+    // snapshot/replacement discards them (authoritative generation wins).
+    let pendingAppend: NativeChatMessage[] | null = null
+    let appendTimer: ReturnType<typeof setTimeout> | null = null
+    let lastFlushAt = 0
+    function flushPendingAppend(): void {
+      if (appendTimer !== null) {
+        clearTimeout(appendTimer)
+        appendTimer = null
+      }
+      if (!pendingAppend) {
+        return
+      }
+      const messages = pendingAppend
+      pendingAppend = null
+      lastFlushAt = Date.now()
+      setAppended(applyAppend(appendMergerRef.current, messages, limitRef.current))
+    }
 
     const subscriptionId = nextSubscriptionId()
     const closeStream = openNativeChatTranscriptStream(
@@ -243,21 +282,53 @@ export function useNativeChatLiveSession(
           setAppended([])
           setRead({ phase: 'ready', messages: appendMergerRef.current.list })
           setHasMore(frame.hasMore)
+          pendingAppend = null
           return
         }
         transcriptLifecycleControl.append(frame.lifecycle)
-        // Merge by id then bound to the window; the base read + assembler re-dedup mean trimming the append tail can't drop a covered turn (#6).
-        setAppended(applyAppend(appendMergerRef.current, frame.messages, limitRef.current))
+        // Why: PERF-08 — coalesce chunk frames into leading+trailing state updates;
+        // a completed/interrupted lifecycle flushes synchronously so the final
+        // chunk never waits out the timer.
+        pendingAppend = pendingAppend ? [...pendingAppend, ...frame.messages] : frame.messages
+        if (frame.lifecycle?.state === 'completed' || frame.lifecycle?.state === 'interrupted') {
+          flushPendingAppend()
+          return
+        }
+        const elapsed = Date.now() - lastFlushAt
+        if (elapsed >= APPEND_FLUSH_THROTTLE_MS) {
+          flushPendingAppend()
+        } else if (appendTimer === null) {
+          appendTimer = setTimeout(() => {
+            appendTimer = null
+            if (!cancelled && latestEnabled.current) {
+              flushPendingAppend()
+            }
+          }, APPEND_FLUSH_THROTTLE_MS - elapsed)
+        }
       }
     )
 
     return () => {
       cancelled = true
+      if (appendTimer !== null) {
+        clearTimeout(appendTimer)
+        appendTimer = null
+      }
+      pendingAppend = null
       retryTimer.cancel()
       closeStream()
     }
     // `transport` identity changes on an owner flip, re-running this effect to re-subscribe against the new host.
-  }, [agent, enabled, sessionId, sourceKey, transcriptPath, transport, transcriptLifecycleControl])
+  }, [
+    agent,
+    allowMissingTranscript,
+    enabled,
+    sessionId,
+    sourceKey,
+    transcriptPath,
+    transport,
+    transcriptLifecycleControl
+  ])
 
   const loadEarlier = useCallback(() => {
     if (

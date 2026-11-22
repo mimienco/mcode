@@ -41,19 +41,24 @@ export async function parseCodexSessionFile(
   codexHome: string | null = null,
   executionHostId?: ExecutionHostId
 ): Promise<AiVaultSession | null> {
-  const lines = createInterface({
-    input: openTranscriptReadStream(file.path, { encoding: 'utf-8' }, 'scan'),
-    crlfDelay: Infinity
-  })
-
-  return parseCodexSessionLines({
-    file,
-    lines,
-    platform,
-    codexHome,
-    executionHostId,
-    titleReader: (sessionId) => readCodexSessionIndexTitle(file.path, codexHome, sessionId)
-  })
+  const input = openTranscriptReadStream(file.path, { encoding: 'utf-8' }, 'scan')
+  const lines = createInterface({ input, crlfDelay: Infinity })
+  try {
+    return await parseCodexSessionLines({
+      file,
+      lines,
+      platform,
+      codexHome,
+      executionHostId,
+      titleReader: (sessionId) => readCodexSessionIndexTitle(file.path, codexHome, sessionId)
+    })
+  } finally {
+    // readline.close() leaves the underlying stream open; destroy it so a
+    // mid-parse throw or rejected-worker early return cannot leak the gated
+    // transcript handle.
+    lines.close()
+    input.destroy()
+  }
 }
 
 export async function parseCodexSessionContent(args: {

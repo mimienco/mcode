@@ -151,6 +151,10 @@ function subscribe(subscriber: () => void): () => void {
         window.clearTimeout(scheduledFocusRescan)
         scheduledFocusRescan = null
       }
+      // Why: a focus-rescan retracts the inventory before its trailing scan; with
+      // no subscriber left the completion would be lost, so reset the loading
+      // flag or a remount's ensureInventoryLoaded can never recover.
+      publishSnapshot({ inventory: snapshot.inventory, loading: false, error: snapshot.error })
     }
   }
 }

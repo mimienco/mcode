@@ -50,12 +50,20 @@ class ExpoTwoWayAudioModule : Module() {
              null
          }
 
-         Function("restart") {
-             audioEngine?.resumeRecordingAndPlayer()
-             sendEvent(ON_RECORDING_CHANGE_EVENT, mapOf(
-                 "data" to (audioEngine?.isRecording ?: false)
-             ))
-         }
+        AsyncFunction("restart") { promise: Promise ->
+            val engine = audioEngine
+            if (engine == null) {
+                promise.reject("ERR_AUDIO_ENGINE_UNAVAILABLE", "Two-way audio engine is not initialized")
+                return@AsyncFunction
+            }
+            if (engine.resumeRecordingAndPlayer()) {
+                sendEvent(ON_RECORDING_CHANGE_EVENT, mapOf(
+                    "data" to engine.isRecording
+                ))
+            } else {
+                promise.reject("ERR_AUDIO_FOCUS_DENIED", "Could not resume two-way audio: audio focus request was denied")
+            }
+        }
 
          Function("playPCMData") { data: kotlin.ByteArray ->
              audioEngine?.playPCMData(data)

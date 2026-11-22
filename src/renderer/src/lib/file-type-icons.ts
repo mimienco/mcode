@@ -86,7 +86,8 @@ export function getFileTypeIconColorClass(filePath: string | undefined | null): 
   if (!filename) {
     return ''
   }
-  if (filename.toLowerCase().startsWith('.env')) {
+  const lowerName = filename.toLowerCase()
+  if (lowerName === '.env' || lowerName.startsWith('.env.')) {
     return FILE_ICON_COLOR_BY_EXTENSION['env']
   }
   return FILE_ICON_COLOR_BY_EXTENSION[getExtension(filename)] ?? ''

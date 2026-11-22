@@ -108,6 +108,24 @@ describe('prunePendingSends', () => {
     expect(next).toEqual([])
   })
 
+  it('drops an attachment pending send when the transcript prefixes concatenated image paths', () => {
+    const first = 'C:\\Users\\Milan M\\AppData\\Local\\Temp\\first.png'
+    const second = 'C:\\Users\\Milan M\\AppData\\Local\\Temp\\second.png'
+    const pending = [
+      {
+        ...pendingOf('p1', 'why does omp not show anything in the chat?'),
+        imagePaths: [first, second]
+      }
+    ]
+    const transcript = [
+      userMessage('m1', `${first}${second}why does omp not show anything in the chat?`),
+      assistantMessage('m2', 'I found the cause')
+    ]
+
+    expect(prunePendingSends(pending, transcript)).toEqual([])
+    expect(pendingSendsAsMessages(pending, transcript)).toEqual([])
+  })
+
   it('drops a pending send represented by multiple marker-bearing text blocks', () => {
     const prompt: NativeChatMessage = {
       ...userMessage('m1', 'unused'),

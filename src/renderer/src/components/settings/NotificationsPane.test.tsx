@@ -80,7 +80,7 @@ describe('NotificationsPane', () => {
         requested: true
       })),
       dispatch: vi.fn(async (_args: NotificationDispatchRequest) => ({ delivered: true })),
-      playSound: vi.fn(),
+      playSound: vi.fn(async () => ({ played: true })),
       openSystemSettings: vi.fn(),
       requestPermission: vi.fn()
     }
@@ -98,7 +98,13 @@ describe('NotificationsPane', () => {
     // renderer Web Notification.permission can stay stale after macOS Settings changes.
     expect(notifications.dispatch).toHaveBeenCalledWith({
       source: 'test',
-      requireDisplayConfirmation: true
+      requireDisplayConfirmation: true,
+      suppressSystemSound: true
+    })
+    expect(notifications.playSound).toHaveBeenCalledWith({
+      force: true,
+      volume: 50,
+      systemFallback: true
     })
     expect(toastError).not.toHaveBeenCalled()
     expect(toastSuccess).not.toHaveBeenCalled()
@@ -125,7 +131,7 @@ describe('NotificationsPane', () => {
         requested: true
       })),
       dispatch: vi.fn(async (_args: NotificationDispatchRequest) => ({ delivered: true })),
-      playSound: vi.fn(),
+      playSound: vi.fn(async () => ({ played: true })),
       openSystemSettings: vi.fn(),
       requestPermission: vi.fn()
     }
@@ -142,6 +148,40 @@ describe('NotificationsPane', () => {
     expect(toastMessage).not.toHaveBeenCalled()
     expect(toastError).not.toHaveBeenCalled()
     expect(toastSuccess).toHaveBeenCalledWith('Test notification sent')
+    expect(notifications.playSound).toHaveBeenCalledWith({
+      force: true,
+      volume: 50,
+      systemFallback: true
+    })
+  })
+
+  it('does not report success when the audible test cue fails', async () => {
+    const notifications = {
+      getPermissionStatus: vi.fn(async () => ({
+        supported: true,
+        platform: 'win32' as NodeJS.Platform,
+        requested: true
+      })),
+      dispatch: vi.fn(async (_args: NotificationDispatchRequest) => ({ delivered: true })),
+      playSound: vi.fn(async () => ({
+        played: false,
+        reason: 'playback-failed' as const
+      })),
+      openSystemSettings: vi.fn(),
+      requestPermission: vi.fn()
+    }
+    vi.stubGlobal('window', {
+      Notification: { permission: 'granted' },
+      api: {
+        notifications,
+        shell: { pickAudio: vi.fn() }
+      }
+    })
+
+    await sendNotificationSettingsTestNotification(createSettings().notifications, 50)
+
+    expect(toastSuccess).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith('Notification sound could not be played')
   })
 
   it('opens macOS notification settings when the native test notification is not shown', async () => {

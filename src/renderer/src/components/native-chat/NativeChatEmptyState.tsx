@@ -1,7 +1,8 @@
-import { Loader2, MessageSquare, TriangleAlert } from 'lucide-react'
+import { Loader2, LogIn, MessageSquare, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
-import { formatAgentTypeLabel } from '@/lib/agent-status'
+import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
+import { AgentIcon } from '@/lib/agent-catalog'
 import { NATIVE_CHAT_EMPTY_STATE_COPY } from '../../../../shared/native-chat-empty-state'
 import type { NativeChatSession } from '../../../../shared/native-chat-types'
 
@@ -14,7 +15,7 @@ export function NativeChatEmptyState({
   secondaryActionLabel,
   onSecondaryAction
 }: {
-  kind: 'loading' | 'empty' | 'error' | 'not-agent'
+  kind: 'loading' | 'empty' | 'error' | 'not-agent' | 'auth-required'
   message?: string
   agent?: NativeChatSession['agent']
   actionLabel?: string
@@ -25,22 +26,44 @@ export function NativeChatEmptyState({
   const copy = emptyStateCopy(kind, message, agent)
   return (
     <div
-      role={kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : undefined}
-      aria-live={kind === 'error' ? 'assertive' : kind === 'loading' ? 'polite' : undefined}
+      role={
+        kind === 'error' || kind === 'auth-required'
+          ? 'alert'
+          : kind === 'loading'
+            ? 'status'
+            : undefined
+      }
+      aria-live={
+        kind === 'error' || kind === 'auth-required'
+          ? 'assertive'
+          : kind === 'loading'
+            ? 'polite'
+            : undefined
+      }
       aria-busy={kind === 'loading' || undefined}
+      data-native-chat-empty-state={kind}
       className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center"
     >
       <div
+        data-native-chat-empty-icon
         className={
           kind === 'error'
             ? 'flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive'
-            : 'flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground'
+            : kind === 'auth-required'
+              ? 'flex size-12 items-center justify-center rounded-full bg-agent-question/10 text-agent-question'
+              : 'flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground'
         }
       >
         {kind === 'loading' ? (
           <Loader2 className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
         ) : kind === 'error' ? (
           <TriangleAlert className="size-6" />
+        ) : kind === 'auth-required' ? (
+          <LogIn className="size-6" />
+        ) : kind === 'empty' && agent ? (
+          // Why: the brand mark makes "Start a chat with X" instant — the
+          // generic speech bubble read as a placeholder, not an identity.
+          <AgentIcon agent={agentTypeToIconAgent(agent)} size={26} />
         ) : (
           <MessageSquare className="size-6" />
         )}
@@ -50,7 +73,7 @@ export function NativeChatEmptyState({
         <p className="max-w-sm text-balance text-xs text-muted-foreground">{copy.subtitle}</p>
       ) : null}
       {kind === 'empty' ? (
-        <p className="text-xs text-foreground/70">
+        <p data-native-chat-empty-shortcuts className="text-xs text-foreground/70">
           {translate(
             'components.native-chat.state.empty.shortcuts',
             'Use @ for workspace files or / for commands.'
@@ -74,7 +97,7 @@ export function NativeChatEmptyState({
 }
 
 function emptyStateCopy(
-  kind: 'loading' | 'empty' | 'error' | 'not-agent',
+  kind: 'loading' | 'empty' | 'error' | 'not-agent' | 'auth-required',
   message?: string,
   agent?: NativeChatSession['agent']
 ): { title: string; subtitle: string | null } {
@@ -114,6 +137,20 @@ function emptyStateCopy(
           NATIVE_CHAT_EMPTY_STATE_COPY.notAgent.subtitle
         )
       }
+    case 'auth-required': {
+      const agentName = agent ? formatAgentTypeLabel(agent) : 'The agent'
+      return {
+        title: translate(
+          'components.native-chat.state.authRequired.title',
+          NATIVE_CHAT_EMPTY_STATE_COPY.authRequired.title,
+          { value0: agentName }
+        ),
+        subtitle: translate(
+          'components.native-chat.state.authRequired.subtitle',
+          NATIVE_CHAT_EMPTY_STATE_COPY.authRequired.subtitle
+        )
+      }
+    }
     case 'empty': {
       const agentName = agent ? formatAgentTypeLabel(agent) : 'the agent'
       return {

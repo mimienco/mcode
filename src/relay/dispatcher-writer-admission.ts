@@ -1,3 +1,5 @@
+import { MAX_MESSAGE_SIZE } from './relay-frame-decoder'
+
 export type DispatcherWriterLane =
   | 'liveness'
   | 'control'
@@ -27,6 +29,10 @@ type AdmissionResult =
 export const DISPATCHER_CONTROL_QUEUE_MAX_FRAMES = 256
 export const DISPATCHER_CONTROL_QUEUE_MAX_BYTES = 1024 * 1024
 const LIVENESS_QUEUE_MAX_FRAMES = 2
+
+// Why: oversized JSON-RPC responses are atomic wire frames that cannot be split, so the
+// legacy-response lane gets a frame-sized budget instead of the producer queue cap.
+export const DISPATCHER_LEGACY_RESPONSE_QUEUE_MAX_BYTES = MAX_MESSAGE_SIZE
 
 export const DEFAULT_PRODUCER_QUEUE_MAX_BYTES = 2 * 1024 * 1024
 
@@ -165,7 +171,11 @@ export class DispatcherWriterAdmission {
       return this.admitControl(entry)
     }
     if (entry.lane === 'legacy-response') {
-      if (this.producerBytes + entry.estimatedBytes > this.producerQueueMaxBytes) {
+      if (
+        entry.estimatedBytes > DISPATCHER_LEGACY_RESPONSE_QUEUE_MAX_BYTES ||
+        this.producerBytes + entry.estimatedBytes >
+          Math.max(this.producerQueueMaxBytes, DISPATCHER_LEGACY_RESPONSE_QUEUE_MAX_BYTES)
+      ) {
         return { accepted: false }
       }
       this.producerBytes += entry.estimatedBytes

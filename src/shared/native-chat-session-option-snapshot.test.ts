@@ -6,6 +6,7 @@ import {
   CODEX_SESSION_OPTION_CATALOG
 } from './agent-session-option-catalog-claude-codex'
 import { GROK_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-grok'
+import { OMP_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-omp'
 import { resolveAgentSessionOptionLaunch } from './agent-session-option-launch'
 import {
   createNativeChatSessionOptionRecord,
@@ -206,6 +207,52 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
         '--reasoning-effort',
         'high'
       ])
+    })
+
+    it('disables a tracked OMP model missing from the connected provider catalog', () => {
+      const record = createNativeChatSessionOptionRecord('omp')
+      record.model = { value: 'openai-codex/gpt-5.6-sol', source: 'reported' }
+      const reconciled = withTrackedNativeChatModel(
+        OMP_SESSION_OPTION_CATALOG,
+        [
+          {
+            id: 'openrouter/free-model',
+            label: 'Free model',
+            modelMetadata: {
+              availability: 'available',
+              providerId: 'openrouter',
+              providerLabel: 'OpenRouter',
+              pricing: { inputPerMillion: 0, outputPerMillion: 0 }
+            },
+            options: []
+          }
+        ],
+        record
+      )
+      const snapshot = buildNativeChatSessionOptionSnapshot({
+        catalog: OMP_SESSION_OPTION_CATALOG,
+        models: reconciled,
+        record,
+        mode: 'live',
+        modelLabel: 'Model'
+      })
+      const model = snapshot[0]
+      if (model?.kind.type !== 'select') {
+        throw new Error('model descriptor must be a select')
+      }
+      expect(model.kind.choices).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            value: 'openai-codex/gpt-5.6-sol',
+            disabled: true,
+            modelMetadata: expect.objectContaining({ availability: 'unavailable' })
+          }),
+          expect.objectContaining({
+            value: 'openrouter/free-model',
+            modelMetadata: expect.objectContaining({ availability: 'available' })
+          })
+        ])
+      )
     })
   })
 

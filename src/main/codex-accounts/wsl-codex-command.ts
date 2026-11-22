@@ -2,9 +2,9 @@ import { buildPosixCommandPathLookupScript } from '../../shared/posix-command-pa
 import {
   buildWslCapturedLoginShellCommand,
   buildWslExecArgs,
-  buildWslLoginShellCommand,
-  quotePosixShell
+  buildWslLoginShellCommand
 } from '../../shared/wsl-login-shell-command'
+import { quotePosixSingleQuote } from '../../shared/shell-quoting'
 
 export const WSL_CODEX_AVAILABILITY_TIMEOUT_MS = 5_000
 export const WSL_CODEX_NOT_FOUND_MESSAGE = 'Codex CLI not found in the WSL login-shell PATH.'
@@ -53,7 +53,7 @@ export function buildWslCodexAppServerArgs(distro: string, linuxHomePath: string
     `  printf '%s\\n' '${WSL_CODEX_NOT_FOUND_MESSAGE}' >&2`,
     '  exit 127',
     'fi',
-    `export CODEX_HOME=${quotePosixShell(linuxHomePath)}`,
+    `export CODEX_HOME=${quotePosixSingleQuote(linuxHomePath)}`,
     'exec "$resolved" app-server'
   ].join('\n')
   return buildWslCodexShellArgs(distro, command)
@@ -66,7 +66,7 @@ export function buildWslCodexLoginArgs(distro: string, linuxHomePath: string): s
     "  printf '%s\\n' 'Codex CLI not found in the WSL login-shell PATH.' >&2",
     '  exit 127',
     'fi',
-    `export CODEX_HOME=${quotePosixShell(linuxHomePath)}`,
+    `export CODEX_HOME=${quotePosixSingleQuote(linuxHomePath)}`,
     'exec "$resolved" login'
   ].join('\n')
   return buildWslCodexShellArgs(distro, command)

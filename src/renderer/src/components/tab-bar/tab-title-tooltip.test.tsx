@@ -359,6 +359,40 @@ describe('tab title tooltips', () => {
     expect(markup).not.toContain('pwsh.exe')
   })
 
+  it.each(['5e1faf6b-8d37-41a5-9e...', 'Codex 01a03b15'])(
+    'uses the Codex chat label instead of the session placeholder %s',
+    (title) => {
+      mockTabAgent = 'codex'
+      const markup = renderToStaticMarkup(
+        <SortableTab
+          tab={makeTerminalTab({ title, launchAgent: 'codex' })}
+          unifiedTabId="terminal-1"
+          groupId="group-1"
+          tabCount={1}
+          hasTabsToRight={false}
+          hasTabsToLeft={false}
+          isActive={true}
+          isPinned={false}
+          isExpanded={false}
+          isChatView={true}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+          onCloseOthers={vi.fn()}
+          onCloseToRight={vi.fn()}
+          onCloseToLeft={vi.fn()}
+          onSetCustomTitle={vi.fn()}
+          onSetTabColor={vi.fn()}
+          onTogglePin={vi.fn()}
+          onToggleExpand={vi.fn()}
+          dragData={makeDragData('terminal', 'terminal-1')}
+        />
+      )
+
+      expectTooltipContent(markup, 'Codex chat')
+      expect(markup).not.toContain(title)
+    }
+  )
+
   it('uses the browser tab fallback label from the tab prop, not the live URL', () => {
     const markup = renderToStaticMarkup(
       <BrowserTab

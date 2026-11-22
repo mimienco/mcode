@@ -1,5 +1,5 @@
 import type { DragEvent } from 'react'
-import { Check, Copy, GripVertical, Pencil, Play, Trash2 } from 'lucide-react'
+import { Check, Copy, Pencil, Play, Trash2 } from 'lucide-react'
 import { CommandItem } from '@/components/ui/command'
 import {
   getTerminalQuickCommandBody,
@@ -53,20 +53,18 @@ export function TabBarQuickCommandItem({
         const handledInternally = finishQuickCommandDrag(event.clientX, event.clientY)
         onDragFinished?.(handledInternally || event.dataTransfer.dropEffect !== 'none')
       }}
-      className="mx-1 my-0.5 min-w-0 cursor-grab items-center gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 active:cursor-grabbing data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
+      className="min-w-0 cursor-grab items-center gap-3 rounded-xl border border-border/80 bg-card p-3 text-[12px] leading-5 shadow-xs transition-[border-color,box-shadow] hover:border-muted-foreground/40 hover:shadow-sm active:cursor-grabbing data-[selected=true]:border-ring/50 data-[selected=true]:bg-card data-[selected=true]:text-foreground data-[selected=true]:shadow-sm"
     >
-      <GripVertical className="size-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-      {isTerminalAgentQuickCommand(command) ? (
-        <span className="shrink-0 text-muted-foreground">
-          <AgentIcon agent={command.agent} size={12} />
-        </span>
-      ) : (
-        <Play
-          className="size-3 shrink-0 text-muted-foreground"
-          fill="currentColor"
-          strokeWidth={0}
-        />
-      )}
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-ai-action-accent/10 text-ai-action-accent"
+        aria-hidden="true"
+      >
+        {isTerminalAgentQuickCommand(command) ? (
+          <AgentIcon agent={command.agent} size={14} />
+        ) : (
+          <Play className="size-3.5" fill="currentColor" strokeWidth={0} />
+        )}
+      </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 flex-1 truncate font-medium text-foreground">
@@ -128,7 +126,7 @@ export function TabBarQuickCommandActions({
         'auto.components.tab.bar.TabBarQuickCommandsButton.192a4616a5',
         'Quick command actions'
       )}
-      className="flex min-w-0 items-center gap-1 border-t border-border/50 px-2 py-1.5"
+      className="mt-2 flex min-w-0 items-center gap-1 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5"
     >
       <span className="mr-auto min-w-0 truncate text-[11px] text-muted-foreground">
         {command.label}

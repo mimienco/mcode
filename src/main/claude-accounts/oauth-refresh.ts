@@ -1,5 +1,6 @@
 import { net, session } from 'electron'
 import { ensureElectronProxyFromEnvironment } from '../network/proxy-settings'
+import { withOauthRefreshLock } from './oauth-refresh-lock'
 
 // Why: the OAuth client id and token endpoint are the public Claude Code
 // values, verified against the installed `claude` binary (2.1.177) and the
@@ -113,17 +114,55 @@ export function applyRefreshedToken(
   return JSON.stringify(parsed)
 }
 
+export type ClaudeOauthRefreshOptions = {
+  // Why: rotation attempts for one account must never overlap across entry
+  // paths (runtime auth, usage preview); defaults to the refresh token itself.
+  lockKey?: string
+  readStoredCredentials?: () => Promise<string | null>
+  persistCredentials?: (credentialsJson: string) => Promise<void>
+}
+
 /**
  * Refresh the OAuth token for a stored credentials blob.
  *
  * Returns the updated credentials JSON (with the rotated refresh token and new
- * access token) on success, or null on any failure. Never throws — callers
- * treat null as "keep the existing credentials", so a transient network error
- * is never worse than today's behavior.
+ * access token) on success, or null on any failure. Never throws unless
+ * `persistCredentials` rejects — callers treat null as "keep the existing
+ * credentials", so a transient network error is never worse than today's
+ * behavior.
  */
 export async function refreshClaudeOauthCredentials(
   credentialsJson: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  options: ClaudeOauthRefreshOptions = {}
+): Promise<string | null> {
+  const initialRefreshToken = readRefreshToken(credentialsJson)
+  if (!initialRefreshToken) {
+    return null
+  }
+  return withOauthRefreshLock(options.lockKey ?? initialRefreshToken, async () => {
+    let effective = credentialsJson
+    if (options.readStoredCredentials) {
+      const stored = await options.readStoredCredentials().catch(() => null)
+      if (stored && readRefreshToken(stored)) {
+        if (!isOauthTokenExpiring(stored, now)) {
+          // Another path just rotated; reuse the persisted blob instead of burning the single-use token again.
+          return stored
+        }
+        effective = stored
+      }
+    }
+    const refreshed = await postTokenRefreshGrant(effective, now)
+    if (refreshed && options.persistCredentials) {
+      await options.persistCredentials(refreshed)
+    }
+    return refreshed
+  })
+}
+
+async function postTokenRefreshGrant(
+  credentialsJson: string,
+  now: number
 ): Promise<string | null> {
   const refreshToken = readRefreshToken(credentialsJson)
   if (!refreshToken) {

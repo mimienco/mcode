@@ -178,7 +178,19 @@ export function withTrackedNativeChatModel(
     return [...models]
   }
   const seeded = catalog.models.find((model) => model.id === trackedId)
-  return [...models, seeded ?? { id: trackedId, label: trackedId, options: [] }]
+  const restored = seeded ?? { id: trackedId, label: trackedId, options: [] }
+  const authoritativeAvailability = models.some(
+    (model) => model.modelMetadata?.availability === 'available'
+  )
+  return [
+    ...models,
+    authoritativeAvailability
+      ? {
+          ...restored,
+          modelMetadata: { ...restored.modelMetadata, availability: 'unavailable' }
+        }
+      : restored
+  ]
 }
 
 /** Why: no tracked model means no `-m` was ever emitted, so the CLI is running its
@@ -220,10 +232,14 @@ export function buildNativeChatSessionOptionSnapshot(args: {
   // Why: callers reconcile the tracked model into `models` (see
   // withTrackedNativeChatModel), so every listed row is a real choice and the
   // trigger never shows a value without one.
-  const modelChoices = models.map(({ id, label, description }) => ({
+  const modelChoices = models.map(({ id, label, description, modelMetadata }) => ({
     value: id,
     label,
-    ...(description ? { description } : {})
+    ...(description ? { description } : {}),
+    ...(modelMetadata ? { modelMetadata: { ...modelMetadata } } : {}),
+    ...(modelMetadata?.availability === 'unavailable'
+      ? { disabled: true, disabledReason: 'Model unavailable on this host.' }
+      : {})
   }))
   const trackedModelId = typeof modelTracked?.value === 'string' ? modelTracked.value : null
   const defaultModelId = cliDefaultModelId(catalog, models, trackedModelId)

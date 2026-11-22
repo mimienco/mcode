@@ -104,29 +104,41 @@ async function spawnAndPublishSession(
   const shellReadySupported =
     (opts.shellReadySupported ?? false) &&
     (subprocess.shellPath === undefined || shellPathSupportsPtyStartupBarrier(subprocess.shellPath))
-  const session = new Session({
-    sessionId: opts.sessionId,
-    cols: size.cols,
-    rows: size.rows,
-    terminalHandle: opts.env?.MCODE_TERMINAL_HANDLE,
-    launchAgent: opts.launchAgent,
-    subprocess,
-    ownerBackend: resolvePtyOwnerBackend({
-      platform: process.platform,
-      shellPath: subprocess.shellPath,
-      wslDistro
-    }),
-    shellReadySupported,
-    scrollback: resolveDaemonSessionScrollbackRows(),
-    historySeedChunks: opts.historySeedChunks,
-    ...(opts.startupIngress ? { startupIngress: opts.startupIngress } : {}),
-    wslDistro,
-    onExit: () => deps.onSessionExit(opts.sessionId, opts.agentSessionGeneration),
-    ...(deps.reportReadinessEvent ? { reportReadinessEvent: deps.reportReadinessEvent } : {}),
-    ...(opts.shellReadyTimeoutMs !== undefined
-      ? { shellReadyTimeoutMs: opts.shellReadyTimeoutMs }
-      : {})
-  })
+  let session: Session
+  try {
+    session = new Session({
+      sessionId: opts.sessionId,
+      cols: size.cols,
+      rows: size.rows,
+      terminalHandle: opts.env?.MCODE_TERMINAL_HANDLE,
+      launchAgent: opts.launchAgent,
+      subprocess,
+      ownerBackend: resolvePtyOwnerBackend({
+        platform: process.platform,
+        shellPath: subprocess.shellPath,
+        wslDistro
+      }),
+      shellReadySupported,
+      scrollback: resolveDaemonSessionScrollbackRows(),
+      historySeedChunks: opts.historySeedChunks,
+      ...(opts.startupIngress ? { startupIngress: opts.startupIngress } : {}),
+      wslDistro,
+      onExit: () => deps.onSessionExit(opts.sessionId, opts.agentSessionGeneration),
+      ...(deps.reportReadinessEvent ? { reportReadinessEvent: deps.reportReadinessEvent } : {}),
+      ...(opts.shellReadyTimeoutMs !== undefined
+        ? { shellReadyTimeoutMs: opts.shellReadyTimeoutMs }
+        : {})
+    })
+  } catch (error) {
+    // Why: the live shell already spawned above; a constructor throw (e.g. xterm
+    // grid allocation) must not leak it unregistered and undisposed.
+    try {
+      subprocess.forceKill()
+    } catch {
+      /* child may already be gone */
+    }
+    throw error
+  }
 
   if (opts.isCanceled?.()) {
     // Retain cleanup ownership if the native child refuses to exit.

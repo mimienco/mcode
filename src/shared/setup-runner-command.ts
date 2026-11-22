@@ -1,5 +1,13 @@
 import { isWindowsAbsolutePathLike } from './cross-platform-path'
 import {
+  isWslExecutable,
+  isWslUncShareRootPath,
+  nativeWindowsPathToPosixShellPath,
+  nativeWindowsPathToWslShellPath,
+  wslUncToLinuxPath
+} from './wsl-paths'
+import { quotePosixSafeChars, quoteWindowsCmdArg } from './shell-quoting'
+import {
   buildWindowsCmdRunnerDelayedLaunchCommand,
   windowsRunnerPathNeedsCmdGuard
 } from './windows-cmd-runner-delayed-launch'
@@ -45,17 +53,17 @@ export function resolveSetupRunnerCommand(
   shell?: SetupRunnerShell
 ): SetupRunnerCommandResolution {
   if (platform === 'windows') {
-    if (isWslUncPath(runnerScriptPath)) {
+    if (isWslUncShareRootPath(runnerScriptPath)) {
       const linuxPath = wslUncToLinuxPath(runnerScriptPath)
       return {
-        command: `bash ${quotePosixArg(linuxPath)}`,
+        command: `bash ${quotePosixSafeChars(linuxPath)}`,
         runnerScriptPathForShell: linuxPath,
         shell: 'posix'
       }
     }
     if (runnerScriptPath.startsWith('/') && !isWindowsAbsolutePathLike(runnerScriptPath)) {
       return {
-        command: `bash ${quotePosixArg(runnerScriptPath)}`,
+        command: `bash ${quotePosixSafeChars(runnerScriptPath)}`,
         runnerScriptPathForShell: runnerScriptPath,
         shell: 'posix'
       }
@@ -68,7 +76,7 @@ export function resolveSetupRunnerCommand(
       if (isWslExecutable(shell?.executable)) {
         const wslPath = nativeWindowsPathToWslShellPath(runnerScriptPath)
         return {
-          command: `bash ${quotePosixArg(wslPath)}`,
+          command: `bash ${quotePosixSafeChars(wslPath)}`,
           runnerScriptPathForShell: wslPath,
           shell: 'posix'
         }
@@ -76,7 +84,7 @@ export function resolveSetupRunnerCommand(
       // Why: queued setup launches can outlive the process that generated them, so convert native paths before handing off to POSIX shells.
       const posixPath = nativeWindowsPathToPosixShellPath(runnerScriptPath)
       return {
-        command: `bash ${quotePosixArg(posixPath)}`,
+        command: `bash ${quotePosixSafeChars(posixPath)}`,
         runnerScriptPathForShell: posixPath,
         shell: 'posix'
       }
@@ -90,14 +98,14 @@ export function resolveSetupRunnerCommand(
       command:
         shell?.family === 'posix' || windowsRunnerPathNeedsCmdGuard(runnerScriptPath)
           ? buildWindowsCmdRunnerDelayedLaunchCommand(runnerScriptPath)
-          : `cmd.exe /c ${quoteWindowsArg(runnerScriptPath)}`,
+          : `cmd.exe /c ${quoteWindowsCmdArg(runnerScriptPath)}`,
       runnerScriptPathForShell: runnerScriptPath,
       shell: 'windows'
     }
   }
 
   return {
-    command: `bash ${quotePosixArg(runnerScriptPath)}`,
+    command: `bash ${quotePosixSafeChars(runnerScriptPath)}`,
     runnerScriptPathForShell: runnerScriptPath,
     shell: 'posix'
   }
@@ -108,46 +116,3 @@ export function isWindowsCmdRunnerPath(runnerScriptPath: string): boolean {
   return /\.(cmd|bat)$/i.test(runnerScriptPath)
 }
 
-export function isWslUncPath(path: string): boolean {
-  const normalized = path.replace(/\\/g, '/')
-  return /^\/\/(wsl\.localhost|wsl\$)\//i.test(normalized)
-}
-
-export function wslUncToLinuxPath(windowsPath: string): string {
-  const normalized = windowsPath.replace(/\\/g, '/')
-  const match = normalized.match(/^\/\/(wsl\.localhost|wsl\$)\/[^/]+(\/.*)?$/i)
-  return match?.[2] || '/'
-}
-
-function quotePosixArg(value: string): string {
-  if (/^[A-Za-z0-9_./:-]+$/.test(value)) {
-    return value
-  }
-
-  return `'${value.replace(/'/g, `'\\''`)}'`
-}
-
-function quoteWindowsArg(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`
-}
-
-export function nativeWindowsPathToPosixShellPath(value: string): string {
-  const driveMatch = value.match(/^([A-Za-z]):[\\/](.*)$/)
-  if (driveMatch) {
-    return `/${driveMatch[1].toLowerCase()}/${driveMatch[2].replace(/\\/g, '/')}`
-  }
-  return value.replace(/\\/g, '/')
-}
-
-function nativeWindowsPathToWslShellPath(value: string): string {
-  const driveMatch = value.match(/^([A-Za-z]):[\\/](.*)$/)
-  if (driveMatch) {
-    return `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2].replace(/\\/g, '/')}`
-  }
-  return value.replace(/\\/g, '/')
-}
-
-function isWslExecutable(value: string | undefined): boolean {
-  const basename = value?.trim().replaceAll('\\', '/').split('/').pop()?.toLowerCase() ?? ''
-  return basename === 'wsl.exe' || basename === 'wsl'
-}

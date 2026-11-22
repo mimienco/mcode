@@ -1,6 +1,7 @@
 // Wire-level handshake helpers for the MCode relay.
 
 import { dirname, join } from 'node:path'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import type { Socket } from 'node:net'
 import {
@@ -141,13 +142,18 @@ function handleDaemonHandshakeFrame(
     sock.end()
     return false
   }
-  if (
-    endpointCredential !== undefined &&
-    ('endpointCredential' in msg ? msg.endpointCredential : undefined) !== endpointCredential
-  ) {
-    relayLogLine('[relay] Endpoint credential mismatch; closing socket')
-    sock.destroy()
-    return false
+  if (endpointCredential !== undefined) {
+    // Why: hash both sides so the credential check is constant-time.
+    const presented = 'endpointCredential' in msg ? msg.endpointCredential : undefined
+    const expectedDigest = createHash('sha256').update(endpointCredential).digest()
+    if (
+      presented === undefined ||
+      !timingSafeEqual(expectedDigest, createHash('sha256').update(presented).digest())
+    ) {
+      relayLogLine('[relay] Endpoint credential mismatch; closing socket')
+      sock.destroy()
+      return false
+    }
   }
   process.stderr.write(`[relay] Handshake OK from version=${msg.version}\n`)
   sock.write(encodeHandshakeFrame({ type: 'mcode-relay-handshake-ok', version: launchVersion }))

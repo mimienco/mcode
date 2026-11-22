@@ -218,7 +218,9 @@ function killPtyProcess(pty: IPty, signal: string): void {
     return
   }
   if (signal === 'SIGKILL') {
-    forceKillPosixPtyProcessGroups(pty.pid, () => pty.kill(signal))
+    forceKillPosixPtyProcessGroups(pty.pid, () => pty.kill(signal), {
+      ptsName: readPtsName(pty)
+    })
     return
   }
   pty.kill(signal)
@@ -1555,8 +1557,9 @@ export class PtyHandler {
       throw new Error(formatNodePtyUnavailableMessage(process.platform))
     }
 
-    const cols = (params.cols as number) || 80
-    const rows = (params.rows as number) || 24
+    // Same clamp as pty.resize: renderer-supplied dims are untrusted.
+    const cols = Math.max(1, Math.min(500, Math.floor(Number(params.cols) || 80)))
+    const rows = Math.max(1, Math.min(500, Math.floor(Number(params.rows) || 24)))
     const cwd = (params.cwd as string) || resolveDefaultCwd()
     const env = params.env as Record<string, string> | undefined
     const envToDelete = sanitizeEnvToDelete(params.envToDelete)
@@ -2248,8 +2251,8 @@ export class PtyHandler {
     try {
       term = ptyMod.spawn(shell, shellLaunch.args, {
         name: spawnEnv.TERM ?? 'xterm-256color',
-        cols: entry.cols,
-        rows: entry.rows,
+        cols: Math.max(1, Math.min(500, Math.floor(Number(entry.cols) || 80))),
+        rows: Math.max(1, Math.min(500, Math.floor(Number(entry.rows) || 24))),
         cwd: entry.cwd,
         // Why: no provider-delivered command is waiting for a ready marker.
         env: {

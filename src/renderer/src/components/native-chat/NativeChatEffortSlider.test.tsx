@@ -71,7 +71,10 @@ describe('NativeChatEffortSliderBody', () => {
 
     for (const value of [undefined, 'low', 'medium', 'high']) {
       renderValue(value)
-      expect(container.querySelector('button')?.className).toContain('w-28')
+      // Widened from w-28: the trigger now reserves room for the "Effort"
+      // category label beside the value.
+      expect(container.querySelector('button')?.className).toContain('w-32')
+      expect(container.querySelector('button')?.className).toContain('native-chat-effort-trigger')
     }
     root.unmount()
   })

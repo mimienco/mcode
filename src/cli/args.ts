@@ -102,7 +102,15 @@ export function parseArgs(argv: string[], commandPaths?: readonly string[][]): P
     // treats a `--`-leading next token as a new flag, so it can't express one.
     const equalsIndex = assignment.indexOf('=')
     if (equalsIndex !== -1) {
-      setFlagValue(flags, assignment.slice(0, equalsIndex), assignment.slice(equalsIndex + 1))
+      const name = assignment.slice(0, equalsIndex)
+      const value = assignment.slice(equalsIndex + 1)
+      // Why: `--flag=false` must disable a boolean flag; storing the raw
+      // string makes flags.has() readers treat the negation as enabled.
+      if (BOOLEAN_FLAGS.has(name)) {
+        flags.set(name, value !== 'false' && value !== '0')
+      } else {
+        setFlagValue(flags, name, value)
+      }
       continue
     }
 

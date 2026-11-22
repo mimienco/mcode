@@ -1,6 +1,8 @@
 import { createDesktopInvoke } from './desktop-client'
 import { getDefaultUIState } from '../../../shared/constants'
 import type { PersistedUIState } from '../../../shared/persisted-ui-state-types'
+import { homeDir } from '@tauri-apps/api/path'
+import { resolveTauriSettings } from './tauri-settings-defaults'
 
 // ─── Settings-document bridge ────────────────────────────────────────────────
 //
@@ -31,6 +33,8 @@ export function createSettingsDocumentBridge(
 ): SettingsDocumentBridge {
   const call = createDesktopInvoke(invoke)
   let cached: Record<string, unknown> | null = null
+  let revision = 0
+  let writes: Promise<void> = Promise.resolve()
   const listeners = new Set<DocumentListener>()
 
   const publish = (document: Record<string, unknown>): Record<string, unknown> => {
@@ -42,10 +46,25 @@ export function createSettingsDocumentBridge(
   }
 
   return {
-    getDocument: async () =>
-      publish((await call('settings_get_document')) as Record<string, unknown>),
-    setDocument: async (patch) =>
-      publish((await call('settings_set_document', { patch })) as Record<string, unknown>),
+    getDocument: async () => {
+      await writes
+      const requestRevision = ++revision
+      const document = (await call('settings_get_document')) as Record<string, unknown>
+      return requestRevision === revision ? publish(document) : document
+    },
+    setDocument: (patch) => {
+      revision++
+      const result = writes.then(async () => {
+        const requestRevision = ++revision
+        const document = (await call('settings_set_document', { patch })) as Record<string, unknown>
+        return requestRevision === revision ? publish(document) : document
+      })
+      writes = result.then(
+        () => undefined,
+        () => undefined
+      )
+      return result
+    },
     cache: () => cached,
     onDocumentChanged: (listener) => {
       listeners.add(listener)
@@ -62,29 +81,51 @@ function section(document: Record<string, unknown> | null, key: string): Record<
 }
 
 /** settings.* — GlobalSettings under the document's 'settings' key. */
-export function createSettingsClient(bridge: SettingsDocumentBridge): Record<string, unknown> {
-  const settingsSection = (): Record<string, unknown> => section(bridge.cache(), 'settings')
+export function createSettingsClient(
+  bridge: SettingsDocumentBridge,
+  getHomeDirectory: () => Promise<string> = homeDir
+): Record<string, unknown> {
+  let home: string | null = null
+  let loadingHome: Promise<string> | null = null
+  const ensureHome = (): Promise<string> => {
+    loadingHome ??= getHomeDirectory()
+      .then((value) => {
+        home = value
+        return value
+      })
+      .catch((error: unknown) => {
+        loadingHome = null
+        throw error
+      })
+    return loadingHome
+  }
+  const settingsSection = (document: Record<string, unknown>) =>
+    resolveTauriSettings(document, home!)
   return {
     get: async () => {
-      await bridge.getDocument()
-      return settingsSection()
+      const [document] = await Promise.all([bridge.getDocument(), ensureHome()])
+      return settingsSection(document)
     },
-    getSync: () => (bridge.cache() === null ? null : settingsSection()),
+    getSync: () =>
+      bridge.cache() === null || home === null ? null : settingsSection(bridge.cache()!),
     set: async (updates: Record<string, unknown>) => {
+      await ensureHome()
       const document = await bridge.setDocument({ settings: updates })
-      return section(document, 'settings')
+      return settingsSection(document)
     },
     setActiveRuntimeEnvironmentPreference: async (args: { environmentId: string | null }) => {
+      await ensureHome()
       const document = await bridge.setDocument({
         settings: { activeRuntimeEnvironmentId: args.environmentId }
       })
-      return section(document, 'settings')
+      return settingsSection(document)
     },
     updatePRBotAuthorOverride: async (args: { author: string; isBot: boolean }) => {
+      await ensureHome()
       const document = await bridge.setDocument({
         settings: { prBotAuthorOverride: args }
       })
-      return section(document, 'settings')
+      return settingsSection(document)
     },
     listFonts: async () => {
       await bridge.getDocument()
@@ -96,8 +137,24 @@ export function createSettingsClient(bridge: SettingsDocumentBridge): Record<str
     previewWarpThemeImport: async () => {
       throw new Error('Warp import is not available under Tauri yet')
     },
-    onChanged: (callback: (updates: Partial<Record<string, unknown>>) => void) =>
-      bridge.onDocumentChanged((document) => callback(section(document, 'settings')))
+    onChanged: (callback: (updates: Partial<Record<string, unknown>>) => void) => {
+      let active = true
+      const detach = bridge.onDocumentChanged((document) => {
+        void ensureHome()
+          .then(() => {
+            if (active) {
+              callback(settingsSection(document) as unknown as Record<string, unknown>)
+            }
+          })
+          .catch((error: unknown) =>
+            console.error('[settings] Could not load settings defaults', error)
+          )
+      })
+      return () => {
+        active = false
+        detach()
+      }
+    }
   }
 }
 

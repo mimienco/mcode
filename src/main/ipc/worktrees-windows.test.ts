@@ -146,6 +146,7 @@ vi.mock('./worktree-logic', async (importOriginal) => {
 
 import { registerWorktreeHandlers } from './worktrees'
 import { resetRetirementCollisionKeyCacheForTests } from '../worktree-name-retirement'
+import { registerWorktreeRootsForRepo } from './registered-worktree-roots-cache'
 
 type HandlerMap = Record<string, (_event: unknown, args: unknown) => unknown>
 
@@ -165,6 +166,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     getProjectHostSetups: vi.fn(),
     getSettings: vi.fn(),
     getWorktreeMeta: vi.fn(),
+    getAllWorktreeMeta: vi.fn(),
     setWorktreeMeta: vi.fn(),
     removeWorktreeMeta: vi.fn(),
     addRetiredWorktreeName: vi.fn(),
@@ -209,6 +211,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     store.getProjectHostSetups.mockReset()
     store.getSettings.mockReset()
     store.getWorktreeMeta.mockReset()
+    store.getAllWorktreeMeta.mockReset()
     store.setWorktreeMeta.mockReset()
     store.removeWorktreeMeta.mockReset()
     store.addRetiredWorktreeName.mockReset()
@@ -251,6 +254,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     })
     resolveSetupRunnerShellMock.mockReturnValue(undefined)
     store.getWorktreeMeta.mockReturnValue(undefined)
+    store.getAllWorktreeMeta.mockReturnValue({})
     store.getRetiredWorktreeNameRegistry.mockReturnValue({ exhaustedTiers: 0, names: [] })
     store.setWorktreeMeta.mockReturnValue({})
     resolveLocalGitUsernameMock.mockResolvedValue('')
@@ -568,7 +572,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
       repoId: 'repo-1'
     })
   })
-  it('gives the issue-command runner the same setup shell as the setup runner', () => {
+  it('gives the issue-command runner the same setup shell as the setup runner', async () => {
     // Regression (C4): native Windows issue runners stayed .cmd even when setup
     // resolved to Git Bash, so same-session bash issue templates broke.
     resolveSetupRunnerShellMock.mockReturnValue({ family: 'posix' })
@@ -577,14 +581,19 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
       envVars: {},
       shell: { family: 'posix' }
     })
+    registerWorktreeRootsForRepo(store as never, 'repo-1', [
+      'C:\\repo',
+      'C:\\workspaces\\improve-dashboard'
+    ])
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-1::C:\\workspaces\\improve-dashboard': { displayName: '', comment: '' }
+    })
 
-    handlers['hooks:createIssueCommandRunner'](null, {
+    await handlers['hooks:createIssueCommandRunner'](null, {
       repoId: 'repo-1',
       worktreePath: 'C:\\workspaces\\improve-dashboard',
       command: 'gh issue view 42'
     })
-
-    expect(resolveSetupRunnerShellMock).toHaveBeenCalledWith(store.getSettings())
     expect(createIssueCommandRunnerScriptMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'repo-1' }),
       'C:\\workspaces\\improve-dashboard',

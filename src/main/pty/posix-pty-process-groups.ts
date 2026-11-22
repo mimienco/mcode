@@ -12,8 +12,15 @@ type ProcessRow = {
 export type PosixPtyProcessGroupTerminationDeps = {
   platform?: NodeJS.Platform
   currentPid?: number
+  /** Spawn-time slave device (`proc.ptsName()`); pins the ps lookup to our PTY. */
+  ptsName?: string
   readProcessTable?: () => string
   signalProcessGroup?: (pgid: number) => void
+}
+
+/** `ps` prints `ttys003` / `pts/3`; node-pty reports `/dev/ttys003` / `/dev/pts/3`. */
+function normalizeTty(value: string): string {
+  return value.replace(/^\/dev\//, '')
 }
 
 function runPs(args: string[]): string {
@@ -54,11 +61,18 @@ function parseProcessRows(output: string): ProcessRow[] {
 export function getPosixPtyProcessGroups(
   output: string,
   rootPid: number,
-  currentPid = process.pid
+  currentPid = process.pid,
+  ptsName?: string
 ): number[] | null {
   const rows = parseProcessRows(output)
   const root = rows.find((row) => row.pid === rootPid)
   if (!root || root.tty === '?' || root.tty === '??') {
+    return null
+  }
+  // Why: `ps -p` answers for whatever owns the pid now. Without pinning the tty
+  // captured at spawn, a recycled pid could aim a group SIGKILL at a foreign
+  // terminal; mirror posix-pty-foreground-group's mandatory tty check.
+  if (ptsName !== undefined && normalizeTty(root.tty) !== normalizeTty(ptsName)) {
     return null
   }
   // Why: a development daemon can inherit its launch TTY. Never group-signal
@@ -100,7 +114,8 @@ export function forceKillPosixPtyProcessGroups(
     groups = getPosixPtyProcessGroups(
       (deps.readProcessTable ?? (() => readPtyProcessTable(rootPid)))(),
       rootPid,
-      deps.currentPid ?? process.pid
+      deps.currentPid ?? process.pid,
+      deps.ptsName
     )
   } catch {
     groups = null

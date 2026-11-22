@@ -1,3 +1,5 @@
+import { isWslExecutable } from './wsl-paths'
+
 export type LocalWindowsRuntimePreference =
   | { kind: 'inherit-global' }
   | { kind: 'windows-host' }
@@ -128,7 +130,11 @@ export function deriveGlobalWindowsRuntimeDefaultFromLegacySettings(
     return { defaultRuntime: { kind: 'windows-host' }, fallbackReason: null }
   }
 
-  if (selectedRuntime === 'wsl' || isWslShell(settings?.terminalWindowsShell)) {
+  const terminalWindowsShell = settings?.terminalWindowsShell
+  if (
+    selectedRuntime === 'wsl' ||
+    (typeof terminalWindowsShell === 'string' && isWslExecutable(terminalWindowsShell))
+  ) {
     const distro =
       normalizeDistro(settings?.localAgentWslDistro) ??
       normalizeDistro(settings?.terminalWindowsWslDistro)
@@ -285,10 +291,3 @@ function normalizeDistro(value: unknown): string | null {
   return trimmed ? trimmed : null
 }
 
-function isWslShell(value: unknown): boolean {
-  if (typeof value !== 'string') {
-    return false
-  }
-  const shellName = value.trim().split(/[\\/]/).pop()?.toLowerCase()
-  return shellName === 'wsl.exe' || shellName === 'wsl'
-}

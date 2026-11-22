@@ -1,3 +1,4 @@
+import { quotePosixQuoteSplice } from '../../shared/shell-quoting'
 const MANAGED_MARKER = '# MCode managed WSL CLI launcher'
 const BRIDGE_MANAGED_MARKER = '# MCode managed WSL CLI PowerShell bridge'
 
@@ -10,8 +11,8 @@ export function buildWslLauncher(
 set -euo pipefail
 ${MANAGED_MARKER}
 # MCODE_WIN_LAUNCHER_B64=${encodedTarget}
-MCODE_WIN_LAUNCHER=${quoteShell(windowsLauncherPath)}
-MCODE_BRIDGE_PS1=${quoteShell(bridgePath)}
+MCODE_WIN_LAUNCHER=${quotePosixQuoteSplice(windowsLauncherPath)}
+MCODE_BRIDGE_PS1=${quotePosixQuoteSplice(bridgePath)}
 if command -v powershell.exe >/dev/null 2>&1; then
   MCODE_POWERSHELL=powershell.exe
 elif [ -x /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe ]; then
@@ -118,8 +119,8 @@ export function getBridgePathFromCommandPath(commandPath: string): string {
 }
 
 export function buildSafeReplaceGuard(path: string, managedMarker: string): string {
-  const quotedPath = quoteShell(path)
-  const quotedMarker = quoteShell(managedMarker)
+  const quotedPath = quotePosixQuoteSplice(path)
+  const quotedMarker = quotePosixQuoteSplice(managedMarker)
   return [
     `if [ -L ${quotedPath} ]; then`,
     '  echo "__MCODE_CONFLICT__"',
@@ -136,8 +137,8 @@ export function buildRegistrationLockPrelude(commandPath: string): string {
   // Why: the per-distro queue only serializes one MCode process; flock covers
   // a second install (e.g. stable + nightly) mutating the same distro files.
   return [
-    `if command -v flock >/dev/null 2>&1 && mkdir -p ${quoteShell(lockDir)} 2>/dev/null; then`,
-    `  exec 9>${quoteShell(`${lockDir}/.mcode-wsl-cli.lock`)}`,
+    `if command -v flock >/dev/null 2>&1 && mkdir -p ${quotePosixQuoteSplice(lockDir)} 2>/dev/null; then`,
+    `  exec 9>${quotePosixQuoteSplice(`${lockDir}/.mcode-wsl-cli.lock`)}`,
     '  flock -x -w 30 9',
     'fi'
   ].join('\n')
@@ -146,7 +147,7 @@ export function buildRegistrationLockPrelude(commandPath: string): string {
 export function buildManagedLegacyRemoveCommand(quotedLegacyCommandPath: string): string {
   // Why: remove only the MCode-managed pre-rename wrapper; user-owned `mcode`
   // commands and symlinks must survive.
-  return `if [ ! -L ${quotedLegacyCommandPath} ] && [ -f ${quotedLegacyCommandPath} ] && grep -Fq ${quoteShell(MANAGED_MARKER)} ${quotedLegacyCommandPath}; then rm -f ${quotedLegacyCommandPath}; fi`
+  return `if [ ! -L ${quotedLegacyCommandPath} ] && [ -f ${quotedLegacyCommandPath} ] && grep -Fq ${quotePosixQuoteSplice(MANAGED_MARKER)} ${quotedLegacyCommandPath}; then rm -f ${quotedLegacyCommandPath}; fi`
 }
 
 export function buildSafeRemoveCommand(commandPath: string, legacyCommandPath?: string): string {
@@ -156,10 +157,10 @@ export function buildSafeRemoveCommand(commandPath: string, legacyCommandPath?: 
     buildRegistrationLockPrelude(commandPath),
     buildSafeReplaceGuard(commandPath, MANAGED_MARKER),
     buildSafeReplaceGuard(bridgePath, BRIDGE_MANAGED_MARKER),
-    `rm -f ${quoteShell(commandPath)} ${quoteShell(bridgePath)}`,
+    `rm -f ${quotePosixQuoteSplice(commandPath)} ${quotePosixQuoteSplice(bridgePath)}`,
     // Why: leaving a managed legacy `mcode` behind lets startup reconciliation
     // re-adopt it as opt-in proof and silently undo this removal.
-    ...(legacyCommandPath ? [buildManagedLegacyRemoveCommand(quoteShell(legacyCommandPath))] : [])
+    ...(legacyCommandPath ? [buildManagedLegacyRemoveCommand(quotePosixQuoteSplice(legacyCommandPath))] : [])
   ].join('\n')
 }
 
@@ -187,8 +188,4 @@ export function getWslLauncherMarker(): string {
 
 export function getWslBridgeMarker(): string {
   return BRIDGE_MANAGED_MARKER
-}
-
-export function quoteShell(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`
 }

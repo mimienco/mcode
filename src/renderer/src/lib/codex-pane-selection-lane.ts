@@ -8,10 +8,10 @@ import {
 } from '../../../shared/codex-selection-lane'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import {
-  isWslShellName,
   resolveLocalWindowsTerminalRuntimeOptions,
   type LocalWindowsTerminalRuntimeOptions
 } from '../../../shared/local-windows-terminal-runtime'
+import { isWslExecutable } from '../../../shared/wsl-paths'
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
 import { resolveTerminalStartupCwd } from '../../../shared/terminal-startup-cwd'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
@@ -211,7 +211,7 @@ function resolveLocalPaneSelectionTarget(args: {
     return { runtime: 'wsl', wslDistro: wslPath.distro }
   }
   const terminalRuntime = resolveLocalPaneTerminalRuntime(args)
-  if (isWslShellName(terminalRuntime.shellOverride)) {
+  if (isWslExecutable(terminalRuntime.shellOverride)) {
     return { runtime: 'wsl', wslDistro: terminalRuntime.terminalWindowsWslDistro }
   }
   return { runtime: 'host' }

@@ -153,6 +153,7 @@ function registerCloudInstallHandlers(runtime: MCodeRuntimeService): void {
     sendSkillInstallProgress(event, { operationId: input.operationId, phase: 'authorizing' })
     if (
       input.environmentId &&
+      !input.environmentId.startsWith('ssh:') &&
       !(await supportsSkillRuntimeInstall(app.getPath('userData'), input.environmentId))
     ) {
       return { status: 'unsupported' as const, message: SKILL_INSTALL_UPDATE_REQUIRED_MESSAGE }
@@ -200,6 +201,7 @@ function registerCloudInstallHandlers(runtime: MCodeRuntimeService): void {
     sendSkillInstallProgress(event, { operationId: input.operationId, phase: 'authorizing' })
     if (
       input.environmentId &&
+      !input.environmentId.startsWith('ssh:') &&
       !(await supportsSkillRuntimeInstall(app.getPath('userData'), input.environmentId))
     ) {
       return { status: 'unsupported' as const, message: SKILL_INSTALL_UPDATE_REQUIRED_MESSAGE }

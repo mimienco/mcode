@@ -72,9 +72,13 @@ export async function androidTypeText(
   serial: string,
   text: string
 ): Promise<void> {
-  // adb input text uses %s for spaces and cannot carry newlines.
+  // adb input text uses %s for spaces and cannot carry newlines. adb hands the
+  // trailing args to the device shell unquoted, so wrap the payload in single
+  // quotes (with '\'' escaping) or metacharacters like & ; | $ get interpreted
+  // by the device shell instead of typed.
+  const payload = `'${text.replace(/ /g, '%s').replace(/'/g, `'\\''`)}'`
   ensureAdbOk(
-    await runner(sdk.adb, androidShellArgs(serial, ['input', 'text', text.replace(/ /g, '%s')])),
+    await runner(sdk.adb, androidShellArgs(serial, ['input', 'text', payload])),
     'adb type'
   )
 }

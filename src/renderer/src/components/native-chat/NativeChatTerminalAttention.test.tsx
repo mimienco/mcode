@@ -60,4 +60,16 @@ describe('NativeChatTerminalAttention', () => {
     expect(screen.getByRole('textbox', { name: 'Send a message' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('lets a full-pane recovery state own the alert while keeping the draft mounted', () => {
+    render(
+      <NativeChatTerminalAttention attention="agent-auth-required" agent="claude" suppressAlert>
+        <textarea aria-label="Send a message" defaultValue="preserved" />
+      </NativeChatTerminalAttention>
+    )
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Send a message' })).not.toBeInTheDocument()
+    expect(document.querySelector('textarea')?.value).toBe('preserved')
+  })
 })

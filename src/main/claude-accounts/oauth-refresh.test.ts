@@ -183,4 +183,97 @@ describe('refreshClaudeOauthCredentials', () => {
     netFetchMock.mockRejectedValue(new Error('network down'))
     await expect(refreshClaudeOauthCredentials(credentials(), NOW)).resolves.toBeNull()
   })
+
+  it('reuses freshly persisted credentials instead of rotating twice', async () => {
+    const stored = credentials({
+      accessToken: 'stored-access',
+      refreshToken: 'stored-refresh',
+      expiresAt: NOW + 60 * 60 * 1000
+    })
+    const persist = vi.fn()
+    const result = await refreshClaudeOauthCredentials(
+      credentials({ expiresAt: NOW + 60 * 1000 }),
+      NOW,
+      { readStoredCredentials: async () => stored, persistCredentials: persist }
+    )
+    expect(result).toBe(stored)
+    expect(netFetchMock).not.toHaveBeenCalled()
+    expect(persist).not.toHaveBeenCalled()
+  })
+
+  it('serializes concurrent refreshes sharing a lock key', async () => {
+    const events: string[] = []
+    const { promise: firstGate, resolve: releaseFirst } = Promise.withResolvers<unknown>()
+    netFetchMock.mockImplementationOnce(async () => {
+      events.push('start-1')
+      const response = await firstGate
+      events.push('done-1')
+      return response
+    })
+    netFetchMock.mockImplementationOnce(async () => {
+      events.push('start-2')
+      return { ok: true, json: async () => ({ access_token: 'a2', expires_in: 3600 }) }
+    })
+
+    const options = { lockKey: 'account-1' }
+    const first = refreshClaudeOauthCredentials(credentials(), NOW, options)
+    const second = refreshClaudeOauthCredentials(credentials(), NOW, options)
+    releaseFirst({ ok: true, json: async () => ({ access_token: 'a1', expires_in: 3600 }) })
+    await Promise.all([first, second])
+
+    expect(events).toEqual(['start-1', 'done-1', 'start-2'])
+  })
+
+  it('allows concurrent refreshes under different lock keys', async () => {
+    const { promise: gate, resolve: release } = Promise.withResolvers<unknown>()
+    const gatedResponse = { ok: true, json: async () => ({ access_token: 'a1', expires_in: 3600 }) }
+    netFetchMock.mockImplementationOnce(async () => {
+      await gate
+      return gatedResponse
+    })
+    netFetchMock.mockImplementationOnce(() => ({
+      ok: true,
+      json: async () => ({ access_token: 'a2', expires_in: 3600 })
+    }))
+
+    const first = refreshClaudeOauthCredentials(credentials(), NOW, { lockKey: 'account-1' })
+    const second = refreshClaudeOauthCredentials(
+      credentials({ refreshToken: 'other-refresh' }),
+      NOW,
+      { lockKey: 'account-2' }
+    )
+
+    // The second rotation completes while the first is still held on its gate —
+    // a shared key would deadlock it until release.
+    await expect(second).resolves.toContain('a2')
+    release(gatedResponse)
+    await first
+  })
+
+  it('refreshes from the re-read stored blob when it is still expiring', async () => {
+    netFetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'fresh-access', expires_in: 3600, refresh_token: 'r2' })
+    })
+    const staleStored = credentials({ expiresAt: NOW + 60 * 1000, refreshToken: 'stored-refresh' })
+    await refreshClaudeOauthCredentials(credentials({ refreshToken: 'input-refresh' }), NOW, {
+      readStoredCredentials: async () => staleStored
+    })
+    const body = new URLSearchParams(netFetchMock.mock.calls[0][1].body)
+    expect(body.get('refresh_token')).toBe('stored-refresh')
+  })
+
+  it('propagates persist failures so callers can keep prior credentials', async () => {
+    netFetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'a', expires_in: 3600 })
+    })
+    await expect(
+      refreshClaudeOauthCredentials(credentials(), NOW, {
+        persistCredentials: async () => {
+          throw new Error('disk full')
+        }
+      })
+    ).rejects.toThrow('disk full')
+  })
 })

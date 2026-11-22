@@ -7,9 +7,20 @@ import TabDragPreview from '../tab-bar/TabDragPreview'
 import { TabDragProvider } from './tab-drag-context'
 import TabPaneColumnSplitDragOverlay from './TabPaneColumnSplitDragOverlay'
 import { type HoveredTabInsertion, useTabDragSplit } from './useTabDragSplit'
+import { useValidatedMaximizedTabGroupId } from './tab-group-maximize-state'
 
 const MIN_RATIO = 0.15
 const MAX_RATIO = 0.85
+
+export function tabGroupLayoutContainsGroup(node: TabGroupLayoutNode, groupId: string): boolean {
+  if (node.type === 'leaf') {
+    return node.groupId === groupId
+  }
+  return (
+    tabGroupLayoutContainsGroup(node.first, groupId) ||
+    tabGroupLayoutContainsGroup(node.second, groupId)
+  )
+}
 
 function ResizeHandle({
   direction,
@@ -148,6 +159,7 @@ function SplitNode({
   focusedGroupId,
   isWorktreeActive,
   hasSplitGroups,
+  maximizedGroupId,
   touchesTopEdge,
   touchesRightEdge,
   touchesLeftEdge,
@@ -164,6 +176,7 @@ function SplitNode({
   focusedGroupId?: string
   isWorktreeActive: boolean
   hasSplitGroups: boolean
+  maximizedGroupId: string | null
   touchesTopEdge: boolean
   touchesRightEdge: boolean
   touchesLeftEdge: boolean
@@ -195,7 +208,6 @@ function SplitNode({
         suppressLeftBorder={suppressLeftBorder}
         suppressRightBorder={suppressRightBorder}
         suppressBottomBorder={suppressBottomBorder}
-        reserveClosedExplorerToggleSpace={touchesTopEdge && touchesRightEdge}
         reserveCollapsedSidebarHeaderSpace={touchesTopEdge && touchesLeftEdge}
         isTabDragActive={isTabDragActive}
         hoveredTabInsertion={
@@ -207,13 +219,23 @@ function SplitNode({
 
   const isHorizontal = node.direction === 'horizontal'
   const ratio = node.ratio ?? 0.5
+  const firstContainsMaximizedGroup =
+    maximizedGroupId === null || tabGroupLayoutContainsGroup(node.first, maximizedGroupId)
+  const secondContainsMaximizedGroup =
+    maximizedGroupId === null || tabGroupLayoutContainsGroup(node.second, maximizedGroupId)
 
   return (
     <div
       className="flex flex-1 min-w-0 min-h-0 overflow-hidden"
       style={{ flexDirection: isHorizontal ? 'row' : 'column' }}
     >
-      <div className="flex min-w-0 min-h-0 overflow-hidden" style={{ flex: `${ratio} 1 0%` }}>
+      <div
+        className="flex min-w-0 min-h-0 overflow-hidden"
+        style={{
+          display: firstContainsMaximizedGroup ? 'flex' : 'none',
+          flex: maximizedGroupId === null ? `${ratio} 1 0%` : '1 1 0%'
+        }}
+      >
         <SplitNode
           node={node.first}
           nodePath={nodePath.length > 0 ? `${nodePath}.first` : 'first'}
@@ -221,6 +243,7 @@ function SplitNode({
           focusedGroupId={focusedGroupId}
           isWorktreeActive={isWorktreeActive}
           hasSplitGroups={hasSplitGroups}
+          maximizedGroupId={maximizedGroupId}
           touchesTopEdge={touchesTopEdge}
           touchesRightEdge={isHorizontal ? false : touchesRightEdge}
           touchesLeftEdge={touchesLeftEdge}
@@ -234,12 +257,20 @@ function SplitNode({
           hoveredTabInsertion={hoveredTabInsertion}
         />
       </div>
-      <ResizeHandle
-        direction={node.direction}
-        onResizeStart={() => recordFeatureInteraction('terminal-panes')}
-        onRatioChange={(nextRatio) => setTabGroupSplitRatio(worktreeId, nodePath, nextRatio)}
-      />
-      <div className="flex min-w-0 min-h-0 overflow-hidden" style={{ flex: `${1 - ratio} 1 0%` }}>
+      {maximizedGroupId === null ? (
+        <ResizeHandle
+          direction={node.direction}
+          onResizeStart={() => recordFeatureInteraction('terminal-panes')}
+          onRatioChange={(nextRatio) => setTabGroupSplitRatio(worktreeId, nodePath, nextRatio)}
+        />
+      ) : null}
+      <div
+        className="flex min-w-0 min-h-0 overflow-hidden"
+        style={{
+          display: secondContainsMaximizedGroup ? 'flex' : 'none',
+          flex: maximizedGroupId === null ? `${1 - ratio} 1 0%` : '1 1 0%'
+        }}
+      >
         <SplitNode
           node={node.second}
           nodePath={nodePath.length > 0 ? `${nodePath}.second` : 'second'}
@@ -247,6 +278,7 @@ function SplitNode({
           focusedGroupId={focusedGroupId}
           isWorktreeActive={isWorktreeActive}
           hasSplitGroups={hasSplitGroups}
+          maximizedGroupId={maximizedGroupId}
           touchesTopEdge={isHorizontal ? touchesTopEdge : false}
           touchesRightEdge={touchesRightEdge}
           touchesLeftEdge={isHorizontal ? false : touchesLeftEdge}
@@ -274,6 +306,10 @@ export default function TabGroupSplitLayout({
   isWorktreeActive: boolean
 }): React.JSX.Element {
   const dragSplit = useTabDragSplit({ worktreeId, enabled: isWorktreeActive })
+  const maximizedGroupId = useValidatedMaximizedTabGroupId(
+    worktreeId,
+    (groupId) => layout.type === 'split' && tabGroupLayoutContainsGroup(layout, groupId)
+  )
   const hasSplits = layout.type === 'split'
 
   return (
@@ -325,6 +361,7 @@ export default function TabGroupSplitLayout({
               focusedGroupId={focusedGroupId}
               isWorktreeActive={isWorktreeActive}
               hasSplitGroups={hasSplits}
+              maximizedGroupId={maximizedGroupId}
               touchesTopEdge={true}
               touchesRightEdge={true}
               touchesLeftEdge={true}

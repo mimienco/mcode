@@ -135,8 +135,10 @@ import { registerWorktreeChangeInvalidator } from './worktree-change-invalidator
 import { isENOENT } from './filesystem-path-containment'
 import {
   invalidateAuthorizedRootsCache,
-  registerWorktreeRootsForRepo
+  registerWorktreeRootsForRepo,
+  resolveRegisteredWorktreePath
 } from './registered-worktree-roots-cache'
+import { getLocalRepoForRegisteredWorktree } from './local-worktree-runtime-options'
 import type { MCodeRuntimeService, RuntimeWorktreeLifecycleEvent } from '../runtime/mcode-runtime'
 import { killAllProcessesForWorktree } from '../runtime/worktree-teardown'
 import { clearProviderPtyState, getLocalPtyProvider, getSshPtyProvider } from './pty'
@@ -927,6 +929,63 @@ function stampAndMergeVisibleDetectedWorktree(
 ) {
   const meta = resolveWorktreeMetaWithDiscoveryBackfill(store, repo, detected.id)
   return mergeWorktree(repo.id, detected, meta, repo.displayName)
+}
+
+async function listVisibleWorktreesForRepo(
+  store: Store,
+  repo: Repo,
+  sshWorktreeMetaIndex: SshWorktreeMetaIndex
+): Promise<Worktree[]> {
+  try {
+    let gitWorktrees: GitWorktreeInfo[]
+    let freshScan = true
+    if (isFolderRepo(repo)) {
+      return listVisibleFolderWorkspaces(store, repo)
+    } else if (repo.connectionId) {
+      const provider = getSshGitProvider(repo.connectionId)
+      if (!provider) {
+        warnOnce(
+          loggedUnavailableSshGitProviders,
+          `${repo.connectionId}:${repo.id}`,
+          `[worktrees] SSH git provider unavailable; skipping worktree list for repo "${repo.displayName}" (${repo.id}) at ${repo.path} on connection ${repo.connectionId}`
+        )
+        return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
+      }
+      loggedUnavailableSshGitProviders.delete(`${repo.connectionId}:${repo.id}`)
+      try {
+        gitWorktrees = await provider.listWorktrees(repo.path)
+      } catch (err) {
+        warnOnce(
+          loggedWorktreeListFailures,
+          `${repo.id}:${repo.path}`,
+          `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
+          err
+        )
+        return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
+      }
+    } else {
+      const scan = await listDetectedGitWorktrees(store, repo)
+      gitWorktrees = scan.gitWorktrees
+      freshScan = scan.fresh
+    }
+    if (freshScan) {
+      rememberLocalWorktreeRoots(store, repo, gitWorktrees)
+      pruneLineageForMissingRepoWorktrees(store, repo, gitWorktrees)
+    }
+    loggedWorktreeListFailures.delete(`${repo.id}:${repo.path}`)
+    return buildDetectedGitWorktrees(store, repo, gitWorktrees)
+      .filter((worktree) => worktree.visible)
+      .map((worktree) => stampAndMergeVisibleDetectedWorktree(store, repo, worktree))
+  } catch (err) {
+    warnOnce(
+      loggedWorktreeListFailures,
+      `${repo.id}:${repo.path}`,
+      `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
+      err
+    )
+    // Why: do NOT seed empty success — it flags the repo registered, blocking access to legit linked worktrees until the cache is invalidated.
+    return []
+  }
 }
 
 function getFolderWorkspaceRootId(repo: Repo): string {
@@ -1887,58 +1946,9 @@ export function registerWorktreeHandlers(
       : new Map()
 
     // Why: each local repo listing can spawn `git worktree list`; cap fan-out so large fleets don't start unbounded subprocesses.
-    const results = await mapWithConcurrency(repos, WORKTREE_LIST_ALL_CONCURRENCY, async (repo) => {
-      try {
-        let gitWorktrees
-        let freshScan = true
-        if (isFolderRepo(repo)) {
-          return listVisibleFolderWorkspaces(store, repo)
-        } else if (repo.connectionId) {
-          const provider = getSshGitProvider(repo.connectionId)
-          if (!provider) {
-            warnOnce(
-              loggedUnavailableSshGitProviders,
-              `${repo.connectionId}:${repo.id}`,
-              `[worktrees] SSH git provider unavailable; skipping worktree list for repo "${repo.displayName}" (${repo.id}) at ${repo.path} on connection ${repo.connectionId}`
-            )
-            return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
-          }
-          loggedUnavailableSshGitProviders.delete(`${repo.connectionId}:${repo.id}`)
-          try {
-            gitWorktrees = await provider.listWorktrees(repo.path)
-          } catch (err) {
-            warnOnce(
-              loggedWorktreeListFailures,
-              `${repo.id}:${repo.path}`,
-              `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
-              err
-            )
-            return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
-          }
-        } else {
-          const scan = await listDetectedGitWorktrees(store, repo)
-          gitWorktrees = scan.gitWorktrees
-          freshScan = scan.fresh
-        }
-        if (freshScan) {
-          rememberLocalWorktreeRoots(store, repo, gitWorktrees)
-          pruneLineageForMissingRepoWorktrees(store, repo, gitWorktrees)
-        }
-        loggedWorktreeListFailures.delete(`${repo.id}:${repo.path}`)
-        return buildDetectedGitWorktrees(store, repo, gitWorktrees)
-          .filter((worktree) => worktree.visible)
-          .map((worktree) => stampAndMergeVisibleDetectedWorktree(store, repo, worktree))
-      } catch (err) {
-        warnOnce(
-          loggedWorktreeListFailures,
-          `${repo.id}:${repo.path}`,
-          `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
-          err
-        )
-        // Why: do NOT seed empty success — it flags the repo registered, blocking access to legit linked worktrees until the cache is invalidated.
-        return []
-      }
-    })
+    const results = await mapWithConcurrency(repos, WORKTREE_LIST_ALL_CONCURRENCY, (repo) =>
+      listVisibleWorktreesForRepo(store, repo, sshWorktreeMetaIndex)
+    )
 
     return results.flat()
   })
@@ -1959,57 +1969,7 @@ export function registerWorktreeHandlers(
     const sshWorktreeMetaIndex = repo.connectionId
       ? createSshWorktreeMetaIndex(Object.entries(store.getAllWorktreeMeta()))
       : new Map()
-
-    try {
-      let gitWorktrees
-      let freshScan = true
-      if (isFolderRepo(repo)) {
-        return listVisibleFolderWorkspaces(store, repo)
-      } else if (repo.connectionId) {
-        const provider = getSshGitProvider(repo.connectionId)
-        if (!provider) {
-          warnOnce(
-            loggedUnavailableSshGitProviders,
-            `${repo.connectionId}:${repo.id}`,
-            `[worktrees] SSH git provider unavailable; skipping worktree list for repo "${repo.displayName}" (${repo.id}) at ${repo.path} on connection ${repo.connectionId}`
-          )
-          return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
-        }
-        loggedUnavailableSshGitProviders.delete(`${repo.connectionId}:${repo.id}`)
-        try {
-          gitWorktrees = await provider.listWorktrees(repo.path)
-        } catch (err) {
-          warnOnce(
-            loggedWorktreeListFailures,
-            `${repo.id}:${repo.path}`,
-            `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
-            err
-          )
-          return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
-        }
-      } else {
-        const scan = await listDetectedGitWorktrees(store, repo)
-        gitWorktrees = scan.gitWorktrees
-        freshScan = scan.fresh
-      }
-      if (freshScan) {
-        rememberLocalWorktreeRoots(store, repo, gitWorktrees)
-        pruneLineageForMissingRepoWorktrees(store, repo, gitWorktrees)
-      }
-      loggedWorktreeListFailures.delete(`${repo.id}:${repo.path}`)
-      return buildDetectedGitWorktrees(store, repo, gitWorktrees)
-        .filter((worktree) => worktree.visible)
-        .map((worktree) => stampAndMergeVisibleDetectedWorktree(store, repo, worktree))
-    } catch (err) {
-      warnOnce(
-        loggedWorktreeListFailures,
-        `${repo.id}:${repo.path}`,
-        `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
-        err
-      )
-      // Why: see worktrees:listAll catch — seeding an empty-success result would poison the auth cache and block linked worktrees.
-      return []
-    }
+    return listVisibleWorktreesForRepo(store, repo, sshWorktreeMetaIndex)
   })
 
   ipcMain.handle(
@@ -3482,10 +3442,20 @@ export function registerWorktreeHandlers(
 
   ipcMain.handle(
     'hooks:createIssueCommandRunner',
-    (_event, args: { repoId: string; worktreePath: string; command: string }) => {
+    async (_event, args: { repoId: string; worktreePath: string; command: string }) => {
       const repo = store.getRepo(args.repoId)
       if (!repo) {
         throw new Error(`Repo not found: ${args.repoId}`)
+      }
+      const resolvedWorktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      // Why: registration proves the path is a known local worktree; the owner check pins it to args.repoId.
+      const owningRepo = getLocalRepoForRegisteredWorktree(
+        store,
+        args.worktreePath,
+        resolvedWorktreePath
+      )
+      if (!owningRepo || owningRepo.id !== repo.id) {
+        throw new Error('Access denied: worktree is not registered to this repository')
       }
 
       return createIssueCommandRunnerScript(
@@ -3632,6 +3602,9 @@ export function registerWorktreeHandlers(
   ipcMain.handle(
     'hooks:writeIssueCommand',
     async (_event, args: { repoId: string; content: string; hostId?: ExecutionHostId }) => {
+      if (typeof args?.content !== 'string') {
+        throw new Error('Invalid issue command content')
+      }
       const repo = getRepoForWorktreeRemoval(store, args.repoId, args.hostId)
       if (!repo || isFolderRepo(repo)) {
         return

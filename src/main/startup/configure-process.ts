@@ -258,9 +258,10 @@ export function installDevParentWatchdog(isDev: boolean): void {
         (error as NodeJS.ErrnoException).code === 'ESRCH'
       ) {
         parentMissing = true
-      } else {
-        throw error
       }
+      // Why: non-ESRCH failures — EPERM means the parent is alive but owned by
+      // another user — must skip this check, not crash the dev app from inside
+      // the interval callback.
     }
 
     if (parentPidChanged || parentMissing) {

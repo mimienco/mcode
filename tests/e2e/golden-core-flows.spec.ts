@@ -5,6 +5,10 @@ import os from 'node:os'
 import path from 'node:path'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/mcode-app'
+import {
+  startCoreFlowPerformanceProbe,
+  type CoreFlowPerformanceProbe
+} from './helpers/core-flow-performance'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
   countVisibleTerminalPanes,
@@ -187,14 +191,24 @@ async function waitForRepoLoaded(page: Page, repoPath: string): Promise<void> {
   await expect
     .poll(
       () =>
-        page.evaluate((targetPath) => {
-          const state = window.__store?.getState()
-          const repo = state?.repos.find((candidate) => candidate.path === targetPath)
-          if (!state || !repo) {
-            return false
-          }
-          return (state.worktreesByRepo[repo.id] ?? []).length > 0
-        }, repoPath),
+        page.evaluate(
+          ({ targetPath, caseInsensitive }) => {
+            const state = window.__store?.getState()
+            const comparablePath = (value: string): string => {
+              const normalized = value.replaceAll('\\', '/').replace(/\/+$/, '')
+              return caseInsensitive ? normalized.toLocaleLowerCase() : normalized
+            }
+            const comparableTargetPath = comparablePath(targetPath)
+            const repo = state?.repos.find(
+              (candidate) => comparablePath(candidate.path) === comparableTargetPath
+            )
+            if (!state || !repo) {
+              return false
+            }
+            return (state.worktreesByRepo[repo.id] ?? []).length > 0
+          },
+          { targetPath: repoPath, caseInsensitive: process.platform === 'win32' }
+        ),
       { timeout: 30_000, message: `repo did not load: ${repoPath}` }
     )
     .toBe(true)
@@ -220,28 +234,39 @@ async function addProjectFromSidebar(
   await addDialog.getByRole('button', { name: /Browse folder/i }).click()
 
   const confirmDialog = page.getByRole('dialog', { name: /^Add Project$/i })
-  const needsConfirmation = await confirmDialog
-    .waitFor({ state: 'visible', timeout: 2_000 })
-    .then(() => true)
-    .catch(() => false)
-  if (needsConfirmation) {
+  const repoLoaded = waitForRepoLoaded(page, repoPath)
+  const nextState = await Promise.race([
+    repoLoaded.then(() => 'loaded' as const),
+    confirmDialog.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'confirm' as const)
+  ])
+  if (nextState === 'confirm') {
     await confirmDialog.getByRole('button', { name: /^Add Project$/ }).click()
   }
 
-  await waitForRepoLoaded(page, repoPath)
+  await repoLoaded
   await expectProjectVisible(page, repoPath)
 }
 
-async function createWorkspace(page: Page, workspaceName: string): Promise<void> {
-  await page.getByRole('button', { name: 'New workspace', exact: true }).click()
+async function createWorkspace(
+  page: Page,
+  workspaceName: string,
+  measure: CoreFlowPerformanceProbe['measure']
+): Promise<void> {
   const dialog = page.getByRole('dialog', { name: /Create (Workspace|Worktree)/i })
-  await expect(dialog).toBeVisible()
-  const nameInput = dialog.getByPlaceholder(/Type a name/i)
-  await expect(nameInput).toBeVisible()
-  await nameInput.fill(workspaceName)
-  await dialog.getByRole('button', { name: /Create (Workspace|Worktree)/i }).click()
-  await expect(dialog).toBeHidden({ timeout: 20_000 })
-  await expectActiveWorkspaceVisible(page, workspaceName)
+  await measure('workspace-open-dialog', async () => {
+    await page.getByRole('button', { name: 'New workspace', exact: true }).click()
+    await expect(dialog).toBeVisible()
+  })
+  await measure('workspace-enter-name', async () => {
+    const nameInput = dialog.getByPlaceholder(/Type a name/i)
+    await expect(nameInput).toBeVisible()
+    await nameInput.fill(workspaceName)
+  })
+  await measure('workspace-submit', async () => {
+    await dialog.getByRole('button', { name: /Create (Workspace|Worktree)/i }).click()
+    await expect(dialog).toBeHidden({ timeout: 20_000 })
+    await expectActiveWorkspaceVisible(page, workspaceName)
+  })
 }
 
 async function expectActiveWorkspaceBelongsToRepo(
@@ -254,12 +279,19 @@ async function expectActiveWorkspaceBelongsToRepo(
     .poll(
       () =>
         page.evaluate(
-          ({ targetRepoPath, targetWorkspaceName }) => {
+          ({ targetRepoPath, targetWorkspaceName, caseInsensitive }) => {
             const state = window.__store?.getState()
             if (!state?.activeWorktreeId) {
               return null
             }
-            const repo = state.repos.find((candidate) => candidate.path === targetRepoPath)
+            const comparablePath = (value: string): string => {
+              const normalized = value.replaceAll('\\', '/').replace(/\/+$/, '')
+              return caseInsensitive ? normalized.toLocaleLowerCase() : normalized
+            }
+            const comparableTargetRepoPath = comparablePath(targetRepoPath)
+            const repo = state.repos.find(
+              (candidate) => comparablePath(candidate.path) === comparableTargetRepoPath
+            )
             if (!repo) {
               return null
             }
@@ -268,7 +300,11 @@ async function expectActiveWorkspaceBelongsToRepo(
             )
             return activeWorktree?.displayName === targetWorkspaceName
           },
-          { targetRepoPath: repoPath, targetWorkspaceName: workspaceName }
+          {
+            targetRepoPath: repoPath,
+            targetWorkspaceName: workspaceName,
+            caseInsensitive: process.platform === 'win32'
+          }
         ),
       { timeout: 20_000, message: 'active workspace did not belong to the newly added project' }
     )
@@ -405,21 +441,40 @@ test.describe('Existing-user golden core flow', () => {
   test('adds project, creates workspace, opens a terminal tab, and splits a pane', async ({
     electronApp,
     mcodePage
-  }) => {
-    await waitForSessionReady(mcodePage)
-    await waitForActiveWorktree(mcodePage)
-    const repoPath = await createGitRepo('mcode-e2e-golden-existing-', 'golden-existing-project')
+  }, testInfo) => {
+    const performanceProbe = await startCoreFlowPerformanceProbe(electronApp, mcodePage)
+    try {
+      await performanceProbe.measure('session-ready', async () => {
+        await waitForSessionReady(mcodePage)
+        await waitForActiveWorktree(mcodePage)
+      })
+      const repoPath = await createGitRepo('mcode-e2e-golden-existing-', 'golden-existing-project')
 
-    await addProjectFromSidebar(mcodePage, electronApp, repoPath)
-    const workspaceName = `golden-existing-${Date.now()}`
-    await createWorkspace(mcodePage, workspaceName)
-    await expectActiveWorkspaceBelongsToRepo(mcodePage, workspaceName, repoPath)
-    await ensureTerminalVisible(mcodePage)
-    await expectTerminalSurface(mcodePage)
-    await waitForTerminalPaneManager(mcodePage)
+      await performanceProbe.measure('add-project', () =>
+        addProjectFromSidebar(mcodePage, electronApp, repoPath)
+      )
+      const workspaceName = `golden-existing-${Date.now()}`
+      await performanceProbe.measure('create-workspace', async () => {
+        await createWorkspace(mcodePage, workspaceName, performanceProbe.measure)
+        await performanceProbe.measure('workspace-association-ready', () =>
+          expectActiveWorkspaceBelongsToRepo(mcodePage, workspaceName, repoPath)
+        )
+      })
+      await performanceProbe.measure('terminal-ready', async () => {
+        await ensureTerminalVisible(mcodePage)
+        await expectTerminalSurface(mcodePage)
+        await waitForTerminalPaneManager(mcodePage)
+      })
 
-    await createTerminalTabThroughMenu(mcodePage)
-    await splitTerminalPaneAndAssertIdentity(mcodePage)
+      await performanceProbe.measure('open-terminal-tab', () =>
+        createTerminalTabThroughMenu(mcodePage)
+      )
+      await performanceProbe.measure('split-terminal-pane', () =>
+        splitTerminalPaneAndAssertIdentity(mcodePage)
+      )
+    } finally {
+      await performanceProbe.stop(testInfo)
+    }
   })
 })
 

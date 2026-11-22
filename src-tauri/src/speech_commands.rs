@@ -215,6 +215,7 @@ impl AudioRing {
 }
 
 /// Handle to a session's recognizer thread.
+#[derive(Clone)]
 struct DictationHandle {
     ring: Arc<AudioRing>,
     /// Set on stop and on fatal recognizer errors; feeds are rejected after.
@@ -222,6 +223,29 @@ struct DictationHandle {
     /// The recognizer thread finished (final text is available).
     finished: Arc<AtomicBool>,
     final_text: Arc<Mutex<String>>,
+}
+
+trait RecognizerInput {
+    fn accept_waveform(&mut self, sample_rate: i32, samples: &[f32]);
+    fn input_finished(&mut self);
+}
+
+impl RecognizerInput for mcode_voice::FfiOnlineStream {
+    fn accept_waveform(&mut self, sample_rate: i32, samples: &[f32]) {
+        mcode_voice::FfiOnlineStream::accept_waveform(self, sample_rate, samples);
+    }
+
+    fn input_finished(&mut self) {
+        mcode_voice::FfiOnlineStream::input_finished(self);
+    }
+}
+
+fn finish_recognizer_input(ring: &AudioRing, stream: &mut impl RecognizerInput) {
+    let (samples, sample_rate) = ring.drain();
+    if !samples.is_empty() {
+        stream.accept_waveform(sample_rate, &samples);
+    }
+    stream.input_finished();
 }
 
 /// Transcript sink bound to a Tauri app handle: forwards session transcript
@@ -448,8 +472,8 @@ fn spawn_recognizer_thread(
                 }
             }
 
-            // Flush: end of input, drain the decoder, publish the final text.
-            stream.input_finished();
+            // Stop closes admission before draining the last accepted audio.
+            finish_recognizer_input(&ring, &mut stream);
             stream.decode();
             let final_text = stream.result_text().unwrap_or_default();
             *final_slot.lock().expect("final text lock") = final_text;
@@ -672,7 +696,7 @@ pub(crate) fn ui_speech_feed_audio(
     samples: Vec<f32>,
     sample_rate: i32,
 ) -> Result<(), String> {
-    let handle = {
+    {
         let mut dictations = state.dictations.lock().expect("dictations lock");
         if let Some(existing) = dictations.get(&session_id)
             && existing.dead.load(Ordering::SeqCst)
@@ -689,13 +713,8 @@ pub(crate) fn ui_speech_feed_audio(
             ));
         }
 
-        match dictations.get(&session_id) {
-            Some(existing) => DictationHandle {
-                ring: Arc::clone(&existing.ring),
-                dead: Arc::clone(&existing.dead),
-                finished: Arc::clone(&existing.finished),
-                final_text: Arc::clone(&existing.final_text),
-            },
+        let handle = match dictations.get(&session_id) {
+            Some(existing) => existing.clone(),
             None => {
                 let handle = DictationHandle {
                     ring: Arc::new(AudioRing::new()),
@@ -710,20 +729,13 @@ pub(crate) fn ui_speech_feed_audio(
                 let model_dir =
                     mcode_voice::session::resolve_model_dir(&state.model_dir(&model_id)?);
                 spawn_recognizer_thread(app, session_id.clone(), model_dir, &handle);
-                dictations.insert(
-                    session_id.clone(),
-                    DictationHandle {
-                        ring: Arc::clone(&handle.ring),
-                        dead: Arc::clone(&handle.dead),
-                        finished: Arc::clone(&handle.finished),
-                        final_text: Arc::clone(&handle.final_text),
-                    },
-                );
+                dictations.insert(session_id.clone(), handle.clone());
                 handle
             }
-        }
-    };
-    handle.ring.push(&samples, sample_rate);
+        };
+        // Queue admission and stop share this lock, including the actual push.
+        handle.ring.push(&samples, sample_rate);
+    }
     Ok(())
 }
 
@@ -735,30 +747,163 @@ pub(crate) fn ui_speech_stop_dictation(
     state: tauri::State<'_, VoiceState>,
     session_id: String,
 ) -> Result<(), String> {
-    let handle = state
-        .dictations
-        .lock()
-        .expect("dictations lock")
-        .remove(&session_id);
+    stop_dictation(&state, &session_id)
+}
 
-    let final_text = if let Some(handle) = handle {
+fn stop_dictation(state: &VoiceState, session_id: &str) -> Result<(), String> {
+    let handle = {
+        let dictations = state.dictations.lock().expect("dictations lock");
+        let Some(handle) = dictations.get(session_id) else {
+            return if state.sessions.stop(session_id, "") {
+                Ok(())
+            } else {
+                Err(format!("unknown dictation session: {session_id}"))
+            };
+        };
+        // Keep the stopped handle visible so late feeds cannot start a new recognizer.
         handle.dead.store(true, Ordering::SeqCst);
-        let deadline = std::time::Instant::now() + STOP_FLUSH_TIMEOUT;
-        while !handle.finished.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
-            std::thread::sleep(STOP_FLUSH_POLL);
-        }
-        if handle.finished.load(Ordering::SeqCst) {
-            handle.final_text.lock().expect("final text lock").clone()
-        } else {
-            String::new()
-        }
+        handle.clone()
+    };
+    let deadline = std::time::Instant::now() + STOP_FLUSH_TIMEOUT;
+    while !handle.finished.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+        std::thread::sleep(STOP_FLUSH_POLL);
+    }
+    let final_text = if handle.finished.load(Ordering::SeqCst) {
+        handle.final_text.lock().expect("final text lock").clone()
     } else {
         String::new()
     };
 
-    if state.sessions.stop(&session_id, &final_text) {
+    let mut dictations = state.dictations.lock().expect("dictations lock");
+    let stopped = state.sessions.stop(session_id, &final_text);
+    dictations.remove(session_id);
+    if stopped {
         Ok(())
     } else {
         Err(format!("unknown dictation session: {session_id}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, PartialEq)]
+    enum InputEvent {
+        Audio(i32, Vec<f32>),
+        Finished,
+    }
+
+    #[derive(Default)]
+    struct RecordingInput(Vec<InputEvent>);
+
+    impl RecognizerInput for RecordingInput {
+        fn accept_waveform(&mut self, sample_rate: i32, samples: &[f32]) {
+            self.0
+                .push(InputEvent::Audio(sample_rate, samples.to_vec()));
+        }
+
+        fn input_finished(&mut self) {
+            self.0.push(InputEvent::Finished);
+        }
+    }
+
+    #[test]
+    fn stop_before_recognizer_start_consumes_all_queued_audio_before_finishing() {
+        let ring = AudioRing::new();
+        ring.push(&[0.25, -0.5], 16_000);
+        ring.push(&[0.75], 16_000);
+        let mut input = RecordingInput::default();
+
+        finish_recognizer_input(&ring, &mut input);
+
+        assert_eq!(
+            input.0,
+            vec![
+                InputEvent::Audio(16_000, vec![0.25, -0.5, 0.75]),
+                InputEvent::Finished,
+            ]
+        );
+        assert!(ring.drain().0.is_empty());
+    }
+
+    #[test]
+    fn stop_consumes_only_audio_accepted_since_the_last_decode() {
+        let ring = AudioRing::new();
+        ring.push(&[0.1], 48_000);
+        assert_eq!(ring.drain(), (vec![0.1], 48_000));
+        ring.push(&[0.2, 0.3], 48_000);
+        let mut input = RecordingInput::default();
+
+        finish_recognizer_input(&ring, &mut input);
+
+        assert_eq!(
+            input.0,
+            vec![
+                InputEvent::Audio(48_000, vec![0.2, 0.3]),
+                InputEvent::Finished,
+            ]
+        );
+    }
+
+    #[test]
+    fn stop_without_pending_audio_finishes_without_feeding_an_empty_waveform() {
+        let mut input = RecordingInput::default();
+        finish_recognizer_input(&AudioRing::new(), &mut input);
+        assert_eq!(input.0, vec![InputEvent::Finished]);
+    }
+
+    #[test]
+    fn stop_keeps_the_dead_handle_until_the_final_flush_completes() {
+        let models = tempfile::tempdir().unwrap();
+        let state = Arc::new(VoiceState::new(models.path().to_path_buf()));
+        let (events, received) = std::sync::mpsc::channel();
+        state
+            .sessions
+            .start(
+                "desktop",
+                "stop-test",
+                "fixture",
+                models.path(),
+                Box::new(move |event| {
+                    events.send(event).unwrap();
+                }),
+            )
+            .unwrap();
+        let handle = DictationHandle {
+            ring: Arc::new(AudioRing::new()),
+            dead: Arc::new(AtomicBool::new(false)),
+            finished: Arc::new(AtomicBool::new(false)),
+            final_text: Arc::new(Mutex::new(String::new())),
+        };
+        handle.ring.push(&[0.5], 16_000);
+        state
+            .dictations
+            .lock()
+            .unwrap()
+            .insert("stop-test".into(), handle.clone());
+        let stop_state = Arc::clone(&state);
+        let stopping = std::thread::spawn(move || stop_dictation(&stop_state, "stop-test"));
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !handle.dead.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(handle.dead.load(Ordering::SeqCst));
+        assert!(state.dictations.lock().unwrap().contains_key("stop-test"));
+        let mut input = RecordingInput::default();
+        finish_recognizer_input(&handle.ring, &mut input);
+        assert_eq!(
+            input.0,
+            vec![InputEvent::Audio(16_000, vec![0.5]), InputEvent::Finished]
+        );
+        *handle.final_text.lock().unwrap() = "retained final audio".into();
+        handle.finished.store(true, Ordering::SeqCst);
+
+        assert_eq!(stopping.join().unwrap(), Ok(()));
+        assert!(!state.dictations.lock().unwrap().contains_key("stop-test"));
+        assert!(
+            matches!(received.recv_timeout(Duration::from_secs(1)).unwrap(),
+            TranscriptEvent::Final { text, .. } if text == "retained final audio")
+        );
     }
 }

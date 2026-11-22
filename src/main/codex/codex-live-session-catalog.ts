@@ -86,8 +86,23 @@ export function catalogSupportsCodexRunProfile(
 export function prepareCodexLiveSessionUpdate(args: {
   catalog: CodexLiveSessionCatalog
   update: CodexLiveSessionOptionsUpdate
-  current?: { model: string; effort?: string } | null
-}): { currentModel: string; effort?: string; runProfileUpdate: Record<string, unknown> } | null {
+  current?: {
+    model: string
+    effort?: string
+    permission?: AgentPermissionPreset
+    interactionMode?: AgentInteractionMode
+  } | null
+}): {
+  currentModel: string
+  effort?: string
+  runProfileUpdate: Record<string, unknown>
+  accepted: {
+    model: string
+    effort?: string
+    permission?: AgentPermissionPreset
+    interactionMode?: AgentInteractionMode
+  }
+} | null {
   if (!catalogSupportsCodexRunProfile(args.catalog, args.update)) {
     return null
   }
@@ -121,5 +136,29 @@ export function prepareCodexLiveSessionUpdate(args: {
   if ((args.update.permission || args.update.interactionMode) && !runProfileUpdate) {
     return null
   }
-  return { currentModel, ...(effort ? { effort } : {}), runProfileUpdate: runProfileUpdate ?? {} }
+  const collaborationPreset = args.update.interactionMode
+    ? args.catalog.collaborationModes.find(
+        (candidate) => candidate.interactionMode === args.update.interactionMode
+      )
+    : undefined
+  const acceptedEffort = collaborationPreset?.reasoningEffort ?? effort ?? args.current?.effort
+  return {
+    currentModel,
+    ...(effort ? { effort } : {}),
+    runProfileUpdate: runProfileUpdate ?? {},
+    accepted: {
+      model: collaborationPreset?.model ?? currentModel,
+      ...(acceptedEffort ? { effort: acceptedEffort } : {}),
+      ...(args.update.permission
+        ? { permission: args.update.permission }
+        : args.current?.permission
+          ? { permission: args.current.permission }
+          : {}),
+      ...(args.update.interactionMode
+        ? { interactionMode: args.update.interactionMode }
+        : args.current?.interactionMode
+          ? { interactionMode: args.current.interactionMode }
+          : {})
+    }
+  }
 }

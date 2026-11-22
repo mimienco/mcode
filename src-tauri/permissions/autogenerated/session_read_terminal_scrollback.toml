@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-session-read-terminal-scrollback"
+description = "Enables the session_read_terminal_scrollback command without any pre-configured scope."
+commands.allow = ["session_read_terminal_scrollback"]
+
+[[permission]]
+identifier = "deny-session-read-terminal-scrollback"
+description = "Denies the session_read_terminal_scrollback command without any pre-configured scope."
+commands.deny = ["session_read_terminal_scrollback"]

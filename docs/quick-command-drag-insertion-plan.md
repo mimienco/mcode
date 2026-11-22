@@ -2,21 +2,21 @@
 
 ## Goal
 
-Let developers reuse saved terminal commands and agent prompts without retyping them. A saved item can be dragged from the existing Quick Commands menu into either a terminal or the native chat composer. Dropping inserts text only: it never executes a shell command or sends a chat message.
+Let developers reuse saved terminal commands and agent prompts without retyping them. A saved item can be dragged from the **Snippets** menu into either a terminal or the native chat composer. Dropping inserts text only: it never executes a shell command or sends a chat message.
 
 ## Product shape
 
-- Keep **Quick Commands** as the single saved-item library and persistence model.
-- Keep the existing project/global scopes, local/remote host ownership, search, edit, copy, and delete flows.
-- Keep global commands available in folder workspaces and floating terminals even when no repository scope exists.
-- Make every command row visibly draggable and expose the same drag payload to terminal and native-chat surfaces.
-- Make result activation insert by default for keyboard, touch, and pointer users; keep **Run** as a separate explicit row action.
+- Keep **Command** and its terminal-specific persistence unchanged.
+- Store **Snippets** separately as generic `{ id, name, text }` cards with no Terminal/Agent type, Append Enter setting, repository scope, or execution behavior.
+- Show **Snippets** in project terminals, project chats, and no-project chats/terminals.
+- Make every snippet card visibly draggable and expose the same plain-text drag payload to terminal and native-chat surfaces.
+- Keep Copy as the accessible non-drag alternative and Edit/Delete as quiet card actions.
 - Retain Copy as a secondary action for reuse outside MCode.
 
 ## Structure
 
 ```text
-Saved TerminalQuickCommand
+SavedSnippet { id, name, text }
         |
         v
 quick-command-drag-data.ts
@@ -27,8 +27,8 @@ quick-command-drag-data.ts
         +----------------------+
         |                      |
         v                      v
-TabBarQuickCommandItem    TerminalQuickCommandsSubmenu
-  draggable row             draggable row
+Snippets launcher          TerminalQuickCommandsSubmenu
+  insert/drag rows           draggable row
         |
         +----------------------+
                     |
@@ -62,6 +62,6 @@ NativeChatComposerField   TerminalPane
 ## Non-goals
 
 - No automatic execution on drop.
-- No second persistence store or migration of existing quick commands.
+- No migration or reinterpretation of existing quick commands.
 - No cloud sync changes, new remote protocol fields, or mobile drag-and-drop in this slice.
 - No arbitrary external text-to-terminal drop, which would weaken the explicit trust boundary.

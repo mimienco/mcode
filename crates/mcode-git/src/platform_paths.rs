@@ -4,7 +4,7 @@
 //! Kept as pure functions so future PTY/SSH layers can reuse them without
 //! touching the git process runner.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 /// Windows long-path limit (`MAX_PATH`).
 const MAX_PATH: usize = 260;
@@ -15,31 +15,23 @@ const EXTENDED_PREFIX: &str = r"\\?\";
 /// form. `C:\foo` and `c:\foo` refer to the same location; git output and our
 /// own comparisons should agree on one spelling.
 pub fn normalize_drive_letter(path: &Path) -> PathBuf {
-    match path.components().next() {
-        Some(Component::Prefix(prefix)) => {
-            // Prefix kinds look like `C:` or `\\?\C:`; uppercase the drive
-            // letter and keep whatever verbatim prefix was present.
-            let kind_text = prefix.as_os_str().to_string_lossy().into_owned();
-            if let Some(stem) = kind_text.strip_prefix(EXTENDED_PREFIX) {
-                if is_drive_stem(stem) {
-                    let mut normalized = String::from(EXTENDED_PREFIX);
-                    normalized.push_str(&stem[..1].to_ascii_uppercase());
-                    normalized.push(':');
-                    let mut rebuilt = PathBuf::from(normalized);
-                    rebuilt.extend(path.components().skip(1));
-                    return rebuilt;
-                }
-            } else if is_drive_stem(&kind_text) {
-                let mut normalized = String::new();
-                normalized.push_str(&kind_text[..1].to_ascii_uppercase());
-                normalized.push(':');
-                let mut rebuilt = PathBuf::from(normalized);
-                rebuilt.extend(path.components().skip(1));
-                return rebuilt;
-            }
-            path.to_path_buf()
-        }
-        _ => path.to_path_buf(),
+    let Some(text) = path.to_str() else {
+        return path.to_path_buf();
+    };
+    let offset = if text.starts_with(EXTENDED_PREFIX) {
+        EXTENDED_PREFIX.len()
+    } else {
+        0
+    };
+    if text.get(offset..offset + 2).is_some_and(is_drive_stem) {
+        let mut normalized = text.to_owned();
+        normalized.replace_range(
+            offset..offset + 1,
+            &text[offset..offset + 1].to_ascii_uppercase(),
+        );
+        PathBuf::from(normalized)
+    } else {
+        path.to_path_buf()
     }
 }
 
@@ -53,7 +45,7 @@ fn is_drive_stem(stem: &str) -> bool {
 /// needs the `\\?\UNC\` form, which callers must opt into explicitly).
 pub fn maybe_long_path(path: &Path) -> PathBuf {
     let text = path.as_os_str().to_string_lossy();
-    if text.starts_with(EXTENDED_PREFIX) || text.len() < MAX_PATH {
+    if text.starts_with(EXTENDED_PREFIX) || !needs_long_path(path) {
         return path.to_path_buf();
     }
     if text.starts_with(r"\\") {
@@ -61,13 +53,24 @@ pub fn maybe_long_path(path: &Path) -> PathBuf {
         let rest = text.trim_start_matches(r"\\");
         return PathBuf::from(format!(r"\\?\UNC\{rest}"));
     }
-    PathBuf::from(format!("{EXTENDED_PREFIX}{text}"))
+    if is_absolute_drive_path(&text) {
+        PathBuf::from(format!("{EXTENDED_PREFIX}{}", text.replace('/', "\\")))
+    } else {
+        path.to_path_buf()
+    }
 }
 
 /// True when the path would exceed the Win32 `MAX_PATH` limit without the
 /// extended-length prefix.
 pub fn needs_long_path(path: &Path) -> bool {
-    path.as_os_str().len() >= MAX_PATH
+    let text = path.to_string_lossy();
+    (is_absolute_drive_path(&text) || text.starts_with(r"\\"))
+        && !text.starts_with(EXTENDED_PREFIX)
+        && text.encode_utf16().count() >= MAX_PATH
+}
+
+fn is_absolute_drive_path(text: &str) -> bool {
+    text.get(..2).is_some_and(is_drive_stem) && matches!(text.as_bytes().get(2), Some(b'/' | b'\\'))
 }
 
 /// A translated WSL path: the Windows original plus its Linux-side form.
@@ -87,34 +90,19 @@ pub fn windows_to_wsl(path: &Path) -> Option<WslPath> {
             linux: text.into_owned(),
         });
     }
-    let (stem, rest) = match path.components().next() {
-        Some(Component::Prefix(prefix)) => {
-            let kind = prefix.as_os_str().to_string_lossy().into_owned();
-            let stem = kind.trim_start_matches(EXTENDED_PREFIX).to_string();
-            (stem, path.components().skip(1))
-        }
-        _ => return None,
-    };
-    let bytes = stem.as_bytes();
-    if bytes.len() != 2 || bytes[1] != b':' || !bytes[0].is_ascii_alphabetic() {
+    let text = text.strip_prefix(EXTENDED_PREFIX).unwrap_or(&text);
+    if !is_absolute_drive_path(text) {
         return None;
     }
-    let drive = bytes[0].to_ascii_lowercase() as char;
-    let mut linux = String::from("/mnt/");
-    linux.push(drive);
-    let mut windows_rest = PathBuf::from(format!("{stem}\\"));
-    for component in rest {
-        let piece = component.as_os_str().to_string_lossy();
-        if piece == r"\" || piece.is_empty() {
-            continue;
-        }
-        linux.push('/');
-        // Components may still contain backslashes in odd inputs; normalize.
-        linux.push_str(&piece.replace('\\', "/"));
-        windows_rest.push(piece.as_ref());
-    }
+    let drive = text.as_bytes()[0].to_ascii_lowercase() as char;
+    let rest = text[3..].replace('\\', "/");
+    let linux = if rest.is_empty() {
+        format!("/mnt/{drive}")
+    } else {
+        format!("/mnt/{drive}/{rest}")
+    };
     Some(WslPath {
-        windows: windows_rest,
+        windows: PathBuf::from(text.replace('/', "\\")),
         linux,
     })
 }
@@ -157,6 +145,20 @@ pub fn to_wsl_text(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_path_rules_leave_posix_and_relative_names_unchanged() {
+        for text in [
+            format!("/repo/{}", "x".repeat(300)),
+            format!("relative/{}", "x".repeat(300)),
+        ] {
+            assert_eq!(maybe_long_path(Path::new(&text)), PathBuf::from(&text));
+            assert!(!needs_long_path(Path::new(&text)));
+        }
+        let short_unicode = format!(r"C:\{}", "\u{e9}".repeat(150));
+        assert!(!needs_long_path(Path::new(&short_unicode)));
+        assert!(windows_to_wsl(Path::new("C:relative")).is_none());
+    }
 
     #[test]
     fn normalizes_drive_letter_case() {

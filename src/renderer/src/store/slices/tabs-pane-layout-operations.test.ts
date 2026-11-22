@@ -110,6 +110,61 @@ describe('TabsSlice', () => {
     })
   })
 
+  describe('createEmptyGridGroups', () => {
+    it('allocates six reserved groups as an equal three-by-two grid in one update', () => {
+      const sourceGroupId = store.getState().ensureWorktreeRootGroup(WT)
+      const agents = ['claude', 'codex', 'grok', 'opencode', 'pi', 'omp'] as const
+      const subscriber = vi.fn()
+      const unsubscribe = store.subscribe(subscriber)
+
+      const groupIds = store.getState().createEmptyGridGroups(WT, sourceGroupId, agents)
+
+      expect(groupIds).toHaveLength(6)
+      expect(groupIds?.[0]).toBe(sourceGroupId)
+      expect(store.getState().groupsByWorktree[WT]).toHaveLength(6)
+      expect(subscriber).toHaveBeenCalledOnce()
+      expect(store.getState().layoutByWorktree[WT]).toEqual({
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 1 / 3,
+        first: {
+          type: 'split',
+          direction: 'vertical',
+          ratio: 1 / 2,
+          first: { type: 'leaf', groupId: groupIds?.[0] },
+          second: { type: 'leaf', groupId: groupIds?.[1] }
+        },
+        second: {
+          type: 'split',
+          direction: 'horizontal',
+          ratio: 1 / 2,
+          first: {
+            type: 'split',
+            direction: 'vertical',
+            ratio: 1 / 2,
+            first: { type: 'leaf', groupId: groupIds?.[2] },
+            second: { type: 'leaf', groupId: groupIds?.[3] }
+          },
+          second: {
+            type: 'split',
+            direction: 'vertical',
+            ratio: 1 / 2,
+            first: { type: 'leaf', groupId: groupIds?.[4] },
+            second: { type: 'leaf', groupId: groupIds?.[5] }
+          }
+        }
+      })
+      expect(
+        groupIds?.map((groupId) => store.getState().pendingWorkspaceLaunchAgentByGroupId[groupId])
+      ).toEqual(agents)
+      store.getState().clearPendingWorkspaceLaunchGroups(groupIds?.slice(0, 2) ?? [])
+      expect(store.getState().pendingWorkspaceLaunchAgentByGroupId[groupIds?.[0] ?? '']).toBeUndefined()
+      expect(store.getState().pendingWorkspaceLaunchAgentByGroupId[groupIds?.[1] ?? '']).toBeUndefined()
+      expect(store.getState().pendingWorkspaceLaunchAgentByGroupId[groupIds?.[2] ?? '']).toBe('grok')
+      unsubscribe()
+    })
+  })
+
   describe('move/copy/merge group operations', () => {
     it('moves a unified tab into another group', () => {
       const tab = store.getState().createUnifiedTab(WT, 'editor', {

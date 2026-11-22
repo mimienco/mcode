@@ -6,6 +6,7 @@ import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import {
   drainRolledBackPtyShutdownData,
   ensurePtyDispatcher,
+  ensurePtyDispatcherReady,
   isPtyDataHandlerShutdownPending,
   ptyDataHandlers,
   ptyExitHandlers,
@@ -188,12 +189,13 @@ export function createTauriPtyTransport(
   return {
     async connect(options) {
       storedCallbacks = options.callbacks
-      ensurePtyDispatcher()
       if (destroyed) {
         return
       }
 
       try {
+        await ensurePtyDispatcherReady()
+        if (destroyed) return
         const spawned = await client.spawn({
           cols: options.cols ?? 80,
           rows: options.rows ?? 24,

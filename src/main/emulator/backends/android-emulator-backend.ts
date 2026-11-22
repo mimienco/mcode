@@ -44,6 +44,7 @@ import {
   type StartAndroidStream
 } from '../android/android-stream-session-starter'
 import { AndroidStreamController } from '../android/android-stream-controller'
+import { knownScrcpyForwardPort } from '../android/scrcpy-stream-session'
 import { scrcpyVideoRegistry } from '../scrcpy-video-registry'
 import type { EmulatorGesturePoint } from '../emulator-gesture-sender'
 
@@ -174,7 +175,7 @@ export class AndroidEmulatorBackend implements EmulatorBackend {
     deviceId: string,
     options: { helperPid?: number; includeOrphaned?: boolean } = {}
   ): Promise<void> {
-    this.streams.stop(deviceId)
+    await this.streams.stop(deviceId)
     // Reap a port-forward leaked by an unclean exit: the in-memory handle is gone
     // after a crash, so streams.stop can't remove it. Best-effort, serial-scoped,
     // and must never throw on this teardown path.
@@ -187,14 +188,35 @@ export class AndroidEmulatorBackend implements EmulatorBackend {
       if (!serial) {
         return
       }
-      // `-s <serial>` scopes --remove-all to this device's adb forwards only.
+      const port = knownScrcpyForwardPort(serial)
+      if (port !== null) {
+        // Reap only the scrcpy tunnel this app created; --remove-all would
+        // also tear down forwards registered by the user or other tooling.
+        await this.runner(
+          sdk.adb,
+          ['-s', serial, 'forward', '--remove', `tcp:${port}`]
+        ).catch(() => {})
+        return
+      }
+      // No recorded forward (e.g. after an app restart): --remove-all is the
+      // only remaining way to reap a leaked tunnel.
       await this.runner(sdk.adb, ['-s', serial, 'forward', '--remove-all']).catch(() => {})
     }
   }
 
   async shutdownDevice(deviceId: string): Promise<void> {
     const sdk = this.requireSdk()
-    const serial = await this.resolveDeviceId(deviceId)
+    const serial = await this.resolveDeviceId(deviceId).catch((error) => {
+      // Idempotent like iOS shutdown: an AVD that already exited/crashed is
+      // already shut down, so treat not-found as success.
+      if (error instanceof EmulatorError && error.code === 'emulator_device_not_found') {
+        return null
+      }
+      throw error
+    })
+    if (serial === null) {
+      return
+    }
     this.screenSizes.delete(serial)
     ensureAdbOk(await this.runner(sdk.adb, emuKillArgs(serial)), 'adb emulator shutdown')
   }

@@ -5,6 +5,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  clearPendingWorkspaceLaunchGroupsMock,
+  createEmptyGridGroupsMock,
   launchMock,
   openSettingsPageMock,
   openSettingsTargetMock,
@@ -12,6 +14,8 @@ const {
   useTemplateMock,
   detectedIdsBox
 } = vi.hoisted(() => ({
+  clearPendingWorkspaceLaunchGroupsMock: vi.fn(),
+  createEmptyGridGroupsMock: vi.fn(),
   launchMock: vi.fn(),
   openSettingsPageMock: vi.fn(),
   openSettingsTargetMock: vi.fn(),
@@ -26,6 +30,8 @@ vi.mock('@/store', () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     selector({
       settings: { defaultTuiAgent: 'claude', disabledTuiAgents: [] },
+      clearPendingWorkspaceLaunchGroups: clearPendingWorkspaceLaunchGroupsMock,
+      createEmptyGridGroups: createEmptyGridGroupsMock,
       openSettingsPage: openSettingsPageMock,
       openSettingsTarget: openSettingsTargetMock
     })
@@ -106,8 +112,38 @@ function launchedAgents(): string[] {
   })
 }
 
+function launchedGroupIds(): string[] {
+  return launchMock.mock.calls.map((call) => {
+    const args: LaunchAgentArgs = call[0]
+    return args.groupId
+  })
+}
+
+let queuedAnimationFrames: FrameRequestCallback[] = []
+
+async function flushNextAnimationFrame(): Promise<void> {
+  const callback = queuedAnimationFrames.shift()
+  if (!callback) {
+    throw new Error('expected a queued animation frame')
+  }
+  callback(0)
+  await Promise.resolve()
+}
+
 beforeEach(() => {
   launchCounter = 0
+  queuedAnimationFrames = []
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    queuedAnimationFrames.push(callback)
+    return queuedAnimationFrames.length
+  })
+  clearPendingWorkspaceLaunchGroupsMock.mockReset()
+  createEmptyGridGroupsMock.mockReset().mockImplementation(
+    (_worktreeId: string, sourceGroupId: string, agents: string[]) => [
+      sourceGroupId,
+      ...Array.from({ length: agents.length - 1 }, (_, index) => `group-${index + 2}`)
+    ]
+  )
   launchMock.mockReset().mockImplementation(() => {
     launchCounter += 1
     return { tabId: `tab-${launchCounter}` }
@@ -122,7 +158,10 @@ beforeEach(() => {
   })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('TabGroupEmptyState', () => {
   it('renders every detected agent unselected and disables the workspace action', () => {
@@ -147,10 +186,15 @@ describe('TabGroupEmptyState', () => {
     expect(useTemplateMock).not.toHaveBeenCalled()
   })
 
-  it('launches a template directly from its explicit action', async () => {
+  it('paints template feedback before opening its panes', async () => {
     renderEmptyState()
 
     fireEvent.click(required('[data-use-workspace-template="review"]'))
+
+    expect(useTemplateMock).not.toHaveBeenCalled()
+    await flushNextAnimationFrame()
+    expect(useTemplateMock).not.toHaveBeenCalled()
+    await flushNextAnimationFrame()
 
     await vi.waitFor(() => expect(useTemplateMock).toHaveBeenCalledWith('review', 'claude'))
     expect(required('[data-workspace-template="review"]')).toHaveAttribute('aria-pressed', 'true')
@@ -164,7 +208,7 @@ describe('TabGroupEmptyState', () => {
     expect(launchMock).not.toHaveBeenCalled()
   })
 
-  it('starts every selected agent session and focuses the last created tab', () => {
+  it('paints launch feedback before opening selected sessions in a balanced pane grid', async () => {
     const { activated } = renderEmptyState()
 
     fireEvent.click(required('[data-agent-count-increment="claude"]'))
@@ -175,10 +219,27 @@ describe('TabGroupEmptyState', () => {
 
     fireEvent.click(required('[data-start-workspace]'))
 
-    expect(launchMock).toHaveBeenCalledTimes(3)
-    expect(launchMock).toHaveBeenCalledWith(
-      expect.objectContaining({ agent: 'claude', worktreeId: 'wt-1', groupId: 'group-1' })
-    )
+    expect(launchMock).not.toHaveBeenCalled()
+    expect(required('[data-start-workspace]')).toHaveAttribute('aria-busy', 'true')
+    expect(queuedAnimationFrames).toHaveLength(1)
+    await flushNextAnimationFrame()
+    expect(launchMock).not.toHaveBeenCalled()
+    await flushNextAnimationFrame()
+
+    await vi.waitFor(() => expect(launchMock).toHaveBeenCalledTimes(2))
+    expect(queuedAnimationFrames).toHaveLength(1)
+    await flushNextAnimationFrame()
+    await vi.waitFor(() => expect(launchMock).toHaveBeenCalledTimes(3))
+    expect(createEmptyGridGroupsMock).toHaveBeenCalledWith('wt-1', 'group-1', [
+      'claude',
+      'claude',
+      'codex'
+    ])
+    expect(clearPendingWorkspaceLaunchGroupsMock.mock.calls).toEqual([
+      [['group-1', 'group-2']],
+      [['group-3']]
+    ])
+    expect(launchedGroupIds()).toEqual(['group-1', 'group-2', 'group-3'])
     expect(activated).toEqual(['tab-3'])
     expect(launchedAgents()).toEqual(['claude', 'claude', 'codex'])
   })

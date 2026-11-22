@@ -68,8 +68,7 @@ import {
 import { createNestedRepoImportTargetResolver } from '../project-groups/nested-repo-import-target'
 import {
   isGitRepo,
-  getGitRepoRoot,
-  getLinkedWorktreeMainRepoRoot,
+  getLocalRepoAddMetadata,
   getRepoName,
   getBaseRefDefault,
   getRemoteCount,
@@ -299,11 +298,12 @@ async function addLocalRepoFromPath(
   if (repoKind === 'git') {
     await awaitWindowsHostGitEnvironmentReady({ cwd: path })
   }
-  if (repoKind === 'git' && !isGitRepo(path)) {
+  const gitMetadata = repoKind === 'git' ? await getLocalRepoAddMetadata(path) : null
+  if (gitMetadata && !gitMetadata.isGitRepo) {
     return { error: `Not a valid git repository: ${path}` }
   }
 
-  const resolvedPath = repoKind === 'git' ? getGitRepoRoot(path) : path
+  const resolvedPath = gitMetadata?.rootPath ?? path
   const pathKey = normalizeRuntimePathForComparison(path)
   const existing = store
     .getRepos()
@@ -329,7 +329,7 @@ async function addLocalRepoFromPath(
   // it belongs to an already-tracked repo. Adding it anyway yields a second "ready" host setup on the
   // same project and host — a duplicate run-target row that resolves to a transient worktree path.
   if (repoKind === 'git') {
-    const mainRepoRoot = getLinkedWorktreeMainRepoRoot(resolvedPath)
+    const mainRepoRoot = gitMetadata?.linkedMainRepoRoot
     if (mainRepoRoot) {
       const mainRepoKey = normalizeRuntimePathForComparison(mainRepoRoot)
       // Why !isFolderRepo: only a git-kind main checkout projects onto the same project as its

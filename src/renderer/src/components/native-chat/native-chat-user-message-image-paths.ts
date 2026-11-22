@@ -9,7 +9,10 @@ const IMAGE_EXT = String.raw`\.(?:png|jpe?g|jfif|gif|webp|bmp|avif)`
 const IMAGE_PATH_TOKEN = new RegExp(
   `@?"([^"\\n]*[/\\\\][^"\\n]+?${IMAGE_EXT})"` +
     `|@?'([^'\\n]*[/\\\\][^'\\n]+?${IMAGE_EXT})'` +
-    `|@?((?:(?:[A-Za-z]:)?[/\\\\][^\\s"']+?${IMAGE_EXT}))`,
+    // Bare absolute paths can contain spaces (for example C:\\Users\\Milan M\\...).
+    // The image extension is the terminator, so accepting spaces cannot consume
+    // following prose beyond the path and keeps relative prose/file names excluded.
+    `|@?((?:(?:[A-Za-z]:)?[/\\\\][^"'\\r\\n]+?${IMAGE_EXT}))`,
   'gi'
 )
 

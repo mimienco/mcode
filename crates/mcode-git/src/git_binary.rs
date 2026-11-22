@@ -4,11 +4,9 @@
 //! bounded stdout reader and a per-call timeout.
 
 use std::ffi::OsStr;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::LazyLock;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::Serialize;
 
@@ -79,14 +77,9 @@ impl GitError {
         }
     }
 
-    /// Build a `git_operation_failed` from a command vector; the command text
-    /// joins the argv (which contains no secrets) but the stderr is redacted.
+    /// Keep arguments such as remote credentials and commit messages out of diagnostics.
     pub fn operation_failed(argv: &[&OsStr], stderr: &[u8]) -> Self {
-        let command = argv
-            .iter()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join(" ");
+        let command = args_display(argv);
         Self::GitOperationFailed {
             command,
             stderr_redacted: redact_stderr(&String::from_utf8_lossy(stderr)),
@@ -210,6 +203,7 @@ impl GitCapabilities {
 pub struct GitRunner {
     binary: PathBuf,
     capabilities: GitCapabilities,
+    pub(crate) capability_cache: crate::capability_cache::GitCapabilityCache,
 }
 
 impl GitRunner {
@@ -221,6 +215,7 @@ impl GitRunner {
         Ok(Self {
             binary,
             capabilities,
+            capability_cache: Default::default(),
         })
     }
 
@@ -228,9 +223,8 @@ impl GitRunner {
     /// initializer resolves git at first use and caches the outcome for the
     /// process lifetime.
     pub fn shared() -> Result<&'static GitRunner, GitError> {
-        static RUNNER: LazyLock<Result<GitRunner, ()>> =
-            LazyLock::new(|| GitRunner::discover().map_err(|_| ()));
-        RUNNER.as_ref().map_err(|_| GitError::GitBinaryMissing)
+        static RUNNER: LazyLock<Result<GitRunner, GitError>> = LazyLock::new(GitRunner::discover);
+        RUNNER.as_ref().map_err(Clone::clone)
     }
 
     pub fn binary(&self) -> &Path {
@@ -267,102 +261,81 @@ impl GitRunner {
         args: &[&OsStr],
         stdin: Option<&[u8]>,
     ) -> Result<Vec<u8>, GitError> {
-        use std::io::Write;
+        let output = crate::process_capture::capture(
+            &self.binary,
+            cwd,
+            args,
+            stdin,
+            timeout,
+            MAX_STDOUT_BYTES,
+        )?;
+        classify_output(args, output, &[0])
+    }
 
-        let started = Instant::now();
-        let mut child = std::process::Command::new(&self.binary)
-            .args(args)
-            .current_dir(cwd)
-            .stdin(if stdin.is_some() {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            // Git output locale must not leak into our parsers.
-            .env("LC_ALL", "C")
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GIT_OPTIONAL_LOCKS", "0")
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    GitError::GitBinaryMissing
-                } else {
-                    GitError::GitOperationFailed {
-                        command: format!("spawn {}", self.binary.display()),
-                        stderr_redacted: e.to_string(),
-                    }
-                }
-            })?;
-
-        if let (Some(payload), Some(mut pipe)) = (stdin, child.stdin.take()) {
-            let _ = pipe.write_all(payload);
-        }
-
-        // Drain both pipes on threads so a chatty child can never deadlock
-        // on a full pipe buffer while the timeout poll runs. Reads enforce
-        // the byte cap; overflow is reported through the join handles.
-        let stdout_handle = spawn_drain(child.stdout.take());
-        let stderr_handle = spawn_drain(child.stderr.take());
-
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
-                Ok(None) => {
-                    if started.elapsed() >= timeout {
-                        break None;
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                Err(_) => break None,
-            }
-        };
-
-        let Some(status) = status else {
-            let _ = child.kill();
-            let _ = child.wait();
-            // Pipes close when the child dies; collect what we got.
-            let _ = stdout_handle.join();
-            let _ = stderr_handle.join();
-            return Err(GitError::GitTimeout);
-        };
-
-        let (stdout, stdout_overflow) = stdout_handle.join().unwrap_or_default();
-        let (stderr, stderr_overflow) = stderr_handle.join().unwrap_or_default();
-        if stdout_overflow || stderr_overflow {
-            return Err(GitError::GitOperationFailed {
-                command: args_display(args),
-                stderr_redacted: "<output exceeded 64 MB cap>".to_string(),
-            });
-        }
-
-        if status.success() {
-            return Ok(stdout);
-        }
-
-        let stderr_text = String::from_utf8_lossy(&stderr).into_owned();
-        if stderr_text.contains("index.lock") {
-            return Err(GitError::GitLockExists);
-        }
-        if stderr_text.contains("not a git repository") {
-            return Err(GitError::GitNotARepository);
-        }
-        if stderr_text.contains("unresolved conflict") || stderr_text.contains("CONFLICT") {
-            return Err(GitError::GitDirtyConflict);
-        }
-        Err(GitError::GitOperationFailed {
-            command: args_display(args),
-            stderr_redacted: redact_stderr(&stderr_text),
-        })
+    pub(crate) fn run_accepting_exit_codes(
+        &self,
+        cwd: &Path,
+        timeout: Duration,
+        args: &[&OsStr],
+        accepted: &[i32],
+        stdin: Option<&[u8]>,
+    ) -> Result<Vec<u8>, GitError> {
+        let output = crate::process_capture::capture(
+            &self.binary,
+            cwd,
+            args,
+            stdin,
+            timeout,
+            MAX_STDOUT_BYTES,
+        )?;
+        classify_output(args, output, accepted)
     }
 }
 
+fn classify_output(
+    args: &[&OsStr],
+    output: crate::process_capture::Captured,
+    accepted: &[i32],
+) -> Result<Vec<u8>, GitError> {
+    if output
+        .status
+        .code()
+        .is_some_and(|code| accepted.contains(&code))
+    {
+        return Ok(output.stdout);
+    }
+    let stderr_text = String::from_utf8_lossy(&output.stderr).into_owned();
+    if stderr_text.contains("index.lock") {
+        return Err(GitError::GitLockExists);
+    }
+    if stderr_text.contains("not a git repository") {
+        return Err(GitError::GitNotARepository);
+    }
+    if stderr_text.contains("unresolved conflict") || stderr_text.contains("CONFLICT") {
+        return Err(GitError::GitDirtyConflict);
+    }
+    Err(GitError::GitOperationFailed {
+        command: args_display(args),
+        stderr_redacted: redact_stderr(&stderr_text),
+    })
+}
+
 fn args_display(args: &[&OsStr]) -> String {
-    args.iter()
-        .map(|a| a.to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut args = args.iter().map(|arg| arg.to_string_lossy());
+    let command = args
+        .find(|arg| !arg.starts_with('-'))
+        .unwrap_or_else(|| "command".into());
+    if command == "worktree"
+        && let Some(subcommand) = args.next().filter(|subcommand| {
+            matches!(
+                subcommand.as_ref(),
+                "add" | "list" | "remove" | "prune" | "repair" | "lock" | "unlock"
+            )
+        })
+    {
+        return format!("worktree {subcommand}");
+    }
+    command.into_owned()
 }
 
 fn resolve_git_binary() -> Option<PathBuf> {
@@ -378,12 +351,18 @@ fn resolve_git_binary() -> Option<PathBuf> {
 }
 
 fn probe_version(binary: &Path) -> Result<GitCapabilities, GitError> {
-    let output = std::process::Command::new(binary)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-        .map_err(|_| GitError::GitBinaryMissing)?;
+    let cwd = std::env::current_dir().map_err(|_| GitError::GitBinaryMissing)?;
+    let output = crate::process_capture::capture(
+        binary,
+        &cwd,
+        &[OsStr::new("--version")],
+        None,
+        TimeoutClass::Fast.duration(),
+        64 * 1024,
+    )?;
+    if !output.status.success() {
+        return Err(GitError::GitBinaryMissing);
+    }
     let text = String::from_utf8_lossy(&output.stdout);
     parse_version(&text).ok_or(GitError::GitBinaryMissing)
 }
@@ -392,7 +371,7 @@ fn probe_version(binary: &Path) -> Result<GitCapabilities, GitError> {
 pub fn parse_version(text: &str) -> Option<GitCapabilities> {
     let line = text.lines().next()?;
     let rest = line.strip_prefix("git version")?.trim();
-    let mut parts = rest.split('.');
+    let mut parts = rest.split_whitespace().next()?.split('.');
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next()?.parse().ok()?;
     let patch = parts.next().unwrap_or("0").parse().ok()?;
@@ -404,36 +383,36 @@ pub fn parse_version(text: &str) -> Option<GitCapabilities> {
     })
 }
 
-/// Spawn a thread that reads a child pipe to EOF with a byte cap. Returns
-/// `(captured_bytes, overflowed)` via the join handle.
-fn spawn_drain<T: Read + Send + 'static>(
-    pipe: Option<T>,
-) -> std::thread::JoinHandle<(Vec<u8>, bool)> {
-    std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let mut overflowed = false;
-        if let Some(mut pipe) = pipe {
-            let mut chunk = [0u8; 64 * 1024];
-            loop {
-                match pipe.read(&mut chunk) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        if (buf.len() as u64) + n as u64 <= MAX_STDOUT_BYTES {
-                            buf.extend_from_slice(&chunk[..n]);
-                        } else {
-                            overflowed = true;
-                        }
-                    }
-                }
-            }
-        }
-        (buf, overflowed)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_apple_git_version_suffix() {
+        let caps = parse_version("git version 2.39.5 (Apple Git-154)").unwrap();
+        assert_eq!((caps.major, caps.minor, caps.patch), (2, 39, 5));
+    }
+
+    #[test]
+    fn failed_command_diagnostics_do_not_echo_private_arguments() {
+        let error = GitError::operation_failed(
+            &[
+                OsStr::new("push"),
+                OsStr::new("https://user:password@example.test/repo"),
+            ],
+            b"failed",
+        );
+        assert!(!error.to_string().contains("password"));
+        let error = GitError::operation_failed(
+            &[
+                OsStr::new("commit"),
+                OsStr::new("-m"),
+                OsStr::new("private message"),
+            ],
+            b"failed",
+        );
+        assert!(!error.to_string().contains("private message"));
+    }
 
     #[test]
     fn parses_windows_suffixed_version() {

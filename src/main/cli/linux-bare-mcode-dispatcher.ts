@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs'
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { buildAppImageCliWrapper, quoteShell } from './appimage-cli-wrapper'
+import { buildAppImageCliWrapper } from './appimage-cli-wrapper'
+import { quotePosixQuoteSplice } from '../../shared/shell-quoting'
 import { getBundledLauncherPath } from './cli-installer'
 
 // Why: marks a dispatcher this function wrote so repeat serve starts overwrite
@@ -82,7 +83,7 @@ export function buildBareMCodeCliScript(
     return null
   }
   return {
-    script: `#!/usr/bin/env bash\nexec ${quoteShell(launcher)} "$@"\n`,
+    script: `#!/usr/bin/env bash\nexec ${quotePosixQuoteSplice(launcher)} "$@"\n`,
     target: launcher
   }
 }

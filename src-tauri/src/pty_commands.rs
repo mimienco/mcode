@@ -22,10 +22,8 @@ use crate::DesktopCommandError;
 
 /// Renderer-facing event names (spec §4).
 pub(crate) const PTY_DATA_EVENT: &str = "pty://data";
+pub(crate) const PTY_WRITE_UNAVAILABLE_EVENT: &str = "pty://write-unavailable";
 pub(crate) const PTY_EXIT_EVENT: &str = "pty://exit";
-
-/// Graceful-stop ladder bound before a forced kill (spec §8: bounded kill).
-const KILL_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
 
 const PTY_SPAWN_OPERATION: &str = "pty_spawn";
 const PTY_WRITE_OPERATION: &str = "pty_write";
@@ -105,6 +103,7 @@ fn exit_code_of(cause: &mcode_process::ExitCause) -> i32 {
 struct NativePtyStateInner {
     sessions: Mutex<HashMap<u64, Arc<Mutex<PtySession>>>>,
     next_handle: AtomicU64,
+    global_credit: Mutex<mcode_pty::GlobalCredit>,
 }
 
 impl std::fmt::Debug for NativePtyStateInner {
@@ -131,6 +130,7 @@ impl NativePtyState {
         Self(Arc::new(NativePtyStateInner {
             sessions: Mutex::new(HashMap::new()),
             next_handle: AtomicU64::new(1),
+            global_credit: Mutex::new(mcode_pty::GlobalCredit::default()),
         }))
     }
 
@@ -149,11 +149,43 @@ impl NativePtyState {
     }
 
     fn remove(&self, id: u64) -> Option<Arc<Mutex<PtySession>>> {
-        self.0
+        let session = self
+            .0
             .sessions
             .lock()
             .expect("pty sessions lock")
-            .remove(&id)
+            .remove(&id);
+        if let Some(session) = &session {
+            session
+                .lock()
+                .expect("pty session lock")
+                .release_delivery_credit(
+                    &mut self.0.global_credit.lock().expect("pty credit lock"),
+                );
+        }
+        session
+    }
+
+    fn remove_instance(&self, id: u64, expected: &Arc<Mutex<PtySession>>) -> bool {
+        let removed = {
+            let mut sessions = self.0.sessions.lock().expect("pty sessions lock");
+            if !sessions
+                .get(&id)
+                .is_some_and(|session| Arc::ptr_eq(session, expected))
+            {
+                return false;
+            }
+            sessions.remove(&id)
+        };
+        if let Some(session) = removed {
+            session
+                .lock()
+                .expect("pty session lock")
+                .release_delivery_credit(
+                    &mut self.0.global_credit.lock().expect("pty credit lock"),
+                );
+        }
+        true
     }
 
     pub(crate) fn get(&self, id: u64) -> Option<Arc<Mutex<PtySession>>> {
@@ -163,6 +195,25 @@ impl NativePtyState {
             .expect("pty sessions lock")
             .get(&id)
             .cloned()
+    }
+
+    pub(crate) fn owns_pane(&self, pane_key: &str, pty_id: &str) -> bool {
+        let Some(session) = pty_id.parse::<u64>().ok().and_then(|id| self.get(id)) else {
+            return false;
+        };
+        session.lock().is_ok_and(|session| {
+            let env = match &session.spec().env_policy {
+                mcode_process::EnvironmentPolicy::Inherit { deltas, .. } => deltas,
+                mcode_process::EnvironmentPolicy::Explicit { map, .. } => map,
+            };
+            !session.is_dead()
+                && env
+                    .iter()
+                    .rev()
+                    .find(|(key, _)| key == "MCODE_PANE_KEY")
+                    .map(|(_, value)| value.as_str())
+                    == Some(pane_key)
+        })
     }
 
     fn ids(&self) -> Vec<u64> {
@@ -303,9 +354,22 @@ fn resolved_shell_name(request: &PtySpawnRequest) -> String {
 pub(crate) async fn pty_spawn(
     app: AppHandle,
     state: tauri::State<'_, NativePtyState>,
-    spec: PtySpawnRequest,
+    mut spec: PtySpawnRequest,
 ) -> Result<PtySpawnResponse, DesktopCommandError> {
     let id = state.allocate_handle();
+    // agentStatus hooks (buildPtyEnv, server.ts:2882-2900): when the renderer
+    // pane identity is present (MCODE_PANE_KEY) and the hook server is
+    // running, inject the loopback endpoint env so installed CLI hooks
+    // attribute callbacks to this pane. Server-down ⇒ inject nothing — hooks
+    // exit early on missing env, which is the original behavior.
+    if spec
+        .env
+        .as_ref()
+        .is_some_and(|env| env.contains_key("MCODE_PANE_KEY"))
+        && let Some(deltas) = crate::agent_status_http::hook_env_deltas()
+    {
+        spec.env.get_or_insert_with(Default::default).extend(deltas);
+    }
     let (pty_spec, shell) =
         build_spec(&spec).map_err(|error| pty_error(error, PTY_SPAWN_OPERATION))?;
 
@@ -325,40 +389,87 @@ pub(crate) async fn pty_spawn(
 
     let (id, session) = id_spawned;
     let shared = state.insert(id, session);
-    spawn_pty_forwarder(app, id, shared);
+    spawn_pty_forwarder(app, id, shared, state.inner().clone());
 
     Ok(PtySpawnResponse { id, shell })
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_write(
+    app: tauri::AppHandle,
     state: tauri::State<'_, NativePtyState>,
+    id: String,
+    data: String,
+) -> Result<(), DesktopCommandError> {
+    pty_write_for(&app, &state, id, data).await
+}
+
+/// `pty_write` body without the Tauri runtime: writes to the session and,
+/// on every failure path, emits `pty://write-unavailable` exactly once
+/// (spec §1 `onWriteUnavailable` — the renderer's flow-control recovery
+/// arm). The payload carries the decimal-string id and the failure reason;
+/// emit failures are logged and never mask the original command error.
+/// Generic over the runtime like `ssh_open_pty_for` so the mock-app tests
+/// can drive it.
+pub async fn pty_write_for<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    state: &NativePtyState,
     id: String,
     data: String,
 ) -> Result<(), DesktopCommandError> {
     let id = parse_pty_id(&id, PTY_WRITE_OPERATION)?;
     let session = state.get(id).ok_or_else(|| {
+        emit_write_unavailable(app, &id.to_string(), "pty session is gone");
         command_error(
             "pty_session_gone",
             PTY_WRITE_OPERATION,
             "pty session is gone",
         )
     })?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let write_result = tauri::async_runtime::spawn_blocking(move || {
         session
             .lock()
             .expect("pty session lock")
             .write_input(data.as_bytes())
     })
-    .await
-    .map_err(|error| {
-        command_error(
-            "pty_session_gone",
-            PTY_WRITE_OPERATION,
-            format!("pty write task failed: {error}"),
-        )
-    })?
-    .map_err(|error| pty_error(error, PTY_WRITE_OPERATION))
+    .await;
+    match write_result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => {
+            emit_write_unavailable(app, &id.to_string(), &error.to_string());
+            Err(pty_error(error, PTY_WRITE_OPERATION))
+        }
+        Err(error) => {
+            emit_write_unavailable(
+                app,
+                &id.to_string(),
+                &format!("pty write task failed: {error}"),
+            );
+            Err(command_error(
+                "pty_session_gone",
+                PTY_WRITE_OPERATION,
+                format!("pty write task failed: {error}"),
+            ))
+        }
+    }
+}
+
+/// Announces `pty://write-unavailable` exactly once per failed `pty_write`:
+/// the renderer's flow-control recovery arm (`TERMINAL_UI_INTEGRATION.md` §1
+/// `onWriteUnavailable`). The payload carries the decimal-string id and the
+/// failure reason; emit failures are logged and never mask the command error.
+fn emit_write_unavailable<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    pty_id: &str,
+    reason: &str,
+) {
+    let payload = serde_json::json!({
+        "ptyId": pty_id,
+        "reason": reason,
+    });
+    if let Err(error) = app.emit(PTY_WRITE_UNAVAILABLE_EVENT, payload) {
+        eprintln!("[pty] failed to emit write-unavailable for {pty_id}: {error}");
+    }
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -393,10 +504,7 @@ pub(crate) async fn pty_kill(
     };
     tauri::async_runtime::spawn_blocking(move || {
         let mut guard = session.lock().expect("pty session lock");
-        // Graceful ladder: bounded flush-wait, then force-kill. The
-        // forwarder owns the exit announcement, so this only guarantees the
-        // child is gone.
-        let _ = guard.wait_with_flush(KILL_FLUSH_TIMEOUT);
+        // Closing the pane abandons queued delivery; stop the owned process immediately.
         let _ = guard.kill();
     })
     .await
@@ -421,17 +529,19 @@ pub(crate) async fn pty_has_pty(
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_ack_data(
     state: tauri::State<'_, NativePtyState>,
-    id: u64,
+    id: String,
     processed_chars: u64,
 ) -> Result<(), DesktopCommandError> {
+    let id = parse_pty_id(&id, PTY_ACK_DATA_OPERATION)?;
     pty_ack_data_for(&state, id, processed_chars)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn pty_get_size(
     state: tauri::State<'_, NativePtyState>,
-    id: u64,
+    id: String,
 ) -> Result<Option<PtyAppliedSize>, DesktopCommandError> {
+    let id = parse_pty_id(&id, PTY_GET_SIZE_OPERATION)?;
     pty_get_size_for(&state, id)
 }
 
@@ -452,10 +562,10 @@ pub fn pty_ack_data_for(
             "pty session is gone",
         )
     })?;
-    session
-        .lock()
-        .expect("pty session lock")
-        .ack(processed_chars);
+    session.lock().expect("pty session lock").ack_with_global(
+        &mut state.0.global_credit.lock().expect("pty credit lock"),
+        processed_chars,
+    );
     Ok(())
 }
 
@@ -497,71 +607,67 @@ pub fn pty_register_session_for(
 /// owner is the only queue, so nothing here grows unboundedly — and emits
 /// `pty://data`. On death it drains one final flush and announces `pty://exit`
 /// exactly once, then the session's last reference drops (killing the child).
-fn spawn_pty_forwarder(app: AppHandle, id: u64, session: Arc<Mutex<PtySession>>) {
+fn spawn_pty_forwarder<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    id: u64,
+    session: Arc<Mutex<PtySession>>,
+    state: NativePtyState,
+) {
     std::thread::Builder::new()
         .name(format!("mcode-pty-forwarder-{id}"))
         .spawn(move || {
+            let mut exit_code = None;
             loop {
-                let (batch, dead) = {
-                    let guard = session.lock().expect("pty session lock");
-                    // Why: ConPTY's conhost can keep the output pipe open after
-                    // the child dies, so reader EOF alone is not a death signal;
-                    // poll the child as well (spec §5: exit announced exactly
-                    // once, promptly).
-                    (guard.take_batch(), guard.is_dead() || guard.child_exited())
-                };
-                if !batch.chunks.is_empty()
-                    || batch.dropped.is_some()
-                    || batch.restore_marker.is_some()
+                if !state
+                    .get(id)
+                    .is_some_and(|current| Arc::ptr_eq(&current, &session))
                 {
+                    return;
+                }
+                let batch = {
+                    let mut guard = session.lock().expect("pty session lock");
+                    if !state
+                        .get(id)
+                        .is_some_and(|current| Arc::ptr_eq(&current, &session))
+                    {
+                        return;
+                    }
+                    if exit_code.is_none() && guard.child_exited() {
+                        exit_code = Some(exit_code_of(&guard.stop_reader_after_child_exit()));
+                    }
+                    guard.reserve_batch(&mut state.0.global_credit.lock().expect("pty credit lock"))
+                };
+                if !batch.is_empty() {
+                    if !state
+                        .get(id)
+                        .is_some_and(|current| Arc::ptr_eq(&current, &session))
+                    {
+                        return;
+                    }
                     let event = PtyDataEvent { id, batch };
                     if let Err(error) = app.emit(PTY_DATA_EVENT, &event) {
-                        eprintln!("[pty] failed to emit data event for {id}: {error}");
+                        session.lock().expect("pty session lock").rollback_batch(
+                            &mut state.0.global_credit.lock().expect("pty credit lock"),
+                            event.batch,
+                        );
+                        eprintln!("[pty] failed to emit data for {id}: {error}");
                     }
                 }
-                if dead {
-                    break;
+                if let Some(code) = exit_code
+                    && !session
+                        .lock()
+                        .expect("pty session lock")
+                        .has_pending_delivery()
+                {
+                    if !state.remove_instance(id, &session) {
+                        return;
+                    }
+                    if let Err(error) = app.emit(PTY_EXIT_EVENT, PtyExitEvent { id, code }) {
+                        eprintln!("[pty] failed to emit exit for {id}: {error}");
+                    }
+                    return;
                 }
                 std::thread::sleep(Duration::from_millis(2));
-            }
-
-            let (exit_flush, exit_code) = {
-                let mut guard = session.lock().expect("pty session lock");
-                if guard.is_dead() {
-                    match guard.wait_with_flush(Duration::from_secs(1)) {
-                        Ok((batch, cause)) => (batch, exit_code_of(&cause)),
-                        Err(error) => {
-                            eprintln!("[pty] exit wait failed for {id}: {error}");
-                            (mcode_pty::OutputBatch::default(), -1)
-                        }
-                    }
-                } else {
-                    // Child exited but reader EOF never came (conhost holds
-                    // the pipe). Deterministic teardown, then the final batch.
-                    let (batch, cause) = guard.drain_after_child_exit_and_cause();
-                    (batch, exit_code_of(&cause))
-                }
-            };
-            if !exit_flush.chunks.is_empty()
-                || exit_flush.dropped.is_some()
-                || exit_flush.restore_marker.is_some()
-            {
-                let event = PtyDataEvent {
-                    id,
-                    batch: exit_flush,
-                };
-                if let Err(error) = app.emit(PTY_DATA_EVENT, &event) {
-                    eprintln!("[pty] failed to emit exit flush for {id}: {error}");
-                }
-            }
-            if let Err(error) = app.emit(
-                PTY_EXIT_EVENT,
-                PtyExitEvent {
-                    id,
-                    code: exit_code,
-                },
-            ) {
-                eprintln!("[pty] failed to emit exit event for {id}: {error}");
             }
         })
         .expect("failed to spawn pty forwarder");
@@ -569,15 +675,182 @@ fn spawn_pty_forwarder(app: AppHandle, id: u64, session: Arc<Mutex<PtySession>>)
 
 // ─── Shutdown ───────────────────────────────────────────────────────────────
 
-/// Kills every live session: bounded flush-wait per session, then force.
-/// Called from the app shutdown hook; the forwarders observe the deaths and
-/// announce `pty://exit` on their own threads.
+/// Shutdown abandons renderer delivery credit and stops each owned session.
 pub(crate) fn kill_all_sessions_for_shutdown(state: &NativePtyState) {
     for id in state.ids() {
         if let Some(session) = state.remove(id) {
             let mut guard = session.lock().expect("pty session lock");
-            let _ = guard.wait_with_flush(KILL_FLUSH_TIMEOUT);
             let _ = guard.kill();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+    use tauri::Listener;
+
+    #[test]
+    fn failed_write_emits_write_unavailable_once_with_decimal_string_id() {
+        let app = tauri::test::mock_app();
+        let handle = app.handle().clone();
+        let state = NativePtyState::new();
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+        let sink = std::sync::Arc::clone(&events);
+        let _subscription = handle.listen(PTY_WRITE_UNAVAILABLE_EVENT, move |event| {
+            sink.lock()
+                .expect("write-unavailable event lock")
+                .push(serde_json::from_str(event.payload()).expect("event payload json"));
+        });
+
+        // No session registered under this id: the write fails with
+        // `pty_session_gone`, the deterministic error path.
+        let gone_id: u64 = 4242;
+        assert!(state.get(gone_id).is_none());
+
+        // The command body below the parse seam is what emits; drive the
+        // runtime-generic seam so the mock-app handle is the real emitter.
+        let result = tauri::async_runtime::block_on(super::pty_write_for(
+            &handle,
+            &state,
+            gone_id.to_string(),
+            "echo hi\n".to_owned(),
+        ));
+        assert!(result.is_err());
+
+        let emitted = events.lock().expect("write-unavailable event lock").clone();
+        assert_eq!(emitted.len(), 1, "a failed write emits exactly once");
+        let payload = &emitted[0];
+        assert_eq!(payload["ptyId"], Value::String(gone_id.to_string()));
+        assert!(payload["reason"].is_string());
+        assert_eq!(payload.as_object().map(|object| object.len()), Some(2));
+    }
+
+    #[test]
+    fn successful_write_emits_nothing() {
+        let app = tauri::test::mock_app();
+        let handle = app.handle().clone();
+        let state = NativePtyState::new();
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+        let sink = std::sync::Arc::clone(&events);
+        let _subscription = handle.listen(PTY_WRITE_UNAVAILABLE_EVENT, move |event| {
+            sink.lock()
+                .expect("write-unavailable event lock")
+                .push(serde_json::from_str(event.payload()).expect("event payload json"));
+        });
+
+        let session = mcode_pty::PtySession::spawn(
+            mcode_pty::PtyHandle(901),
+            mcode_pty::PtySpec {
+                program: "cmd".to_owned(),
+                args: vec!["/c".to_owned(), "pause".to_owned()],
+                cwd: None,
+                env_policy: mcode_process::EnvironmentPolicy::Inherit {
+                    deltas: Vec::new(),
+                    removes: Vec::new(),
+                },
+                size: mcode_pty::PtySize::default(),
+                scrollback_rows: 1000,
+            },
+        )
+        .expect("spawn a live session for the happy path");
+        pty_register_session_for(&state, 901, session);
+
+        let result = tauri::async_runtime::block_on(super::pty_write_for(
+            &handle,
+            &state,
+            "901".to_owned(),
+            "echo hi\n".to_owned(),
+        ));
+        assert!(result.is_ok());
+
+        let emitted = events.lock().expect("write-unavailable event lock").clone();
+        assert!(emitted.is_empty(), "a successful write emits nothing");
+    }
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "subprocess output fixture"]
+    fn credit_forwarder_child_output() {
+        use std::io::Write;
+        std::io::stdout()
+            .write_all(&vec![b'x'; 1024 * 1024])
+            .unwrap();
+        std::io::stdout().flush().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn production_forwarder_obeys_credit_and_delivers_exit_after_final_ack() {
+        let app = tauri::test::mock_app();
+        let state = NativePtyState::new();
+        let received = Arc::new(AtomicU64::new(0));
+        let acknowledge = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let id = 902;
+        let output_count = Arc::clone(&received);
+        let ack_enabled = Arc::clone(&acknowledge);
+        let ack_state = state.clone();
+        app.listen(PTY_DATA_EVENT, move |event| {
+            let value: Value = serde_json::from_str(event.payload()).unwrap();
+            if value["id"] != id {
+                return;
+            }
+            let batch: OutputBatch = serde_json::from_value(value).unwrap();
+            let total = output_count.fetch_add(batch.delivered_units(), Ordering::SeqCst)
+                + batch.delivered_units();
+            if ack_enabled.load(Ordering::SeqCst) {
+                pty_ack_data_for(&ack_state, id, total).unwrap();
+            }
+        });
+        let (sender, receiver) = std::sync::mpsc::channel();
+        app.listen(PTY_EXIT_EVENT, move |_| {
+            let _ = sender.send(());
+        });
+        let session = PtySession::spawn(
+            PtyHandle(id),
+            PtySpec {
+                program: std::env::current_exe()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                args: vec![
+                    "--exact".into(),
+                    "pty_commands::tests::credit_forwarder_child_output".into(),
+                    "--ignored".into(),
+                    "--nocapture".into(),
+                ],
+                cwd: None,
+                env_policy: Default::default(),
+                size: PtySize::default(),
+                scrollback_rows: 1000,
+            },
+        )
+        .unwrap();
+        let shared = state.insert(id, session);
+        spawn_pty_forwarder(app.handle().clone(), id, shared, state.clone());
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while received.load(Ordering::SeqCst)
+            < mcode_pty::byte_owner::PER_PTY_INFLIGHT_CAP_CHARS as u64
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let stalled_at = received.load(Ordering::SeqCst);
+        assert!(stalled_at > 0);
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(received.load(Ordering::SeqCst), stalled_at);
+        assert!(
+            state.0.global_credit.lock().unwrap().in_flight()
+                <= mcode_pty::byte_owner::PER_PTY_INFLIGHT_CAP_CHARS as u64
+        );
+        acknowledge.store(true, Ordering::SeqCst);
+        pty_ack_data_for(&state, id, received.load(Ordering::SeqCst)).unwrap();
+        receiver
+            .recv_timeout(Duration::from_secs(15))
+            .expect("final ACK must allow exit");
+        assert!(received.load(Ordering::SeqCst) >= 1024 * 1024);
+        assert!(state.get(id).is_none());
+        assert_eq!(state.0.global_credit.lock().unwrap().in_flight(), 0);
     }
 }

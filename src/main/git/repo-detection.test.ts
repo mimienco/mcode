@@ -13,6 +13,7 @@ import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   getGitRepoRoot,
+  getLocalRepoAddMetadata,
   getLinkedWorktreeMainRepoRoot,
   isGitRepo,
   normalizeGitRepoRootForInputPath
@@ -315,6 +316,20 @@ describe('isGitRepo', () => {
     // the /var tmpdir symlink to /private/var) across all platforms.
     const expectedRoot = git(repoRoot, ['rev-parse', '--show-toplevel']).trim().replace(/\\/g, '/')
     expect(getGitRepoRoot(nestedDir)).toBe(expectedRoot)
+  })
+
+  it('collects local add metadata for a contained path', async () => {
+    const repoRoot = path.join(tmpDir, 'repo-metadata')
+    const nestedDir = path.join(repoRoot, 'packages', 'web')
+    mkdirSync(nestedDir, { recursive: true })
+    git(tmpDir, ['init', '--quiet', repoRoot])
+
+    const expectedRoot = git(repoRoot, ['rev-parse', '--show-toplevel']).trim().replace(/\\/g, '/')
+    await expect(getLocalRepoAddMetadata(nestedDir)).resolves.toEqual({
+      isGitRepo: true,
+      rootPath: expectedRoot,
+      linkedMainRepoRoot: null
+    })
   })
 
   it('keeps WSL UNC identity when git reports a Linux worktree root', () => {

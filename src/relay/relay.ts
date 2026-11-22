@@ -23,6 +23,7 @@ import {
 import {
   RELAY_SENTINEL,
   FrameDecoder,
+  MAX_MESSAGE_SIZE,
   MessageType,
   encodeJsonRpcFrame,
   parseJsonRpcMessage,
@@ -76,11 +77,12 @@ import { shouldReadRemoteCliStdin } from './remote-cli-stdin'
 import { prepareRemoteArtifactCliInput } from './remote-artifact-cli-input'
 import {
   assertRemoteArtifactCliForwardingFits,
+  remoteArtifactCliForwardingFrameBytes,
   type RemoteArtifactCliForwardingParams
 } from './remote-artifact-cli-forwarding'
 import { registerManagedHookInstaller } from './managed-hook-installer'
 import { registerRelayPluginHostCallHandlers } from './plugin-host-call-handler'
-import { DispatcherClientWriter } from './dispatcher-client-writer'
+import { DispatcherClientWriter, type SinkWriteSettlement } from './dispatcher-client-writer'
 import { SshPtyConsumerSessionAdapter } from './ssh-pty-consumer-session-adapter'
 import { RelayPtySourcePublication } from './relay-pty-source-publication'
 import { SKILL_RELAY_CAPABILITIES, SkillInstallHandler } from './skill-install-handler'
@@ -341,6 +343,24 @@ async function runMCodeCliMode(
       return
     }
   }
+  // Why: encodeJsonRpcFrame throws past MAX_MESSAGE_SIZE; without this pre-check an oversized
+  // piped stdin crashes the CLI with a raw stack instead of a diagnostic. Sizing itself encodes,
+  // so its overflow throw is the over-budget signal.
+  let requestFrameBytes = MAX_MESSAGE_SIZE + 1
+  try {
+    requestFrameBytes = remoteArtifactCliForwardingFrameBytes(requestParams)
+  } catch {
+    // Fall through with stdin's own byte length as the size to report.
+  }
+  if (requestFrameBytes > MAX_MESSAGE_SIZE) {
+    const reported = Math.max(requestFrameBytes, stdin !== undefined ? Buffer.byteLength(stdin, 'utf8') : 0)
+    const mib = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+    process.stderr.write(
+      `mcode: forwarded CLI input (${mib(reported)}) exceeds the MCode SSH transport limit of ${mib(MAX_MESSAGE_SIZE)}.\n`
+    )
+    process.exitCode = 1
+    return
+  }
   const sock = createConnection({ path: sockPath })
   const stdoutWriter = new DispatcherClientWriter(
     (data, onSettled) =>
@@ -365,16 +385,25 @@ async function runMCodeCliMode(
   let initialExitCode = 0
 
   const sendRequest = (): void => {
-    const frame = encodeJsonRpcFrame(
-      {
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'mcode.cli',
-        params: requestParams
-      },
-      nextSeq++,
-      highestReceivedSeq
-    )
+    let frame: Buffer
+    try {
+      frame = encodeJsonRpcFrame(
+        {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'mcode.cli',
+          params: requestParams
+        },
+        nextSeq++,
+        highestReceivedSeq
+      )
+    } catch (error) {
+      process.stderr.write(
+        `mcode: failed to encode the CLI request: ${error instanceof Error ? error.message : String(error)}\n`
+      )
+      sock.destroy()
+      process.exit(1)
+    }
     sock.write(frame)
   }
 
@@ -396,6 +425,64 @@ async function runMCodeCliMode(
         highestReceivedSeq
       )
     )
+  }
+
+  // Why: host capture caps stdout at 8 MiB but the control lane admits 1 MiB, so one control
+  // frame dies in admission and kills the process; the backpressure-managed producer lane
+  // drains ordered chunks instead.
+  const writeStdoutChunks = (output: Buffer, onDone: (error?: Error) => void): void => {
+    let offset = 0
+    let outstanding = 0
+    let waitingForCapacity = false
+    let finished = false
+    const finish = (error?: Error): void => {
+      if (finished) {
+        return
+      }
+      finished = true
+      removeCapacityListener()
+      onDone(error)
+    }
+    const removeCapacityListener = stdoutWriter.onCapacity(() => {
+      if (!finished && waitingForCapacity) {
+        waitingForCapacity = false
+        pump()
+      }
+    })
+    const onChunkSettled = (settlement: SinkWriteSettlement): void => {
+      if (finished) {
+        return
+      }
+      if (!settlement.ok) {
+        finish(settlement.error)
+        return
+      }
+      outstanding -= 1
+      if (offset >= output.length && outstanding === 0) {
+        finish()
+      }
+    }
+    const pump = (): void => {
+      while (!finished && offset < output.length) {
+        const capacity = stdoutWriter.producerFrameCapacity
+        if (capacity <= 0) {
+          finish(new Error('Relay stdout has no producer capacity'))
+          return
+        }
+        const bytes = Math.min(capacity, output.length - offset)
+        const chunk = output.subarray(offset, offset + bytes)
+        if (!stdoutWriter.enqueue('ordinary', () => chunk, bytes, onChunkSettled)) {
+          // Why: enqueue already settled a failure via onChunkSettled when the writer is closed.
+          if (!finished) {
+            waitingForCapacity = true
+          }
+          return
+        }
+        offset += bytes
+        outstanding += 1
+      }
+    }
+    pump()
   }
 
   const writeOutput = (
@@ -421,13 +508,7 @@ async function runMCodeCliMode(
     }
     if (typeof result.stdout === 'string' && result.stdout.length > 0) {
       pending += 1
-      const output = Buffer.from(result.stdout)
-      stdoutWriter.enqueue(
-        'control',
-        () => output,
-        output.length,
-        (settlement) => settle(settlement.ok ? undefined : settlement.error)
-      )
+      writeStdoutChunks(Buffer.from(result.stdout), settle)
     }
     if (typeof result.stderr === 'string' && result.stderr.length > 0) {
       pending += 1

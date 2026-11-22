@@ -1,3 +1,4 @@
+import { quotePosixQuoteSplice } from '../../shared/shell-quoting'
 const APPIMAGE_CLI_SCRIPT = [
   '(async()=>{',
   'try{',
@@ -17,7 +18,7 @@ export function buildAppImageCliWrapper(appImagePath: string): string {
   // installed command must call the stable outer AppImage and resolve APPDIR.
   return `#!/usr/bin/env bash
 set -euo pipefail
-APPIMAGE=${quoteShell(appImagePath)}
+APPIMAGE=${quotePosixQuoteSplice(appImagePath)}
 if [ ! -f "$APPIMAGE" ]; then
   echo "MCode AppImage not found at $APPIMAGE" >&2
   echo "If you moved the AppImage, re-run CLI registration from MCode Settings." >&2
@@ -28,10 +29,7 @@ export MCODE_NODE_REPL_EXTERNAL_MODULE="\${NODE_REPL_EXTERNAL_MODULE-}"
 unset NODE_OPTIONS
 unset NODE_REPL_EXTERNAL_MODULE
 # Why: AppImage mount paths change on each launch; $APPDIR is the runtime mount.
-ELECTRON_RUN_AS_NODE=1 exec "$APPIMAGE" -e ${quoteShell(APPIMAGE_CLI_SCRIPT)} -- "$@"
+ELECTRON_RUN_AS_NODE=1 exec "$APPIMAGE" -e ${quotePosixQuoteSplice(APPIMAGE_CLI_SCRIPT)} -- "$@"
 `
 }
 
-export function quoteShell(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`
-}

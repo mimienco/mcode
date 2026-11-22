@@ -3359,38 +3359,133 @@ html.native-shell .app-layout {
   transition: color 180ms ease-out;
 }
 
+.native-chat-container {
+  container-name: native-chat;
+  container-type: size;
+}
+
 [data-native-chat-composer-surface] {
   container-type: inline-size;
 }
 
-@container (max-width: 22rem) {
+@container (max-width: 42rem) {
+  [data-native-chat-picker-category] {
+    display: none;
+  }
+
+  [data-native-chat-session-options] {
+    gap: 0;
+  }
+
+  [data-native-chat-session-options] button {
+    gap: 0.25rem;
+    padding-inline: 0.5rem;
+  }
+
+  .native-chat-effort-trigger {
+    width: auto;
+    max-width: 12rem;
+  }
+}
+
+@container (max-width: 35rem) {
   [data-native-chat-composer-actions] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    column-gap: 0.25rem;
+    row-gap: 0;
   }
 
   [data-native-chat-run-profile] {
-    grid-column: 1 / -1;
+    grid-column: 2;
     grid-row: 1;
+    width: auto;
+    max-width: none;
+    min-width: 0;
     justify-self: end;
-    margin-left: 0;
-    max-width: 100%;
+    overflow: visible;
+    padding: 0;
+    background: transparent;
+  }
+
+  [data-native-chat-session-options] {
+    display: none;
+  }
+
+  [data-native-chat-compact-options] {
+    display: flex;
   }
 
   [data-native-chat-attach-action] {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 1;
     justify-self: start;
   }
 
   [data-native-chat-dictation-action] {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 3;
+    grid-row: 1;
   }
 
   [data-native-chat-send-action] {
-    grid-column: 3;
-    grid-row: 2;
+    grid-column: 4;
+    grid-row: 1;
+  }
+}
+
+@container native-chat (max-width: 32rem) or (max-height: 36rem) {
+  [data-native-chat-empty-state] {
+    gap: 0.375rem;
+    padding: 0.75rem;
+  }
+
+  [data-native-chat-empty-icon] {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  [data-native-chat-empty-shortcuts] {
+    display: none;
+  }
+
+  [data-native-chat-composer-padding] {
+    padding: 0.5rem 0.625rem 0.625rem;
+  }
+
+  [data-native-chat-composer-surface] {
+    padding: 0.375rem;
+    border-radius: 0.5rem;
+  }
+
+  [data-native-chat-composer-surface] textarea {
+    min-height: 2.5rem;
+    max-height: calc(4lh + 0.25rem);
+    padding: 0.25rem 0.5rem;
+    line-height: 1.25rem;
+  }
+
+  [data-native-chat-composer-footer] {
+    margin-top: 0;
+    gap: 0.25rem;
+    padding-top: 0.25rem;
+  }
+
+  [data-native-chat-composer-actions] {
+    gap: 0.25rem;
+  }
+}
+
+@media (pointer: fine) {
+  @container native-chat (max-width: 32rem) or (max-height: 36rem) {
+    [data-native-chat-send-action] button {
+      width: 2rem;
+      height: 2rem;
+    }
+  }
+}
+
+@container native-chat (max-height: 22rem) {
+  [data-native-chat-empty-icon] {
+    display: none;
   }
 }
 

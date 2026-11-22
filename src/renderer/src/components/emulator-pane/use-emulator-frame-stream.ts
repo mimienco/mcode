@@ -43,6 +43,10 @@ export function useEmulatorFrameStream(
 
     let disposed = false
     let activeStreamId: string | null = null
+    // Why: errors can arrive before startFrameStream resolves (activeStreamId is
+    // still null); buffer the latest one so the real disconnect reason surfaces
+    // once the stream id is known instead of the generic first-frame timeout.
+    let earlyError: { streamId: string; message: string } | null = null
     let firstFrameTimer: number | null = window.setTimeout(() => {
       setState((current) =>
         current.streamIdentity !== streamIdentity || current.frameUrl
@@ -86,13 +90,18 @@ export function useEmulatorFrameStream(
     })
 
     const unsubscribeError = emulatorApi.onFrameStreamError?.(({ streamId, message }) => {
-      if (!disposed && streamId === activeStreamId) {
-        setState((current) =>
-          current.streamIdentity === streamIdentity
-            ? { ...current, error: message || 'Stream disconnected' }
-            : current
-        )
+      if (disposed || (activeStreamId !== null && streamId !== activeStreamId)) {
+        return
       }
+      if (activeStreamId === null) {
+        earlyError = { streamId, message }
+        return
+      }
+      setState((current) =>
+        current.streamIdentity === streamIdentity
+          ? { ...current, error: message || 'Stream disconnected' }
+          : current
+      )
     })
 
     // Why: a device switch gets a fresh stream identity, so stale frames from
@@ -106,6 +115,16 @@ export function useEmulatorFrameStream(
           return
         }
         activeStreamId = streamId
+        const buffered = earlyError
+        if (buffered && buffered.streamId === streamId) {
+          earlyError = null
+          clearFirstFrameTimer()
+          setState((current) =>
+            current.streamIdentity === streamIdentity
+              ? { ...current, error: buffered.message || 'Stream disconnected' }
+              : current
+          )
+        }
       })
       .catch((error) => {
         if (disposed) {

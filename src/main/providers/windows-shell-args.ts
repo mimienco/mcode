@@ -3,9 +3,9 @@ import { isWindowsGitBashShellPath } from '../git-bash'
 import { parseWslPath, toLinuxPath, toWindowsWslPath } from '../wsl'
 import {
   buildWslExecArgs,
-  buildWslInteractiveLoginShellCommand,
-  quotePosixShell
+  buildWslInteractiveLoginShellCommand
 } from '../../shared/wsl-login-shell-command'
+import { quotePosixSingleQuote } from '../../shared/shell-quoting'
 import { getBashWrapperLaunchArgs } from './local-pty-shell-ready'
 import { ensureShellReadyWrappersAt } from './local-pty-shell-ready-wrapper-generation'
 import {
@@ -39,7 +39,7 @@ function getGitBashLaunchCommand(codexLaunchPreflightCommand?: string): string {
     return GIT_BASH_UTF8_LOGIN_COMMAND
   }
   const bashArgs = [...wrapperArgs, '-i']
-    .map((arg) => (arg.startsWith('-') ? arg : quotePosixShell(arg.replace(/\\/g, '/'))))
+    .map((arg) => (arg.startsWith('-') ? arg : quotePosixSingleQuote(arg.replace(/\\/g, '/'))))
     .join(' ')
   return `chcp.com 65001 >/dev/null 2>&1; exec "$BASH" ${bashArgs}`
 }
@@ -140,7 +140,7 @@ function getPowerShellEncodedCommand(
 function buildWslShellArgs(linuxCwd: string, distro?: string): string[] {
   ensureShellReadyWrappersAt()
   const setupCommand = [
-    `cd ${quotePosixShell(linuxCwd)}`,
+    `cd ${quotePosixSingleQuote(linuxCwd)}`,
     'export PATH="$HOME/.local/bin:$PATH"',
     buildWslInteractiveLoginShellCommand()
   ].join(' && ')

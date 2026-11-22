@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "workspace-catalog-commands",
+  "description": "Local project catalog and user-selected folder access for the primary window.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-workspace-catalog-get",
+    "allow-workspace-pick-folder",
+    "allow-workspace-list-detected",
+    "allow-workspace-path-status"
+  ]
+}

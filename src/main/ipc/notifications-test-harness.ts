@@ -116,12 +116,18 @@ export function getOpenSystemSettingsHandler(): (event: unknown) => unknown {
   return findRegisteredHandler('notifications:openSystemSettings') as (event: unknown) => unknown
 }
 
-export function getLoadSoundHandler(): (event: unknown) => Promise<unknown> {
-  return findRegisteredHandler('notifications:loadSound') as (event: unknown) => Promise<unknown>
+export function getLoadSoundHandler(): (event: unknown, options?: unknown) => Promise<unknown> {
+  return findRegisteredHandler('notifications:loadSound') as (
+    event: unknown,
+    options?: unknown
+  ) => Promise<unknown>
 }
 
-export function getResolveSoundPathHandler(): (event: unknown) => unknown {
-  return findRegisteredHandler('notifications:resolveSoundPath') as (event: unknown) => unknown
+export function getResolveSoundPathHandler(): (event: unknown, options?: unknown) => unknown {
+  return findRegisteredHandler('notifications:resolveSoundPath') as (
+    event: unknown,
+    options?: unknown
+  ) => unknown
 }
 
 export function getNotificationEventHandler(eventName: string): (...args: unknown[]) => void {

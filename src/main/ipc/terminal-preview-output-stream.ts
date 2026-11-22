@@ -10,6 +10,8 @@ export const TERMINAL_PREVIEW_OUTPUT_BATCH_MAX_BYTES = 64 * 1024
 const OUTPUT_IN_FLIGHT_MAX_BYTES = 512 * 1024
 const OUTPUT_PENDING_MAX_BYTES = 256 * 1024
 const INITIAL_PENDING_MAX_BYTES = 256 * 1024
+// Why: in-flight bytes drain only via renderer ACKs — exactly what an overflowing/stuck renderer stops sending — so bound how long a pending resync waits before forcing the heal.
+const OUTPUT_RESYNC_MAX_ACK_WAIT_MS = 15_000
 
 export type TerminalPreviewOutputMeta = {
   seq?: number
@@ -65,6 +67,7 @@ export class TerminalPreviewOutputStream {
   private pendingBatches: { data: string; bytes: number }[] = []
   private pendingBatchBytes = 0
   private resyncPending = false
+  private resyncForceTimer: ReturnType<typeof setTimeout> | null = null
   private awaitingReconnect = false
   private unsubscribeData: () => void = () => {}
   private isDisposed = false
@@ -96,6 +99,7 @@ export class TerminalPreviewOutputStream {
     this.unsubscribeData()
     this.releaseRawView()
     this.onDispose(this)
+    this.clearResyncForceTimer()
   }
 
   append(data: string, meta?: TerminalPreviewOutputMeta): void {
@@ -146,6 +150,7 @@ export class TerminalPreviewOutputStream {
     this.pendingBatches = []
     this.pendingBatchBytes = 0
     this.resyncPending = true
+    this.armResyncForceTimer()
     this.maybeDrain()
   }
 
@@ -183,16 +188,38 @@ export class TerminalPreviewOutputStream {
     }
   }
 
+  // Why: the grace timer is the deadline tracker — while armed, ACKs may still drain in-flight bytes; when it fires it re-enters maybeDrain to force the resync.
+  private armResyncForceTimer(): void {
+    if (this.resyncForceTimer || this.isDisposed || this.inFlightBytes === 0) {
+      return
+    }
+    this.resyncForceTimer = setTimeout(() => {
+      this.resyncForceTimer = null
+      this.maybeDrain()
+    }, OUTPUT_RESYNC_MAX_ACK_WAIT_MS)
+    this.resyncForceTimer.unref?.()
+  }
+
+  private clearResyncForceTimer(): void {
+    if (this.resyncForceTimer) {
+      clearTimeout(this.resyncForceTimer)
+      this.resyncForceTimer = null
+    }
+  }
+
   private maybeDrain(): void {
     if (this.isDisposed || this.awaitingReconnect) {
       return
     }
     if (this.resyncPending) {
-      if (this.inFlightBytes === 0) {
-        this.resyncPending = false
-        this.awaitingReconnect = true
-        this.send({ type: 'resync', ptyId: this.ptyId })
+      // While the grace timer is armed, unacked in-flight bytes may still drain via ACKs; once it fires (or bytes hit zero), force the resync.
+      if (this.inFlightBytes !== 0 && this.resyncForceTimer) {
+        return
       }
+      this.clearResyncForceTimer()
+      this.resyncPending = false
+      this.awaitingReconnect = true
+      this.send({ type: 'resync', ptyId: this.ptyId })
       return
     }
     while (this.pendingBatches.length > 0) {
@@ -228,6 +255,7 @@ export class TerminalPreviewOutputStream {
       this.pendingBatches = []
       this.pendingBatchBytes = 0
       this.resyncPending = true
+      this.armResyncForceTimer()
     }
   }
 

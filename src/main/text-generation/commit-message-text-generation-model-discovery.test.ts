@@ -82,6 +82,55 @@ describe('discoverCommitMessageModelsLocal', () => {
     )
   })
 
+  it('discovers the provider-qualified OMP catalog through the main-process boundary', async () => {
+    const listeners = new Map<string, (value: unknown) => void>()
+    const child = {
+      pid: 123,
+      kill: vi.fn(),
+      stdout: { on: vi.fn((event, callback) => listeners.set(`stdout:${event}`, callback)) },
+      stderr: { on: vi.fn((event, callback) => listeners.set(`stderr:${event}`, callback)) },
+      stdin: { end: vi.fn() },
+      on: vi.fn((event, callback) => listeners.set(event, callback))
+    }
+    spawnMock.mockReturnValue(child as never)
+
+    const pending = discoverCommitMessageModelsLocal('omp', undefined)
+
+    listeners.get('stdout:data')?.(
+      Buffer.from(
+        JSON.stringify({
+          models: [
+            {
+              provider: 'openai-codex',
+              id: 'gpt-5.6-sol',
+              selector: 'openai-codex/gpt-5.6-sol',
+              name: 'GPT-5.6-Sol',
+              thinking: ['low', 'high', 'xhigh']
+            },
+            {
+              provider: 'openrouter',
+              id: 'anthropic/claude-opus-4.6',
+              selector: 'openrouter/anthropic/claude-opus-4.6',
+              name: 'Claude Opus 4.6'
+            }
+          ]
+        })
+      )
+    )
+    listeners.get('close')?.(0)
+
+    await expect(pending).resolves.toMatchObject({
+      success: true,
+      catalogOrigin: 'probe',
+      defaultModelId: 'openai-codex/gpt-5.6-sol',
+      models: [
+        { id: 'openai-codex/gpt-5.6-sol', label: 'GPT-5.6-Sol' },
+        { id: 'openrouter/anthropic/claude-opus-4.6', label: 'Claude Opus 4.6' }
+      ]
+    })
+    expect(spawnMock.mock.calls[0]?.[1]).toEqual(['models', '--json'])
+  })
+
   it('writes the Claude list_models request to stdin and parses the control response', async () => {
     const listeners = new Map<string, (value: unknown) => void>()
     const child = {

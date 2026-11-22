@@ -218,6 +218,9 @@ export async function readPersistedWindowsPathSegmentsAsync(
     return [...persistedWindowsPathCache.segments]
   }
   if (useProductionCache && pendingPersistedWindowsPathRefresh) {
+    // Why: an in-flight registry read is by definition fresher than any cached
+    // value, so even forceRefresh callers coalesce onto it instead of forking
+    // a duplicate second read of both hives.
     return [...(await pendingPersistedWindowsPathRefresh)]
   }
 

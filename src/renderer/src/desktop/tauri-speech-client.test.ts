@@ -202,4 +202,37 @@ describe('tauri-speech-client', () => {
 
     expect(innerUnlisten).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    'onPartialTranscript',
+    'onFinalTranscript',
+    'onDownloadProgress',
+    'onModelReady',
+    'onError'
+  ] as const)('detaches an armed %s subscription exactly once', async (method) => {
+    const innerUnlisten = vi.fn()
+    const armedListen: SpeechListen = async () => innerUnlisten
+    const armedClient = createTauriSpeechClient(invoke, armedListen)
+    const unlisten = armedClient[method](vi.fn())
+
+    await Promise.resolve()
+    unlisten()
+    unlisten()
+
+    expect(innerUnlisten).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows cleanup when native subscription setup fails', async () => {
+    const rejectedListen: SpeechListen = async () => {
+      throw new Error('listener setup failed')
+    }
+    const rejectedClient = createTauriSpeechClient(invoke, rejectedListen)
+    const unlisten = rejectedClient.onPartialTranscript(vi.fn())
+
+    await Promise.resolve()
+    expect(() => {
+      unlisten()
+      unlisten()
+    }).not.toThrow()
+  })
 })

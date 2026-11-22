@@ -220,7 +220,7 @@ export function mapGhosttyToMCode(
 
     'font-size': (v) => {
       const num = Number(v)
-      if (!Number.isFinite(num) || num <= 0) {
+      if (!Number.isFinite(num) || num < 1 || num > 128) {
         return null
       }
       return { key: 'terminalFontSize', value: num }

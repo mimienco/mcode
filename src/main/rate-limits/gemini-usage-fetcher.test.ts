@@ -6,10 +6,11 @@ import {
   quotaResponse
 } from './gemini-usage-fetcher.test-fixtures'
 
-const { readFileMock, extractCredsMock, netFetchMock } = vi.hoisted(() => ({
+const { readFileMock, extractCredsMock, netFetchMock, writeFileAtomicallyMock } = vi.hoisted(() => ({
   readFileMock: vi.fn(),
   extractCredsMock: vi.fn(),
-  netFetchMock: vi.fn()
+  netFetchMock: vi.fn(),
+  writeFileAtomicallyMock: vi.fn()
 }))
 
 // Why: mock the extractor at the module boundary rather than re-routing every
@@ -22,9 +23,12 @@ vi.mock('./gemini-cli-oauth-extractor', () => ({
 }))
 
 vi.mock('node:fs/promises', () => ({
-  readFile: readFileMock,
-  writeFile: vi.fn().mockResolvedValue(undefined),
-  rename: vi.fn().mockResolvedValue(undefined)
+  readFile: readFileMock
+}))
+// saveGeminiCredentials writes via the shared atomic-write helper; stub it so
+// tests never touch the real ~/.gemini/oauth_creds.json.
+vi.mock('../codex-accounts/fs-utils', () => ({
+  writeFileAtomically: writeFileAtomicallyMock
 }))
 vi.mock('electron', () => ({ net: { fetch: netFetchMock } }))
 
@@ -37,6 +41,7 @@ describe('fetchGeminiRateLimits', () => {
     readFileMock.mockReset()
     extractCredsMock.mockReset()
     netFetchMock.mockReset()
+    writeFileAtomicallyMock.mockReset()
     netFetchMock.mockImplementation((url: string) => {
       if (url.includes('loadCodeAssist')) {
         return Promise.resolve(makeResponse({ cloudaicompanionProject: 'proj-123' }))

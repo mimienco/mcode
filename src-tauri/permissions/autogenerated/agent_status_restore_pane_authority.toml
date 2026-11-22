@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-status-restore-pane-authority"
+description = "Enables the agent_status_restore_pane_authority command without any pre-configured scope."
+commands.allow = ["agent_status_restore_pane_authority"]
+
+[[permission]]
+identifier = "deny-agent-status-restore-pane-authority"
+description = "Denies the agent_status_restore_pane_authority command without any pre-configured scope."
+commands.deny = ["agent_status_restore_pane_authority"]

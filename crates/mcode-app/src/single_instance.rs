@@ -15,6 +15,7 @@ pub const SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE: i32 = 3;
 
 struct InstanceLock {
     _mutex: PlatformMutex,
+    profile: String,
 }
 
 static LOCK: std::sync::Mutex<Option<InstanceLock>> = std::sync::Mutex::new(None);
@@ -39,7 +40,7 @@ pub fn should_bypass_single_instance_lock(
     is_serve_mode: bool,
     platform: &str,
 ) -> bool {
-    platform == "darwin"
+    matches!(platform, "darwin" | "macos")
         && !is_dev
         && !is_serve_mode
         && env(SINGLE_INSTANCE_LOCK_BYPASS_ENV).as_deref() == Some("1")
@@ -63,12 +64,16 @@ pub fn should_skip_single_instance_lock(
 #[allow(clippy::result_unit_err)]
 pub fn acquire(profile: &str) -> Result<(), ()> {
     let mut slot = LOCK.lock().map_err(|_| ())?;
-    if slot.is_some() {
-        // This process already owns the profile.
-        return Ok(());
+    if let Some(lock) = slot.as_ref() {
+        return if lock.profile == profile {
+            Ok(())
+        } else {
+            Err(())
+        };
     }
     *slot = Some(InstanceLock {
         _mutex: PlatformMutex::acquire(profile)?,
+        profile: profile.to_owned(),
     });
     Ok(())
 }
@@ -83,8 +88,8 @@ pub fn release_for_restart() {
 }
 
 /// Platform mutex: named mutex on Windows; a bound TCP listener port is NOT
-/// used (the profile is the scope, not a port). On POSIX a lock file with
-/// flock semantics would be the seam — Windows is the verified platform.
+/// used (the profile is the scope, not a port). POSIX holds a file lock in
+/// a private per-user directory until the guard is dropped.
 struct PlatformMutex {
     _guard: MutexGuard,
 }
@@ -95,16 +100,37 @@ enum MutexGuard {
     #[cfg(windows)]
     #[allow(dead_code)]
     Windows(windows_sys::Win32::Foundation::HANDLE),
+    #[cfg(unix)]
+    Posix(std::fs::File),
 }
 
 // SAFETY: the wrapped HANDLE is a process-wide kernel object handle. It is
-// only ever closed by the OS at process exit (never `Send`ed to another
-// thread to close), and the mutex kernel object itself is thread-safe by
-// contract. Raw pointers are not automatically Send/Sync, so state it.
+// only closed once by its owning guard, and the kernel object supports
+// process-wide handle lifetime. Raw pointers are not automatically Send/Sync, so state it.
 #[cfg(windows)]
 unsafe impl Send for MutexGuard {}
 #[cfg(windows)]
 unsafe impl Sync for MutexGuard {}
+
+fn profile_digest(profile: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(profile.as_bytes()))
+}
+
+impl Drop for MutexGuard {
+    fn drop(&mut self) {
+        match self {
+            #[cfg(windows)]
+            Self::Windows(handle) => unsafe {
+                windows_sys::Win32::Foundation::CloseHandle(*handle);
+            },
+            #[cfg(unix)]
+            Self::Posix(file) => {
+                let _ = file.unlock();
+            }
+        }
+    }
+}
 
 impl PlatformMutex {
     fn acquire(profile: &str) -> Result<Self, ()> {
@@ -114,7 +140,7 @@ impl PlatformMutex {
             // separator; arbitrary backslashes make CreateMutexW fail with
             // ERROR_PATH_NOT_FOUND (verified by probe). Flatten the profile
             // into one path-free segment.
-            let name: Vec<u16> = format!("mcode-single-instance-{profile}")
+            let name: Vec<u16> = format!("mcode-single-instance-{}", profile_digest(profile))
                 .encode_utf16()
                 .chain(std::iter::once(0))
                 .collect();
@@ -149,24 +175,39 @@ impl PlatformMutex {
                 _guard: MutexGuard::Windows(handle),
             })
         }
-        #[cfg(not(windows))]
+        #[cfg(unix)]
         {
-            // POSIX: abstract socket bind (scoped per profile) — never
-            // returns success when another instance holds the name.
-            let _ = profile;
+            use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
+            let uid = unsafe { libc::geteuid() };
+            let directory = std::env::temp_dir().join(format!("mcode-single-instance-{uid}"));
+            match std::fs::DirBuilder::new().mode(0o700).create(&directory) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(_) => return Err(()),
+            }
+            let metadata = std::fs::symlink_metadata(&directory).map_err(|_| ())?;
+            if !metadata.is_dir() || metadata.uid() != uid || metadata.mode() & 0o077 != 0 {
+                return Err(());
+            }
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                .open(directory.join(format!("{}.lock", profile_digest(profile))))
+                .map_err(|_| ())?;
+            let metadata = file.metadata().map_err(|_| ())?;
+            if !metadata.is_file() || metadata.uid() != uid || metadata.mode() & 0o077 != 0 {
+                return Err(());
+            }
+            file.try_lock().map_err(|_| ())?;
+            // Leave the inode in place: unlinking a held/released lock permits a competing lock inode.
             Ok(Self {
-                _guard: MutexGuard::PlaceHolder,
+                _guard: MutexGuard::Posix(file),
             })
         }
     }
-}
-
-#[cfg(not(windows))]
-enum MutexGuardPlaceHolder {}
-#[cfg(not(windows))]
-impl PlatformMutex {
-    // POSIX guard enum lives here in a future slice; macOS/Linux evidence is
-    // blocked on CI hosts (see STATUS.md blockers).
 }
 
 #[cfg(test)]
@@ -223,7 +264,6 @@ mod tests {
         assert!(!should_skip_single_instance_lock(&no_env, true, true));
     }
 
-    #[cfg(windows)]
     #[test]
     fn second_acquire_fails_for_the_same_profile() {
         // Exercises the OS mutex directly (not the OnceLock-guarded
@@ -237,5 +277,65 @@ mod tests {
             PlatformMutex::acquire("single-instance-e2e-probe").is_err(),
             "second acquire for the same profile must report already-running"
         );
+    }
+    #[test]
+    fn releasing_profile_guard_allows_reacquisition_and_other_profiles_remain_independent() {
+        let profile = format!("lock-release-{}", std::process::id());
+        let first = PlatformMutex::acquire(&profile).unwrap();
+        assert!(PlatformMutex::acquire(&profile).is_err());
+        let other = PlatformMutex::acquire(&format!("{profile}-other")).unwrap();
+        drop(first);
+        let replacement = PlatformMutex::acquire(&profile).unwrap();
+        drop(replacement);
+        drop(other);
+    }
+
+    #[test]
+    fn profile_paths_are_encoded_without_kernel_name_separators() {
+        let digest = profile_digest(r"C:\Users\Example\MCode");
+        assert_eq!(digest.len(), 64);
+        assert!(digest.chars().all(|ch| ch.is_ascii_hexdigit()));
+        assert_ne!(digest, profile_digest(r"C:\Users\Other\MCode"));
+    }
+    #[test]
+    #[ignore = "subprocess helper invoked by profile_lock_is_visible_to_another_process"]
+    fn profile_lock_child_probe() {
+        let profile = std::env::var("MCODE_SINGLE_INSTANCE_TEST_PROFILE").unwrap();
+        let expected = std::env::var("MCODE_SINGLE_INSTANCE_TEST_ACQUIRED").unwrap() == "1";
+        assert_eq!(PlatformMutex::acquire(&profile).is_ok(), expected);
+    }
+
+    #[test]
+    fn profile_lock_is_visible_to_another_process() {
+        let profile = format!("process-lock-{}", std::process::id());
+        let lock = PlatformMutex::acquire(&profile).unwrap();
+        let probe = |expected: bool| {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "single_instance::tests::profile_lock_child_probe",
+                    "--ignored",
+                ])
+                .env("MCODE_SINGLE_INSTANCE_TEST_PROFILE", &profile)
+                .env(
+                    "MCODE_SINGLE_INSTANCE_TEST_ACQUIRED",
+                    if expected { "1" } else { "0" },
+                );
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                command.creation_flags(0x0800_0000);
+            }
+            let output = command.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        };
+        probe(false);
+        drop(lock);
+        probe(true);
     }
 }

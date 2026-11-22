@@ -6,10 +6,11 @@ import {
   validCreds
 } from './gemini-usage-fetcher.test-fixtures'
 
-const { readFileMock, extractCredsMock, netFetchMock } = vi.hoisted(() => ({
+const { readFileMock, extractCredsMock, netFetchMock, writeFileAtomicallyMock } = vi.hoisted(() => ({
   readFileMock: vi.fn(),
   extractCredsMock: vi.fn(),
-  netFetchMock: vi.fn()
+  netFetchMock: vi.fn(),
+  writeFileAtomicallyMock: vi.fn()
 }))
 
 // Why: mock the CLI-credential extractor at the module boundary. The extractor
@@ -23,12 +24,14 @@ vi.mock('./gemini-cli-oauth-extractor', () => ({
 }))
 
 vi.mock('node:fs/promises', () => ({
-  readFile: readFileMock,
-  // Why: saveGeminiCredentials is exercised on the refresh path. The atomic
-  // tmp+rename write has no observable side effect in these tests, so the
-  // stubs just resolve.
-  writeFile: vi.fn().mockResolvedValue(undefined),
-  rename: vi.fn().mockResolvedValue(undefined)
+  readFile: readFileMock
+}))
+// Why: saveGeminiCredentials is exercised on the refresh path via the shared
+// atomic-write helper. Stubbing it keeps tests off the real
+// ~/.gemini/oauth_creds.json and lets refresh-persistence assertions inspect
+// exactly what would be written.
+vi.mock('../codex-accounts/fs-utils', () => ({
+  writeFileAtomically: writeFileAtomicallyMock
 }))
 
 vi.mock('electron', () => ({
@@ -44,6 +47,7 @@ describe('fetchGeminiRateLimits fallback oauth creds', () => {
     readFileMock.mockReset()
     extractCredsMock.mockReset()
     netFetchMock.mockReset()
+    writeFileAtomicallyMock.mockReset()
     extractCredsMock.mockResolvedValue({
       clientId: 'client-id-123',
       clientSecret: 'client-secret-456'
@@ -111,7 +115,11 @@ describe('fetchGeminiRateLimits fallback oauth creds', () => {
     })
     netFetchMock
       .mockResolvedValueOnce(
-        makeResponse({ access_token: 'bundle-refreshed-token', expires_in: 3600 })
+        makeResponse({
+          access_token: 'bundle-refreshed-token',
+          refresh_token: 'rotated-refresh-token',
+          expires_in: 3600
+        })
       )
       .mockResolvedValueOnce(makeResponse({ cloudaicompanionProject: 'cli-proj-456' }))
       .mockResolvedValueOnce(makeResponse(quotaResponse))
@@ -129,6 +137,16 @@ describe('fetchGeminiRateLimits fallback oauth creds', () => {
     const refreshBody = new URLSearchParams((refreshCall![1] as RequestInit).body as string)
     expect(refreshBody.get('client_id')).toBe('client-id-123')
     expect(refreshBody.get('client_secret')).toBe('client-secret-456')
+
+    expect(writeFileAtomicallyMock).toHaveBeenCalledTimes(1)
+    const [writtenPath, writtenContents, writeOptions] = writeFileAtomicallyMock.mock.calls[0]
+    expect(writtenPath).toContain('oauth_creds.json')
+    expect(JSON.parse(writtenContents)).toEqual({
+      access_token: 'bundle-refreshed-token',
+      refresh_token: 'rotated-refresh-token',
+      expiry_date: new Date('2026-04-24T13:00:00.000Z').getTime()
+    })
+    expect(writeOptions).toEqual({ mode: 0o600 })
   })
 
   it('returns error when oauth_creds.json token expired and bundle refresh fails', async () => {

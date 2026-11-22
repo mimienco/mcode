@@ -5,6 +5,10 @@
 #[cfg(windows)]
 use crate::supervisor::SupervisorError;
 
+/// POSIX uses process groups; this uninhabited type keeps the optional guard API portable.
+#[cfg(not(windows))]
+pub enum JobObject {}
+
 /// Windows Job Object guard: closing the handle kills everything assigned
 /// (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE), so Drop is itself a safety rung.
 #[cfg(windows)]
@@ -107,8 +111,11 @@ pub fn pre_spawn_group(_spec: &crate::handle::ProcessSpec, cmd: &mut std::proces
         use std::os::unix::process::CommandExt;
         unsafe {
             cmd.pre_exec(|| {
-                libc::setpgid(0, 0);
-                Ok(())
+                if libc::setpgid(0, 0) == 0 {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::last_os_error())
+                }
             });
         }
     }
@@ -144,5 +151,28 @@ pub fn assign_to_job(
     #[cfg(not(windows))]
     {
         Ok(())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn posix_spawn_uses_its_own_process_group_without_a_job_object() {
+        let spec = crate::ProcessSpec::new("sh", vec!["-c".into(), "sleep 30".into()]).unwrap();
+        assert!(pre_spawn_job_object(&spec).unwrap().is_none());
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", "sleep 30"]);
+        pre_spawn_group(&spec, &mut command);
+        let mut child = command.spawn().unwrap();
+        let pid = child.id();
+        let group = unsafe { libc::getpgid(pid as libc::pid_t) };
+        unsafe {
+            libc::kill(-(pid as libc::pid_t), libc::SIGKILL);
+        }
+        let _ = child.wait();
+        assert_eq!(group, pid as libc::pid_t);
+        assert_eq!(capture_spawn_time_pgid(pid), Some(pid as libc::pid_t));
     }
 }

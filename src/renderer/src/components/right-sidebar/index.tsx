@@ -139,8 +139,11 @@ function RightSidebarInner(): React.JSX.Element {
   return (
     <div
       ref={containerRef}
+      // Why: scoped test selector — panel content selectors must resolve inside
+      // this surface only (duplicate explorer shells exist in hidden surfaces).
+      data-right-sidebar-root
       className={cn(
-        'relative flex-shrink-0 flex flex-row',
+        'relative flex min-h-0 self-stretch flex-row flex-shrink-0',
         // Why: overflow-visible is needed when open so the resize handle
         // on the left edge remains interactive.  When closed (width 0),
         // switch to overflow-hidden so the activity bar icons and panel
@@ -151,7 +154,7 @@ function RightSidebarInner(): React.JSX.Element {
     >
       {/* Panel content area */}
       <div
-        className="flex flex-col flex-1 min-w-0 bg-sidebar overflow-hidden"
+        className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden bg-sidebar"
         style={{
           borderLeft: rightSidebarOpen ? '1px solid var(--sidebar-border)' : 'none'
         }}
@@ -199,7 +202,7 @@ function RightSidebarInner(): React.JSX.Element {
       {activityBarPosition === 'side' && (
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <div className="flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-l border-border side-activity-bar-windows-inset">
+            <div className="flex h-full min-h-0 w-10 min-w-[40px] flex-col items-center border-l border-border bg-sidebar side-activity-bar-windows-inset">
               <TooltipProvider delayDuration={400}>{sideActivityBarIcons}</TooltipProvider>
             </div>
           </ContextMenuTrigger>

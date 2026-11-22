@@ -6,12 +6,14 @@ Current summary:
 
 | Status      | Count |
 | ----------- | ----: |
-| done        |     0 |
-| in progress |     6 |
-| not started |    30 |
+| done        |     2 |
+| in progress |    32 |
+| not started |     3 |
 | blocked     |     0 |
 
-The initial 36 rows cover lifecycle/windowing, workspaces/settings, filesystem/watcher, Git/worktrees/WSL, process/PTY/agents, SSH/remote, relay/mobile/wire, CLI/headless, updater/packaging, diagnostics/permissions, editor/terminal/rich UI, integrations, voice/computer use, i18n/theme, extensions, and session recovery.
+The current 37 rows cover lifecycle/windowing, workspaces/settings, filesystem/watcher, Git/worktrees/WSL, process/PTY/agents, SSH/remote, relay/mobile/wire, CLI/headless, updater/packaging, diagnostics/permissions, editor/terminal/rich UI, integrations, voice/computer use, i18n/theme, extensions, and session recovery. Counts reflect the machine-readable ledger; they are not a percentage of working product behavior or release approval.
+
+As of 2026-09-08, `workspace.session` is `in_progress`: native local catalog/picker/open, Git/folder discovery, project projection and async host-partitioned session persistence are connected to renderer adapters. New roots require an actual native-picker grant or existing persisted authorization; remote execution is explicitly gated. See [LOCAL-WORKSPACE-SLICE-2026-09-07.md](LOCAL-WORKSPACE-SLICE-2026-09-07.md) and [REPAIR-REVIEW-2026-09-08.md](REPAIR-REVIEW-2026-09-08.md). Fresh Rust/native gates, a complete restart/restore workflow, remaining mutations and macOS/Linux evidence are pending. No other feature-row status changed in this update.
 
 Current Windows lifecycle evidence now includes real WebView2 Quit and Restart acknowledgement, durable checkpoint persistence, child relaunch, delivery-failure recovery, atomic confirm-and-execute, close-to-tray suppression during every shutdown phase, and a production-source gate that routes every full-renderer restart/relaunch action through the runtime lifecycle client. Native update application now has a distinct lifecycle intent and backend install path. The lifecycle row remains `in_progress` because single-instance/headless/crash-recovery behavior and macOS/Linux evidence are still missing.
 

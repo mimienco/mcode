@@ -16,6 +16,7 @@ import { grantDirAcl, isPermissionError } from '../win32-utils'
 import { resolveHooksJsonWritePath } from './hook-config-write-path'
 import { writeRollingFileBackup } from '../rolling-file-backup'
 import { wrapWindowsPowerShellEncodedCommand } from './windows-powershell-hook-launcher'
+import { quotePowerShellString } from '../../shared/shell-quoting'
 
 export type HookCommandConfig = {
   type: 'command'
@@ -106,10 +107,6 @@ export function getSharedManagedScriptPath(scriptFileName: string): string {
 }
 
 export { wrapPosixHookCommand } from './posix-hook-command'
-
-export function quotePowerShellString(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`
-}
 
 export {
   wrapWindowsPowerShellEncodedCommand,

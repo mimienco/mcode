@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -7,7 +7,7 @@ import {
   isToolResultBlock,
   type NativeChatBlock
 } from '../../../../shared/native-chat-types'
-import { diffFromText, diffFromToolCall, type DiffLine } from './native-chat-diff'
+import { diffFromText, diffFromToolCall } from './native-chat-diff'
 import {
   countToolCalls,
   createToolInputDisplay,
@@ -26,28 +26,40 @@ function ToolLine({ block }: { block: NativeChatBlock }): React.JSX.Element | nu
   const [expanded, setExpanded] = useState(true)
   const detailId = useId()
 
-  let name: string
-  let preview: string
-  let diff: DiffLine[] | null = null
-  let body: { output: string; isError?: boolean } | null = null
-  let detail: string | null = null
-  let inputHasDetail = false
+  // Why: PERF-08 — diff parsing is the expensive per-block work; memoized on
+  // [block, expanded] so a stream tick that only appends later blocks never
+  // reparses this line's tool input/output.
+  const line = useMemo(() => {
+    if (isToolCallBlock(block)) {
+      const inputDisplay = createToolInputDisplay(block.input)
+      const diff = expanded ? diffFromToolCall(block.name, block.input) : null
+      return {
+        name: block.name,
+        preview: inputDisplay.label,
+        inputHasDetail: inputDisplay.hasDetail,
+        diff,
+        body: null,
+        detail: expanded && !diff ? inputDisplay.formatDetail() : null
+      }
+    }
+    if (isToolResultBlock(block)) {
+      return {
+        name: translate('components.native-chat.tool.result', 'Result'),
+        preview: block.output.split('\n')[0]?.slice(0, 80) ?? '',
+        inputHasDetail: false,
+        diff: expanded ? diffFromText(block.output) : null,
+        body: { output: block.output, isError: block.isError },
+        detail: null
+      }
+    }
+    return null
+  }, [block, expanded])
 
-  if (isToolCallBlock(block)) {
-    name = block.name
-    const inputDisplay = createToolInputDisplay(block.input)
-    preview = inputDisplay.label
-    inputHasDetail = inputDisplay.hasDetail
-    diff = expanded ? diffFromToolCall(block.name, block.input) : null
-    detail = expanded && !diff ? inputDisplay.formatDetail() : null
-  } else if (isToolResultBlock(block)) {
-    name = translate('components.native-chat.tool.result', 'Result')
-    preview = block.output.split('\n')[0]?.slice(0, 80) ?? ''
-    diff = expanded ? diffFromText(block.output) : null
-    body = { output: block.output, isError: block.isError }
-  } else {
+  if (!line) {
     return null
   }
+
+  const { name, preview, diff, body, detail, inputHasDetail } = line
 
   const hasDetail = diff !== null || body !== null || inputHasDetail
 
@@ -145,8 +157,10 @@ export function NativeChatToolRun({
   // Re-sync when the global toolbar toggle flips.
   useEffect(() => setOpen(expandSignal), [expandSignal])
 
-  const callCount = countToolCalls(blocks) || blocks.length
-  const summary = summarizeToolRun(blocks)
+  // Why: PERF-08 — block scans are memoized so re-renders from expand toggles
+  // or sibling rows don't rescan every tool block.
+  const callCount = useMemo(() => countToolCalls(blocks) || blocks.length, [blocks])
+  const summary = useMemo(() => summarizeToolRun(blocks), [blocks])
   const fallbackLabel =
     callCount === 1
       ? translate('components.native-chat.tool.countOne', '1 tool call')

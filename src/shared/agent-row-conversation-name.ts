@@ -40,6 +40,11 @@ const AGENT_IDENTITY_ALIASES_LOWER: Readonly<Record<string, readonly string[]>> 
 
 const STATUS_WITH_CONTEXT_RE = /^(?:ready|idle|done)(?:\s+\([^)]*\))?$/i
 const DEFAULT_TERMINAL_TITLE_RE = /^terminal \d+$/i
+// Codex can publish its task UUID as an OSC title before it has a real
+// conversation name. The tab strip truncates that value with an ellipsis, so
+// reject both the complete identifier and the visible shortened form.
+const SESSION_ID_TITLE_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{2,4}(?:-[0-9a-f]{1,12})?(?:\.{3}|…)?$/i
 
 function isIdentityStatusTitle(titleLower: string, identityLower: string): boolean {
   return (
@@ -69,6 +74,13 @@ function isAgentIdentityStatusTitle(
   )
 }
 
+function isAgentSessionIdentifierTitle(titleLower: string, agentTypeLabelLower: string): boolean {
+  return (
+    titleLower.startsWith(`${agentTypeLabelLower} `) &&
+    /^[0-9a-f]{8}$/.test(titleLower.slice(agentTypeLabelLower.length + 1))
+  )
+}
+
 function isCwdLikeTitle(title: string): boolean {
   // Hook-less agents over SSH surface spinner+cwd titles (#8711); once the
   // spinner is stripped, what remains is a path, not a conversation name.
@@ -94,8 +106,10 @@ function conversationNameFromLiveTitle(
     SYNTHETIC_STATUS_TITLES_LOWER.has(lower) ||
     lower === FALLBACK_TAB_TITLE_LOWER ||
     isAgentIdentityStatusTitle(lower, agentType, agentTypeLabelLower) ||
+    isAgentSessionIdentifierTitle(lower, agentTypeLabelLower) ||
     STATUS_WITH_CONTEXT_RE.test(stripped) ||
     DEFAULT_TERMINAL_TITLE_RE.test(stripped) ||
+    SESSION_ID_TITLE_RE.test(stripped) ||
     isClaudeManagementTitle(stripped) ||
     isShellProcess(stripped) ||
     isCwdLikeTitle(stripped)

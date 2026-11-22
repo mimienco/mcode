@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import type { ActiveRightSidebarTab } from '@/store/slices/editor'
 import { isPluginPanelTabKey } from '../../../../shared/plugins/plugin-manifest'
+import { translate } from '@/i18n/i18n'
 
 const FileExplorer = lazy(() => import('./FileExplorer'))
 const SourceControl = lazy(() => import('./SourceControl'))
@@ -18,13 +19,33 @@ type RightSidebarPanelContentProps = {
   rightSidebarOpen: boolean
 }
 
+function RightSidebarPanelLoadingSurface(): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3"
+    >
+      <span className="sr-only">
+        {translate('auto.components.right.sidebar.panel.loading', 'Loading panel…')}
+      </span>
+      <div aria-hidden="true" className="h-7 flex-none animate-pulse rounded bg-muted/55" />
+      <div aria-hidden="true" className="space-y-2">
+        <div className="h-8 animate-pulse rounded bg-muted/45" />
+        <div className="h-8 animate-pulse rounded bg-muted/40" />
+        <div className="h-8 animate-pulse rounded bg-muted/35" />
+      </div>
+    </div>
+  )
+}
+
 export function RightSidebarPanelContent({
   effectiveTab,
   rightSidebarOpen
 }: RightSidebarPanelContentProps): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <Suspense fallback={null}>
+      <Suspense fallback={<RightSidebarPanelLoadingSurface />}>
         {effectiveTab === 'explorer' && <FileExplorer />}
         {effectiveTab === 'source-control' && <SourceControl />}
         {effectiveTab === 'checks' && <ChecksPanel />}

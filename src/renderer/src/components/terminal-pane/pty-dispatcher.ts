@@ -77,10 +77,12 @@ export type PtyEventPort = {
       seq?: number
       rawLength?: number
       transformed?: boolean
+      droppedOutput?: boolean
     }) => void
   ) => Promise<() => void>
   onExit: (listener: (payload: { id: string; code: number }) => void) => Promise<() => void>
   onReplay: (listener: (payload: { id: string; data: string }) => void) => Promise<() => void>
+  onWriteUnavailable: (listener: (payload: { id: string; reason: string }) => void) => Promise<() => void>
 }
 
 let ptyDispatcherEventPort: PtyEventPort | null = null
@@ -89,6 +91,7 @@ export function setPtyDispatcherEventPort(port: PtyEventPort | null): void {
   ptyDispatcherEventPort = port
 }
 let ptyDispatcherAttached = false
+let ptyDispatcherReady: Promise<void> | null = null
 
 let pushListenerUnsubscribes: (() => void)[] = []
 
@@ -106,7 +109,7 @@ export function reattachPtyDispatcherPushListeners(): void {
   // path resolves synchronously); the resolved unsubscribes are pushed onto the
   // live array inside attach, and a reattach before that resolve leaves the
   // stale subscription to resolve into the detached array it was pushed onto.
-  void attachPtyPushListeners()
+  beginPtyPushListenerAttachment()
 }
 
 export function ensurePtyDispatcher(): void {
@@ -116,11 +119,29 @@ export function ensurePtyDispatcher(): void {
   ptyDispatcherAttached = true
   exposeE2eTerminalPtyAckGate()
   installTerminalFreezeReport()
-  attachPtyPushListeners()
+  beginPtyPushListenerAttachment()
   startTerminalDeliveryWatchdog({
     reattachPushListeners: reattachPtyDispatcherPushListeners,
     hasAttachedPtys: () => ptyDataHandlers.size > 0 || eagerPtyHandles.size > 0
   })
+}
+
+function beginPtyPushListenerAttachment(): void {
+  const attached = pushListenerUnsubscribes
+  ptyDispatcherReady = attachPtyPushListeners().catch((error: unknown) => {
+    for (const unsubscribe of attached.splice(0)) unsubscribe()
+    if (pushListenerUnsubscribes === attached) ptyDispatcherAttached = false
+    throw error
+  })
+  // Existing Electron callers remain synchronous; Tauri awaits the original rejection.
+  void ptyDispatcherReady.catch((error: unknown) => {
+    console.error('[pty] push listener attachment failed', error)
+  })
+}
+
+export async function ensurePtyDispatcherReady(): Promise<void> {
+  ensurePtyDispatcher()
+  await ptyDispatcherReady
 }
 
 async function attachPtyPushListeners(): Promise<void> {
@@ -248,6 +269,9 @@ async function attachPtySecondaryPushListeners(unsubscribes: (() => void)[]): Pr
         ptyReplayHandlers.get(payload.id)?.(payload.data)
       })
     )
+    unsubscribes.push(await ptyDispatcherEventPort.onWriteUnavailable((payload) => {
+      ptyWriteUnavailableHandlers.get(payload.id)?.()
+    }))
   } else {
     const unsubscribeWriteUnavailable = window.api.pty.onWriteUnavailable?.((payload) => {
       ptyWriteUnavailableHandlers.get(payload.id)?.()

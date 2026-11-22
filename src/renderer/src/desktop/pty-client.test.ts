@@ -3,10 +3,12 @@ import { describe, expect, it as test, vi } from 'vitest'
 import {
   PTY_DATA_EVENT,
   PTY_EXIT_EVENT,
+  PTY_WRITE_UNAVAILABLE_EVENT,
   createTauriPtyClient,
   type PtyApi,
   type PtyDataPayload,
-  type PtyExitPayload
+  type PtyExitPayload,
+  type PtyWriteUnavailablePayloadMapped
 } from './pty-client'
 import { DesktopCommandError } from './desktop-client'
 
@@ -135,6 +137,38 @@ test('data subscription filters foreign payloads and unsubscription stops delive
 test('the event names match the native emit contract', () => {
   assert.equal(PTY_DATA_EVENT, 'pty://data')
   assert.equal(PTY_EXIT_EVENT, 'pty://exit')
+  assert.equal(PTY_WRITE_UNAVAILABLE_EVENT, 'pty://write-unavailable')
+})
+
+test('write-unavailable subscription maps ptyId onto id and filters foreign payloads', async () => {
+  const listeners: ((event: { payload: unknown }) => void)[] = []
+  let unlistenCalls = 0
+  const client = createTauriPtyClient(
+    async () => null,
+    async (_event, listener) => {
+      listeners.push(listener)
+      return () => {
+        unlistenCalls += 1
+      }
+    }
+  )
+
+  const unavailableEvents: PtyWriteUnavailablePayloadMapped[] = []
+  const unsubscribe = await client.onWriteUnavailable((payload) =>
+    unavailableEvents.push(payload)
+  )
+  assert.equal(listeners.length, 1)
+
+  listeners[0]?.({ payload: { ptyId: '4242', reason: 'pty session is gone' } })
+  listeners[0]?.({ payload: { ptyId: 7, reason: 'numeric id is not the wire shape' } })
+  listeners[0]?.({ payload: { unrelated: true } })
+
+  assert.deepEqual(unavailableEvents, [
+    { id: '4242', reason: 'pty session is gone' }
+  ])
+
+  unsubscribe()
+  assert.equal(unlistenCalls, 1)
 })
 
 describe('smoke', () => {
@@ -144,9 +178,15 @@ describe('smoke', () => {
 
     await client.onData(() => undefined)
     await client.onExit(() => undefined)
+    await client.onWriteUnavailable(() => undefined)
 
-    expect(listen).toHaveBeenCalledTimes(2)
+    expect(listen).toHaveBeenCalledTimes(3)
     expect(listen).toHaveBeenNthCalledWith(1, PTY_DATA_EVENT, expect.any(Function))
     expect(listen).toHaveBeenNthCalledWith(2, PTY_EXIT_EVENT, expect.any(Function))
+    expect(listen).toHaveBeenNthCalledWith(
+      3,
+      PTY_WRITE_UNAVAILABLE_EVENT,
+      expect.any(Function)
+    )
   })
 })

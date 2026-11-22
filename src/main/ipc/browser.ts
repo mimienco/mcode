@@ -62,16 +62,17 @@ export function registerBrowserHandlers(): void {
     ) {
       return false
     }
+    // Why: a renderer-supplied webContentsId must be a webview hosted by the calling sender — enforced on both the register and repair paths before any identity is trusted.
+    const guest = webContents.fromId(args.webContentsId)
+    if (
+      !guest ||
+      guest.isDestroyed() ||
+      guest.getType() !== 'webview' ||
+      guest.hostWebContents?.id !== event.sender.id
+    ) {
+      return false
+    }
     if (repairPolicies) {
-      const guest = webContents.fromId(args.webContentsId)
-      if (
-        !guest ||
-        guest.isDestroyed() ||
-        guest.getType() !== 'webview' ||
-        guest.hostWebContents?.id !== event.sender.id
-      ) {
-        return false
-      }
       browserManager.attachGuestPolicies(guest)
     }
     // Why: when Chromium swaps a guest's renderer process (navigation,

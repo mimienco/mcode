@@ -162,4 +162,20 @@ describe('getAgentRowConversationName', () => {
       )
     ).toBeNull()
   })
+
+  it('rejects Codex session ids as conversation names', () => {
+    expect(
+      getAgentRowConversationName(
+        makeTab({ title: '5e1faf6b-8d37-41a5-9e45-cea6d0b9b00d' }),
+        'codex',
+        false
+      )
+    ).toBeNull()
+    expect(
+      getAgentRowConversationName(makeTab({ title: '5e1faf6b-8d37-41a5-9e...' }), 'codex', false)
+    ).toBeNull()
+    expect(
+      getAgentRowConversationName(makeTab({ title: 'Codex 01a03b15' }), 'codex', false)
+    ).toBeNull()
+  })
 })

@@ -121,6 +121,8 @@ export function removeBrowserPageViewport(browserPageId: string): void {
     viewport.shell.remove()
     browserPageViewports.delete(browserPageId)
   }
+  // Why: prune the remembered inset too or closed pages leak an entry forever.
+  browserPageChromeInsetHeights.delete(browserPageId)
 }
 
 export type BrowserPageViewportLayout = {

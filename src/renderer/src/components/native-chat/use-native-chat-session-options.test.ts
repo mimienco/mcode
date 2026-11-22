@@ -42,7 +42,28 @@ describe('useNativeChatSessionOptions model reporting', () => {
   beforeEach(() => {
     clearNativeChatModelEnrichmentForTests()
     discoverModels.mockReset()
+    discoverModels.mockResolvedValue(null)
     Object.defineProperty(window, 'api', { configurable: true, value: undefined })
+  })
+
+  it('builds the complete live composer option surface for OMP', () => {
+    const { result } = renderHook(() =>
+      useNativeChatSessionOptions({
+        agent: 'omp',
+        terminalTabId: 'tab-omp',
+        targetPtyId: 'pty-omp',
+        dispatchCommand: vi.fn(),
+        readTerminalScreen: () => 'pi > [high] GPT-5.6-Sol > [D] …2-82d2-c726b9ee1669 > (sub) > 7%'
+      })
+    )
+
+    expect(result.current.surface).not.toBeNull()
+    expect(result.current.snapshot.map(({ id }) => id)).toEqual([
+      'model',
+      'effort',
+      'permission',
+      'interaction-mode'
+    ])
   })
 
   it('re-resolves the reported model against models discovered after the read', async () => {

@@ -1,3 +1,5 @@
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
+
 const MAX_CONCURRENT_SKILL_CANDIDATES = 4
 
 export async function runSkillCandidateTasks<T>(
@@ -14,6 +16,8 @@ export async function runSkillCandidateTasks<T>(
         return
       }
       results[index] = await tasks[index]()
+      // Prevent cached candidate bursts from starving Electron main-process timers.
+      await yieldToEventLoop()
     }
   }
 

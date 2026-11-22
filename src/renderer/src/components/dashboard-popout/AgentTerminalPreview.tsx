@@ -22,7 +22,7 @@ import { installPreviewTerminalKeyHandler } from './preview-terminal-key-handler
 import { createPreviewGridClaim } from './preview-grid-claim'
 import { installPreviewTerminalAppMenuClipboard } from './preview-terminal-app-menu-clipboard'
 import type { TerminalPreviewDataPayload } from '../../../../shared/terminal-preview'
-import { tauriTerminalPreviewClient } from '../../desktop/tauri-terminal-preview-client'
+import { runtimeTerminalPreviewClient } from '../../desktop/runtime-terminal-preview-client'
 
 const PREVIEW_SCROLLBACK_ROWS = 24
 // Why: main only ever serializes PREVIEW_SCROLLBACK_ROWS of history into this
@@ -198,7 +198,7 @@ export function AgentTerminalPreview({
       writeReplayed(
         payload.data,
         () => {
-          void tauriTerminalPreviewClient.ack(ptyId, payload.bytes)
+          void runtimeTerminalPreviewClient.ack(ptyId, payload.bytes)
         },
         true
       )
@@ -275,12 +275,12 @@ export function AgentTerminalPreview({
         if (userInputDisposable ? !signaledUserInput : replayDepth > 0) {
           return
         }
-        void tauriTerminalPreviewClient.input(ptyId, data)
+        void runtimeTerminalPreviewClient.input(ptyId, data)
       })
     }
 
     const replayConnection = (
-      connection: Awaited<ReturnType<typeof tauriTerminalPreviewClient.connect>>,
+      connection: Awaited<ReturnType<typeof runtimeTerminalPreviewClient.connect>>,
       replaceExisting: boolean,
       requestRefresh: () => void
     ): void => {
@@ -355,7 +355,7 @@ export function AgentTerminalPreview({
         return
       }
       refreshInFlight = true
-      const connection = await tauriTerminalPreviewClient.connect(ptyId, {
+      const connection = await runtimeTerminalPreviewClient.connect(ptyId, {
         scrollbackRows: PREVIEW_SCROLLBACK_ROWS
       })
       if (disposed) {
@@ -377,7 +377,7 @@ export function AgentTerminalPreview({
         terminal?.dispose()
         terminal = null
         terminalRef.current = null
-        void tauriTerminalPreviewClient.unsubscribe(ptyId)
+        void runtimeTerminalPreviewClient.unsubscribe(ptyId)
         return
       }
       refreshInFlight = false
@@ -394,7 +394,7 @@ export function AgentTerminalPreview({
       pasteClipboardText
     })
 
-    offData = tauriTerminalPreviewClient.onData((payload) => {
+    offData = runtimeTerminalPreviewClient.onData((payload) => {
       if (payload.ptyId !== ptyId) {
         return
       }
@@ -420,7 +420,7 @@ export function AgentTerminalPreview({
       disposeImeNativeTextBridge()
       disposeTerminalCompatibility?.()
       disposeKeyHandler?.()
-      void tauriTerminalPreviewClient.unsubscribe(ptyId)
+      void runtimeTerminalPreviewClient.unsubscribe(ptyId)
       terminal?.dispose()
       terminalRef.current = null
     }

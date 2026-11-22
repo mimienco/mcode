@@ -129,11 +129,21 @@ describe('ClaudeRuntimeAuthService', () => {
     // Now switch into account-1: token is expiring, so the service must refresh
     // and persist the rotation before materializing.
     vi.mocked(isOauthTokenExpiring).mockReturnValueOnce(true)
-    vi.mocked(refreshClaudeOauthCredentials).mockResolvedValueOnce(account1Refreshed)
+    // The service delegates persistence to the refresh's persistCredentials hook.
+    vi.mocked(refreshClaudeOauthCredentials).mockImplementationOnce(
+      async (_credentialsJson, _now, options) => {
+        await options?.persistCredentials?.(account1Refreshed)
+        return account1Refreshed
+      }
+    )
     store.updateSettings({ activeClaudeManagedAccountId: 'account-1' })
     await service.syncForCurrentSelection()
 
-    expect(refreshClaudeOauthCredentials).toHaveBeenCalledWith(account1Stale)
+    expect(refreshClaudeOauthCredentials).toHaveBeenCalledWith(
+      account1Stale,
+      expect.any(Number),
+      expect.objectContaining({ lockKey: 'account-1' })
+    )
     expect(readManagedCredentialsForTest('account-1', managedAuthPath1)).toBe(account1Refreshed)
     expect(readFileSync(runtimeCredentialsPath, 'utf-8')).toBe(account1Refreshed)
   })
@@ -159,7 +169,16 @@ describe('ClaudeRuntimeAuthService', () => {
     const store = createStore(settings)
 
     vi.mocked(isOauthTokenExpiring).mockReturnValue(true)
-    vi.mocked(refreshClaudeOauthCredentials).mockResolvedValue(refreshedCreds)
+    // The service delegates persistence to the refresh's persistCredentials hook.
+    vi.mocked(refreshClaudeOauthCredentials).mockImplementation(
+      async (_credentialsJson, _now, options) => {
+        if (!options) {
+          return null
+        }
+        await options.persistCredentials?.(refreshedCreds)
+        return refreshedCreds
+      }
+    )
 
     const { ClaudeRuntimeAuthService } = await import('./runtime-auth-service')
     const service = new ClaudeRuntimeAuthService(store as never)

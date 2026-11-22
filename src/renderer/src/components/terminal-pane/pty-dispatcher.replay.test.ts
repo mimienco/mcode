@@ -26,6 +26,7 @@ function buildReplayClientDouble(
     getSize: vi.fn(),
     onData: () => Promise.resolve(() => {}),
     onExit: () => Promise.resolve(() => {}),
+    onWriteUnavailable: () => Promise.resolve(() => {}),
     onReplay
   }
   return client

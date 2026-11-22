@@ -8,10 +8,15 @@
     "../src/preload/**/*",
     "../src/shared/**/*",
     "../src/relay/**/*",
-    "../src/types/**/*"
+    "../src/types/**/*",
+    "../package.json",
+    "../src/renderer/src/i18n/locales/*.json",
+    "../src/shared/**/*.json"
   ],
   "compilerOptions": {
     "composite": true,
+    "outDir": "../out/tsc-node",
+    "rootDir": "..",
     "types": ["electron-vite/node"]
   }
 }

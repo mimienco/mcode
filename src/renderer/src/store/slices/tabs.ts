@@ -66,6 +66,7 @@ export type TabsSlice = {
   groupsByWorktree: Record<string, TabGroup[]>
   activeGroupIdByWorktree: Record<string, string>
   layoutByWorktree: Record<string, TabGroupLayoutNode>
+  pendingWorkspaceLaunchAgentByGroupId: Record<string, TuiAgent>
   createUnifiedTab: (
     worktreeId: string,
     contentType: TabContentType,
@@ -156,6 +157,12 @@ export type TabsSlice = {
     sourceGroupId: string,
     direction: TabSplitDirection
   ) => string | null
+  createEmptyGridGroups: (
+    worktreeId: string,
+    sourceGroupId: string,
+    agents: readonly TuiAgent[]
+  ) => string[] | null
+  clearPendingWorkspaceLaunchGroups: (groupIds: readonly string[]) => void
   moveUnifiedTabToGroup: (
     tabId: string,
     targetGroupId: string,
@@ -272,6 +279,47 @@ function buildSplitNode(
     second: position === 'second' ? newLeaf : existingLeaf,
     ratio: 0.5
   }
+}
+
+function buildEqualSplitLayout(
+  nodes: readonly TabGroupLayoutNode[],
+  direction: 'horizontal' | 'vertical',
+  index = 0
+): TabGroupLayoutNode {
+  const first = nodes[index]
+  const remaining = nodes.length - index
+  if (!first) {
+    throw new Error('Cannot build a tab-group layout without groups')
+  }
+  if (remaining === 1) {
+    return first
+  }
+  return {
+    type: 'split',
+    direction,
+    first,
+    second: buildEqualSplitLayout(nodes, direction, index + 1),
+    ratio: 1 / remaining
+  }
+}
+
+function buildGridLayout(groupIds: readonly string[]): TabGroupLayoutNode {
+  const columnCount = Math.ceil(Math.sqrt(groupIds.length))
+  const baseRowsPerColumn = Math.floor(groupIds.length / columnCount)
+  const columnsWithExtraRow = groupIds.length % columnCount
+  const columns: TabGroupLayoutNode[] = []
+  let groupIndex = 0
+
+  for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+    const rowCount = baseRowsPerColumn + (columnIndex < columnsWithExtraRow ? 1 : 0)
+    const rows: TabGroupLayoutNode[] = []
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      rows.push({ type: 'leaf', groupId: groupIds[groupIndex++] })
+    }
+    columns.push(buildEqualSplitLayout(rows, 'vertical'))
+  }
+
+  return buildEqualSplitLayout(columns, 'horizontal')
 }
 
 function replaceLeaf(
@@ -826,6 +874,7 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
   groupsByWorktree: {},
   activeGroupIdByWorktree: {},
   layoutByWorktree: {},
+  pendingWorkspaceLaunchAgentByGroupId: {},
 
   createUnifiedTab: (worktreeId, contentType, init) => {
     const id = init?.id ?? createBrowserUuid()
@@ -1665,6 +1714,69 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
     })
     get().recordFeatureInteraction?.('terminal-panes')
     return newGroupId
+  },
+
+  createEmptyGridGroups: (worktreeId, sourceGroupId, agents) => {
+    const existingGroups = get().groupsByWorktree[worktreeId] ?? []
+    if (agents.length === 0 || !existingGroups.some((group) => group.id === sourceGroupId)) {
+      return null
+    }
+
+    const groupIds = [
+      sourceGroupId,
+      ...Array.from({ length: agents.length - 1 }, () => createBrowserUuid())
+    ]
+    const newGroups: TabGroup[] = groupIds.slice(1).map((id) => ({
+      id,
+      worktreeId,
+      activeTabId: null,
+      tabOrder: []
+    }))
+    const pendingAgents: Record<string, TuiAgent> = {}
+    for (let index = 0; index < groupIds.length; index += 1) {
+      pendingAgents[groupIds[index]] = agents[index]
+    }
+    const gridLayout = buildGridLayout(groupIds)
+
+    set((state) => {
+      const currentLayout =
+        state.layoutByWorktree[worktreeId] ?? ({ type: 'leaf', groupId: sourceGroupId } as const)
+      return {
+        groupsByWorktree: {
+          ...state.groupsByWorktree,
+          [worktreeId]: [...(state.groupsByWorktree[worktreeId] ?? []), ...newGroups]
+        },
+        layoutByWorktree: {
+          ...state.layoutByWorktree,
+          [worktreeId]: replaceLeaf(currentLayout, sourceGroupId, gridLayout)
+        },
+        pendingWorkspaceLaunchAgentByGroupId: {
+          ...state.pendingWorkspaceLaunchAgentByGroupId,
+          ...pendingAgents
+        }
+      }
+    })
+    if (agents.length > 1) {
+      void get().recordFeatureInteraction?.('terminal-panes')
+    }
+    return groupIds
+  },
+
+  clearPendingWorkspaceLaunchGroups: (groupIds) => {
+    if (groupIds.length === 0) {
+      return
+    }
+    set((state) => {
+      const next = { ...state.pendingWorkspaceLaunchAgentByGroupId }
+      let changed = false
+      for (const groupId of groupIds) {
+        if (groupId in next) {
+          delete next[groupId]
+          changed = true
+        }
+      }
+      return changed ? { pendingWorkspaceLaunchAgentByGroupId: next } : state
+    })
   },
 
   moveUnifiedTabToGroup: (tabId, targetGroupId, opts) => {

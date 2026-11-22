@@ -7,9 +7,9 @@ import {
   buildWslCapturedLoginShellCommand,
   buildWslExecArgs,
   buildWslInteractiveLoginShellCommand,
-  buildWslLoginShellCommand,
-  quotePosixShell
+  buildWslLoginShellCommand
 } from './wsl-login-shell-command'
+import { quotePosixSingleQuote } from './shell-quoting'
 
 const WSL_TEST_COMMAND_TIMEOUT_MS = 10_000
 let wslShAvailable: boolean | null = null
@@ -55,7 +55,7 @@ function expectValidShSyntax(command: string): void {
 
 describe('wsl login shell command helpers', () => {
   it('quotes single quotes for POSIX shell arguments', () => {
-    expect(quotePosixShell("a'b")).toBe("'a'\\''b'")
+    expect(quotePosixSingleQuote("a'b")).toBe("'a'\\''b'")
   })
 
   it('runs commands through the distro user login shell', () => {

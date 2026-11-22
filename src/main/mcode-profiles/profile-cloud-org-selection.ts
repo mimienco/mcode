@@ -1,7 +1,6 @@
 import type { MCodeCloudAuthConfig } from './profile-cloud-auth-config'
 import {
   MCodeCloudRequestError,
-  refreshMCodeCloudSession,
   selectMCodeCloudOrg
 } from './profile-cloud-client'
 import { linkMCodeProfileToCloud } from './profile-cloud-index'
@@ -11,6 +10,7 @@ import {
   recordCloudSessionIdentityMutation,
   recordCloudSessionIdentityMutationIfCurrent
 } from './profile-cloud-session-mutation'
+import { refreshMCodeCloudSessionSingleFlight } from './profile-cloud-session-refresh'
 import {
   readMCodeCloudSession,
   saveMCodeCloudSessionIfCurrent,
@@ -45,7 +45,12 @@ export async function selectCloudOrgWithMutationFence(input: {
       if (!(error instanceof MCodeCloudRequestError) || error.statusCode !== 401) {
         throw error
       }
-      const refreshed = await refreshMCodeCloudSession(input.config, workingSession)
+      const refreshed = await refreshMCodeCloudSessionSingleFlight(
+        input.config,
+        input.active.profile.id,
+        input.userDataPath,
+        workingSession
+      )
       if (
         refreshed.cloud.userId !== cloud.userId ||
         refreshed.cloud.cloudProfileId !== cloud.cloudProfileId

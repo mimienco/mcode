@@ -1322,7 +1322,7 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
       try {
         forceKillPosixPtyProcessGroups(proc.pid, () => {
           process.kill(proc.pid, 'SIGKILL')
-        })
+        }, { ptsName: readPtsName(proc) })
       } catch (signalError) {
         try {
           proc.kill()

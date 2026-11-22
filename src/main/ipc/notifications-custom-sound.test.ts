@@ -27,6 +27,7 @@ vi.mock('../tray/system-tray', async () =>
 )
 
 import { registerNotificationHandlers } from './notifications'
+import { getSelectedNotificationSoundPath } from './notification-sound-selection'
 
 describe('registerNotificationHandlers', () => {
   let tempDir: string
@@ -68,6 +69,48 @@ describe('registerNotificationHandlers', () => {
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
     }
+  })
+
+  it('silences a system-default test notification when the renderer owns its cue', async () => {
+    registerNotificationHandlers({
+      getSettings: () => ({
+        notifications: {
+          enabled: true,
+          agentTaskComplete: true,
+          terminalBell: true,
+          suppressWhenFocused: false,
+          customSoundId: 'system',
+          customSoundPath: null
+        }
+      })
+    } as never)
+
+    const handler = getDispatchHandler()
+    expect(await handler({}, { source: 'test', suppressSystemSound: true })).toEqual({
+      delivered: true
+    })
+    expect(notificationCtorMock).toHaveBeenCalledWith({
+      title: 'MCode notifications are on',
+      body: 'This is a test notification from MCode.',
+      silent: true
+    })
+  })
+
+  it('selects a bundled cue when testing the system-default sound', () => {
+    const settings = {
+      enabled: true,
+      agentTaskComplete: true,
+      automationRunComplete: true,
+      terminalBell: true,
+      suppressWhenFocused: false,
+      customSoundId: 'system' as const,
+      customSoundPath: null,
+      customSoundVolume: 100
+    }
+
+    expect(getSelectedNotificationSoundPath(settings, { systemFallback: true })).toEqual(
+      getSelectedNotificationSoundPath({ ...settings, customSoundId: 'two-tone' })
+    )
   })
 
   it('does not request a native macOS sound when a custom sound is configured', async () => {

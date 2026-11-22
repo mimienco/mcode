@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-status-get-migration-unsupported-snapshot"
+description = "Enables the agent_status_get_migration_unsupported_snapshot command without any pre-configured scope."
+commands.allow = ["agent_status_get_migration_unsupported_snapshot"]
+
+[[permission]]
+identifier = "deny-agent-status-get-migration-unsupported-snapshot"
+description = "Denies the agent_status_get_migration_unsupported_snapshot command without any pre-configured scope."
+commands.deny = ["agent_status_get_migration_unsupported_snapshot"]

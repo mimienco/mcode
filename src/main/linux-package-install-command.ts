@@ -1,6 +1,7 @@
 import { statSync } from 'node:fs'
 import path from 'node:path'
 import type { LinuxRootPackageType } from '../shared/update-status-types'
+import { quotePosixQuoteSplice } from '../shared/shell-quoting'
 
 // Why: an absolute but user-writable PATH entry must never be treated as a trusted package manager.
 const TRUSTED_EXECUTABLE_DIRECTORIES = ['/usr/bin', '/bin', '/usr/sbin', '/sbin']
@@ -25,11 +26,6 @@ const RPM_PACKAGE_MANAGERS: { name: string; args: string[] }[] = [
 export type LinuxPackageInstallCommandResult =
   | { ok: true; command: string }
   | { ok: false; reason: 'no-sudo' | 'no-package-manager' | 'invalid-package-path' }
-
-/** POSIX single-quoting: the only metacharacter left is `'`, closed and re-opened around a literal. */
-export function quoteForPosixShell(value: string): string {
-  return `'${value.split("'").join(`'"'"'`)}'`
-}
 
 /**
  * Resolves an executable strictly from the trusted system directories. A symlink inside those
@@ -76,7 +72,7 @@ export function buildLinuxPackageInstallCommand(
       continue
     }
     // No -y/--noconfirm: the user must see and confirm the privileged transaction.
-    const tokens = [sudoPath, managerPath, ...candidate.args, quoteForPosixShell(packagePath)]
+    const tokens = [sudoPath, managerPath, ...candidate.args, quotePosixQuoteSplice(packagePath)]
     return { ok: true, command: tokens.join(' ') }
   }
   return { ok: false, reason: 'no-package-manager' }

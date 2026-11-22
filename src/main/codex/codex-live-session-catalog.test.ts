@@ -36,6 +36,12 @@ describe('Codex live session catalog', () => {
         permissions: ':workspace',
         approvalPolicy: 'on-request',
         collaborationMode: { mode: 'plan' }
+      },
+      accepted: {
+        model: 'gpt-5.6-sol',
+        effort: 'medium',
+        permission: 'auto-edits',
+        interactionMode: 'plan'
       }
     })
   })

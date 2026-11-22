@@ -1,4 +1,9 @@
-import { isWslUncPath, parseWslUncPath, toWindowsWslPath } from './wsl-paths'
+import {
+  foldWslUncPathToComparisonKey,
+  isWslUncPath,
+  parseWslUncPath,
+  toWindowsWslPath
+} from './wsl-paths'
 
 const SLASH_CHAR_CODE = '/'.charCodeAt(0)
 
@@ -47,11 +52,11 @@ export function normalizeRuntimePathForComparison(rawValue: string): string {
   const normalized = trimRuntimePathTrailingSlash(
     isWindowsPath ? normalizeRuntimePathSeparators(value) : value.replace(/\/+/g, '/')
   )
-  const wslUnc = normalized.match(/^\/\/(?:wsl\.localhost|wsl\$)\/([^/]+)(\/[\s\S]*)?$/i)
-  if (wslUnc) {
-    // Why: Windows exposes the same case-sensitive WSL filesystem through two
-    // UNC aliases, while the distro/server portion remains case-insensitive.
-    return `//wsl/${wslUnc[1].toLowerCase()}${wslUnc[2] ?? ''}`
+  // Why: the two WSL UNC aliases expose one case-sensitive filesystem; only
+  // the distro segment folds (see wsl-paths).
+  const wslComparisonKey = foldWslUncPathToComparisonKey(normalized)
+  if (wslComparisonKey !== null) {
+    return wslComparisonKey
   }
   return isWindowsPath ? normalized.toLowerCase() : normalized
 }

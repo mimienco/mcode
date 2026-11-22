@@ -160,8 +160,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     flushPendingEditorChange(fileId)
     const pendingSave = saveQueue.get(fileId)
     clearAutoSaveTimer(fileId)
-    bumpSaveGeneration(fileId)
+    // Why: await BEFORE bumping — a save whose disk write already succeeded must
+    // finish its own post-write bookkeeping (dirty clearing, rebaseline, conflict
+    // clearing); the bump only cancels saves still queued behind it.
     await pendingSave?.catch(() => undefined)
+    bumpSaveGeneration(fileId)
   }
 
   const syncAutoSave = (): void => {

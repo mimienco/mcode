@@ -16,6 +16,12 @@ import { SidebarTaskNavButton } from './SidebarTaskNavButton'
 import { HideSidebarMenu } from './sidebar-nav-controls'
 import { translate } from '@/i18n/i18n'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
+import {
+  cancelAppPagePrefetch,
+  prefetchAppPageNow,
+  scheduleAppPagePrefetch,
+  type PrefetchableAppPage
+} from '@/app-shell/app-page-chunks'
 
 export { getSetupGuideSidebarEntryReady, shouldShowSetupGuideEntry } from './SetupGuideSidebarEntry'
 
@@ -56,6 +62,20 @@ export function shouldShowSkillsButton(
 }
 
 const AgentDashboardSidebarEntry = lazyWithRetry(() => import('./AgentDashboardSidebarEntry'))
+
+function pagePrefetchHandlers(page: PrefetchableAppPage) {
+  return {
+    onPointerEnter: () => scheduleAppPagePrefetch(page),
+    onPointerLeave: () => cancelAppPagePrefetch(page),
+    onFocus: () => prefetchAppPageNow(page)
+  }
+}
+
+const activityPagePrefetchHandlers = pagePrefetchHandlers('activity')
+const artifactsPagePrefetchHandlers = pagePrefetchHandlers('artifacts')
+const automationsPagePrefetchHandlers = pagePrefetchHandlers('automations')
+const mobilePagePrefetchHandlers = pagePrefetchHandlers('mobile')
+const skillsPagePrefetchHandlers = pagePrefetchHandlers('skills')
 
 const SidebarNav = React.memo(function SidebarNav() {
   // Why: this memo boundary needs its own language subscription, while
@@ -113,7 +133,11 @@ const SidebarNav = React.memo(function SidebarNav() {
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              onClick={openArtifactsPage}
+              onClick={() => {
+                prefetchAppPageNow('artifacts')
+                openArtifactsPage()
+              }}
+              {...artifactsPagePrefetchHandlers}
               aria-current={artifactsActive ? 'page' : undefined}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
@@ -142,7 +166,11 @@ const SidebarNav = React.memo(function SidebarNav() {
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              onClick={openSkillsPage}
+              onClick={() => {
+                prefetchAppPageNow('skills')
+                openSkillsPage()
+              }}
+              {...skillsPagePrefetchHandlers}
               aria-current={skillsActive ? 'page' : undefined}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
@@ -171,7 +199,11 @@ const SidebarNav = React.memo(function SidebarNav() {
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              onClick={openAutomationsPage}
+              onClick={() => {
+                prefetchAppPageNow('automations')
+                openAutomationsPage()
+              }}
+              {...automationsPagePrefetchHandlers}
               aria-current={automationsActive ? 'page' : undefined}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
@@ -203,7 +235,11 @@ const SidebarNav = React.memo(function SidebarNav() {
       {showAgentsButton ? (
         <button
           type="button"
-          onClick={openActivityPage}
+          onClick={() => {
+            prefetchAppPageNow('activity')
+            openActivityPage()
+          }}
+          {...activityPagePrefetchHandlers}
           aria-current={activityActive ? 'page' : undefined}
           className={cn(
             'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium tracking-tight transition-colors',
@@ -243,9 +279,11 @@ const SidebarNav = React.memo(function SidebarNav() {
               <button
                 type="button"
                 onClick={() => {
+                  prefetchAppPageNow('mobile')
                   mobileOnboardingBadge.dismiss()
                   openMobilePage()
                 }}
+                {...mobilePagePrefetchHandlers}
                 aria-current={mobileActive ? 'page' : undefined}
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left"
               >

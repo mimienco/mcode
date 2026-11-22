@@ -37,11 +37,16 @@ export function getEffectiveNotificationSoundId(
   return settings.customSoundId ?? (settings.customSoundPath ? 'custom' : 'system')
 }
 
-export function getSelectedNotificationSoundPath(settings: NotificationSettings): {
+export function getSelectedNotificationSoundPath(
+  settings: NotificationSettings,
+  options?: { systemFallback?: boolean }
+): {
   path: string | null
   reason?: 'missing-path' | 'invalid-path' | 'unsupported-type'
 } {
-  const customSoundId = getEffectiveNotificationSoundId(settings)
+  const selectedSoundId = getEffectiveNotificationSoundId(settings)
+  const customSoundId =
+    selectedSoundId === 'system' && options?.systemFallback ? 'two-tone' : selectedSoundId
   if (customSoundId === 'system') {
     return { path: null, reason: 'missing-path' }
   }

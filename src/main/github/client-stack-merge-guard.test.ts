@@ -39,7 +39,7 @@ describe('GitHub GraphQL rate-limit guard', () => {
   afterEach(() => vi.restoreAllMocks())
 
   it('hydrates GitHub-registered stack metadata for exact linked PRs', async () => {
-    getOwnerRepoMock.mockResolvedValue({ owner: 'stablyai', repo: 'mcode', host: 'github.com' })
+    getOwnerRepoMock.mockResolvedValue({ owner: 'mcode-ide', repo: 'mcode', host: 'github.com' })
     ghExecFileAsyncMock
       .mockResolvedValueOnce({
         stdout: JSON.stringify({
@@ -189,7 +189,7 @@ describe('GitHub GraphQL rate-limit guard', () => {
 
     await expect(
       mergePR('/repo-root', 202, 'squash', undefined, {
-        owner: 'stablyai',
+        owner: 'mcode-ide',
         repo: 'mcode',
         host: 'github.com'
       })
@@ -558,7 +558,7 @@ describe('GitHub GraphQL rate-limit guard', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
 
     const result = await mergePR(scenario.repoPath, 202, 'squash', scenario.connectionId, {
-      owner: 'stablyai',
+      owner: 'mcode-ide',
       repo: 'mcode',
       host: scenario.expectedOptions.host
     })
@@ -629,7 +629,7 @@ describe('GitHub GraphQL rate-limit guard', () => {
 
     await expect(
       mergePR('/repo-root', 13866, 'squash', undefined, {
-        owner: 'stablyai',
+        owner: 'mcode-ide',
         repo: 'mcode',
         host: 'github.com'
       })
@@ -674,7 +674,7 @@ describe('GitHub GraphQL rate-limit guard', () => {
 
     await expect(
       mergePR('/repo-root', 202, 'squash', undefined, {
-        owner: 'stablyai',
+        owner: 'mcode-ide',
         repo: 'mcode',
         host: 'github.com'
       })

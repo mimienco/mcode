@@ -54,9 +54,14 @@ export class RemoteRuntimeCompatGate {
         }
         this.noteVerifiedStatus(response.result)
         if (this.environmentSelector) {
-          markEnvironmentUsed(this.userDataPath, this.environmentSelector, {
-            runtimeId: response._meta.runtimeId
-          })
+          // Last-used bookkeeping must never fail an already-successful RPC.
+          try {
+            markEnvironmentUsed(this.userDataPath, this.environmentSelector, {
+              runtimeId: response._meta.runtimeId
+            })
+          } catch {
+            // Ignore: bookkeeping only.
+          }
         }
       },
       args.envelope

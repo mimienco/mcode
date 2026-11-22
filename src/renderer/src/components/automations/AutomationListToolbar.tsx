@@ -9,6 +9,7 @@ import type { AutomationListFilter } from './automation-list-view'
 import { AutomationListFilterMenu, AutomationListFilterPills } from './AutomationListFilterMenu'
 import { AutomationListSearchField } from './AutomationListSearchField'
 import type { AutomationTemplate } from './automation-templates'
+import { prefetchAutomationEditorDialog } from './automation-editor-dialog-chunk'
 
 export function AutomationListToolbar({
   listSearchQuery,
@@ -75,6 +76,8 @@ export function AutomationListToolbar({
         variant="default"
         size="sm"
         className="shrink-0"
+        onPointerEnter={() => void prefetchAutomationEditorDialog().catch(() => {})}
+        onFocus={() => void prefetchAutomationEditorDialog().catch(() => {})}
         onClick={() => openCreateDialog()}
         data-contextual-tour-target="automations-create"
       >

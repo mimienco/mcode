@@ -354,14 +354,28 @@ export function NativeChatEffortSlider({
               disabled={disabled}
               aria-label={accessibleLabel}
               aria-busy={saving}
-              className="w-28 justify-start text-muted-foreground"
+              className="native-chat-effort-trigger w-32 justify-start gap-1.5 text-muted-foreground transition-colors hover:text-foreground pointer-coarse:h-11"
             >
               <BrainCircuit
                 className="size-3.5 shrink-0 transition-colors duration-300"
                 style={{ color: hasValue ? effortAccent(currentIndex, maxIndex) : undefined }}
               />
-              <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
-              <ChevronDown className="size-3 shrink-0" />
+              {hasValue ? (
+                <>
+                  <span
+                    data-native-chat-picker-category
+                    className="shrink-0 text-[11px] text-muted-foreground/80"
+                  >
+                    {translate('components.native-chat.effort.sliderTitle', 'Effort')}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-left text-xs font-medium text-foreground">
+                    {currentLabel}
+                  </span>
+                </>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
+              )}
+              <ChevronDown className="size-3 shrink-0 opacity-60" />
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>

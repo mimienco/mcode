@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
-import { foldToolMessages, splitNativeChatBlocks } from './native-chat-tool-fold'
+import {
+  createNativeChatToolFoldCache,
+  foldToolMessages,
+  splitNativeChatBlocks
+} from './native-chat-tool-fold'
 
 function msg(
   overrides: Partial<NativeChatMessage> & Pick<NativeChatMessage, 'id'>
@@ -72,5 +76,46 @@ describe('splitNativeChatBlocks', () => {
     ])
     expect(prose.map((b) => b.type)).toEqual(['text', 'image-ref'])
     expect(tools.map((b) => b.type)).toEqual(['tool-call', 'tool-result'])
+  })
+})
+
+describe('createNativeChatToolFoldCache', () => {
+  it('folds identically to foldToolMessages', () => {
+    const messages = [
+      msg({ id: 'a', role: 'assistant', blocks: [{ type: 'text', text: 'go' }] }),
+      msg({ id: 'c', role: 'assistant', blocks: [{ type: 'tool-call', name: 'Bash', input: {} }] }),
+      msg({ id: 'r', role: 'tool', blocks: [{ type: 'tool-result', output: 'ok' }] }),
+      msg({ id: 'u', role: 'user', blocks: [{ type: 'text', text: 'next' }] })
+    ]
+    expect(createNativeChatToolFoldCache().fold(messages)).toEqual(foldToolMessages(messages))
+  })
+
+  it('keeps folded identity for unchanged runs while the tail grows', () => {
+    const cache = createNativeChatToolFoldCache()
+    const head = msg({ id: 'a', role: 'assistant', blocks: [{ type: 'text', text: 'go' }] })
+    const call = msg({ id: 'c', role: 'assistant', blocks: [{ type: 'tool-call', name: 'Bash', input: {} }] })
+    const result = msg({ id: 'r', role: 'tool', blocks: [{ type: 'tool-result', output: 'ok' }] })
+    const first = cache.fold([head, call, result])
+    const second = cache.fold([head, call, result])
+    expect(second[0]).toBe(first[0])
+
+    // A growing run (new tool result appended) refolds but keeps earlier rows.
+    const grown = cache.fold([head, call, result, msg({ id: 'r2', role: 'tool', blocks: [{ type: 'tool-result', output: 'more' }] })])
+    expect(grown[0]!.blocks).toHaveLength(4)
+  })
+
+  it('never serves stale blocks when a mid-run source is replaced', () => {
+    const cache = createNativeChatToolFoldCache()
+    const head = msg({ id: 'a', role: 'assistant', blocks: [{ type: 'text', text: 'go' }] })
+    const original = msg({ id: 'c', role: 'assistant', blocks: [{ type: 'tool-call', name: 'Bash', input: {} }] })
+    cache.fold([head, original])
+    const replacement = msg({
+      id: 'c',
+      role: 'assistant',
+      blocks: [{ type: 'tool-call', name: 'Read', input: {} }]
+    })
+    const folded = cache.fold([head, replacement])
+    expect(folded).toHaveLength(1)
+    expect(folded[0]!.blocks[1]).toEqual({ type: 'tool-call', name: 'Read', input: {} })
   })
 })

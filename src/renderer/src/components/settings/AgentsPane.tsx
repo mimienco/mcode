@@ -58,6 +58,7 @@ import { getSettingOwnershipSummary } from './setting-ownership'
 import { translate } from '@/i18n/i18n'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { parseAgentDefaultEnvDraft, stringifyAgentDefaultEnvDraft } from './agent-default-env-draft'
+import { createGlobalSettingsNestedWriteQueue } from './global-settings-nested-write-queue'
 import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
 
 export { getAgentsPaneSearchEntries } from './agents-search'
@@ -71,13 +72,6 @@ type AgentsPaneProps = {
   wslCapabilitiesLoading?: boolean
 }
 
-type AgentAvailabilityUpdateQueueOptions = {
-  getSettings: () => GlobalSettings | null | undefined
-  fallbackSettings: GlobalSettings
-  updateSettings: AgentsPaneProps['updateSettings']
-  agentId: TuiAgent
-  enabled: boolean
-}
 
 type AgentRowProps = {
   agentId: TuiAgent
@@ -150,26 +144,7 @@ export function buildAgentAvailabilitySettingsUpdate(
   }
 }
 
-export function createAgentAvailabilityUpdateQueue(): (
-  options: AgentAvailabilityUpdateQueueOptions
-) => Promise<void> {
-  let pendingUpdate: Promise<unknown> = Promise.resolve()
-
-  return ({ getSettings, fallbackSettings, updateSettings, agentId, enabled }) => {
-    // Why: serialize full-array replacements so each write sees the store after
-    // the previous IPC has reconciled, while preserving the user's requested state.
-    pendingUpdate = pendingUpdate
-      .catch(() => {})
-      .then(() =>
-        updateSettings(
-          buildAgentAvailabilitySettingsUpdate(getSettings() ?? fallbackSettings, agentId, enabled)
-        )
-      )
-    return pendingUpdate.then(() => undefined)
-  }
-}
-
-const enqueueAgentAvailabilityUpdate = createAgentAvailabilityUpdateQueue()
+const enqueueLatestAgentSettingsWrite = createGlobalSettingsNestedWriteQueue<GlobalSettings>()
 
 export function AgentAvailabilityControl({
   label,
@@ -781,46 +756,57 @@ export function AgentsPane({
       : (settings.agentPermissionPreset ?? resolvedAgentPermissionMode)
   const disabledAgents = normalizeDisabledTuiAgents(settings.disabledTuiAgents)
 
+  // Why: every nested-object replacement below rebuilds from the store inside
+  // the shared chain, so a rapid second commit cannot clobber the first via a
+  // stale render-time snapshot.
+  const enqueueAgentSettingsWrite = (
+    buildUpdate: (latest: GlobalSettings) => Partial<GlobalSettings>
+  ): void => {
+    void enqueueLatestAgentSettingsWrite({
+      getSettings: () => useAppStore.getState().settings,
+      fallback: settings,
+      updateSettings
+    })(buildUpdate)
+  }
+
   const setDefault = (id: TuiAgent | 'blank' | null): void => {
     updateSettings({ defaultTuiAgent: id })
   }
 
   const setAgentEnabled = (id: TuiAgent, enabled: boolean): void => {
-    void enqueueAgentAvailabilityUpdate({
-      getSettings: () => useAppStore.getState().settings,
-      fallbackSettings: settings,
-      updateSettings,
-      agentId: id,
-      enabled
-    })
+    enqueueAgentSettingsWrite((latest) =>
+      buildAgentAvailabilitySettingsUpdate(latest, id, enabled)
+    )
   }
 
   const saveOverride = (id: TuiAgent, value: string): void => {
-    const next = { ...cmdOverrides }
-    if (value) {
-      next[id] = value
-    } else {
-      delete next[id]
-    }
-    updateSettings({ agentCmdOverrides: next })
+    enqueueAgentSettingsWrite((latest) => {
+      const next = { ...latest.agentCmdOverrides }
+      if (value) {
+        next[id] = value
+      } else {
+        delete next[id]
+      }
+      return { agentCmdOverrides: next }
+    })
   }
 
   const saveAgentArgs = (id: TuiAgent, value: string): void => {
-    updateSettings({
+    enqueueAgentSettingsWrite((latest) => ({
       agentDefaultArgs: {
-        ...agentDefaultArgs,
+        ...latest.agentDefaultArgs,
         [id]: value
       }
-    })
+    }))
   }
 
   const saveAgentEnv = (id: TuiAgent, value: Record<string, string>): void => {
-    updateSettings({
+    enqueueAgentSettingsWrite((latest) => ({
       agentDefaultEnv: {
-        ...agentDefaultEnv,
+        ...latest.agentDefaultEnv,
         [id]: value
       }
-    })
+    }))
   }
 
   const saveAgentPermissionMode = async (
@@ -846,15 +832,15 @@ export function AgentsPane({
         return
       }
     }
-    updateSettings({
+    enqueueAgentSettingsWrite((latest) => ({
       ...applyAgentPermissionMode({
         mode,
-        interactionMode: settings.agentInteractionMode ?? 'build',
-        agentDefaultArgs,
-        agentDefaultEnv
+        interactionMode: latest.agentInteractionMode ?? 'build',
+        agentDefaultArgs: latest.agentDefaultArgs,
+        agentDefaultEnv: latest.agentDefaultEnv
       }),
       agentPermissionPreset: mode
-    })
+    }))
   }
 
   // Why: null means detection is in flight, not "all agents are installed".
@@ -1016,7 +1002,9 @@ export function AgentsPane({
                 onSaveEnv={(v) => saveAgentEnv(agent.id, v)}
                 sessionSourceHome={
                   agent.id === 'codex'
-                    ? buildCodexSessionSourceHomeControl(settings, updateSettings)
+                    ? buildCodexSessionSourceHomeControl(settings, updateSettings, () =>
+                        useAppStore.getState().settings
+                      )
                     : undefined
                 }
               />

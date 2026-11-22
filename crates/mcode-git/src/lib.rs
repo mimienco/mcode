@@ -4,8 +4,10 @@
 //! bounded stdout, per-operation-class timeouts, and typed errors with stable
 //! snake_case codes for the renderer.
 
+mod capability_cache;
 mod git_binary;
 mod platform_paths;
+mod process_capture;
 mod repo;
 mod worktree;
 

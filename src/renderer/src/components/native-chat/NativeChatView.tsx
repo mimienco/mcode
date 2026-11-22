@@ -1,5 +1,6 @@
 /* oxlint-disable max-lines -- The resolved conversation view coordinates transcript, optimistic sends, interactive prompts, and terminal-backed input in one lifecycle. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '../../store'
@@ -57,12 +58,17 @@ import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
 import { useNativeChatFileLinkClick } from './use-native-chat-file-link-click'
 import {
   detectNativeChatMessageAttention,
-  useNativeChatTerminalAttention
+  useNativeChatTerminalState
 } from './native-chat-terminal-attention'
 import { NativeChatTerminalAttention } from './NativeChatTerminalAttention'
+import { NativeChatTerminalNotice } from './NativeChatTerminalNotice'
+import { launchClaudeUpdateInNewTab } from './native-chat-claude-update'
 import type { NativeChatResolvedViewProps, NativeChatViewProps } from './native-chat-view-types'
 
 export type { NativeChatViewProps } from './native-chat-view-types'
+
+// Why: PERF-08 — cadence for coalescing agentStatus preview ticks into paints.
+const STREAM_PREVIEW_THROTTLE_MS = 120
 
 /** Resolves an agent terminal into its native conversation and composer UI. */
 export default function NativeChatView({
@@ -162,7 +168,8 @@ function NativeChatResolvedView({
     transcriptPath,
     runtimeEnvironmentId,
     enabled: isVisible,
-    refreshKey: transcriptRefreshKey
+    refreshKey: transcriptRefreshKey,
+    allowMissingTranscript: !transcriptOnly
   })
   const launchPrompt = useAppStore((s) => s.nativeChatLaunchPromptByTabId[terminalTabId] ?? null)
   const clearNativeChatLaunchPrompt = useAppStore((s) => s.clearNativeChatLaunchPrompt)
@@ -181,7 +188,47 @@ function NativeChatResolvedView({
   const liveWorking = session.status === 'working'
   // The agent's in-progress reply preview (hook), shown as a live streaming
   // bubble while it works — before the completed turn flushes to the transcript.
-  const hookPreview = useAppStore((s) => s.agentStatusByPaneKey[paneKey]?.lastAssistantMessage)
+  const hookPreviewRaw = useAppStore((s) => s.agentStatusByPaneKey[paneKey]?.lastAssistantMessage)
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previewPublishedAtRef = useRef(0)
+  // Why: PERF-08 — agentStatus ticks arrive once per stream chunk; coalescing
+  // the preview into leading+trailing ~120ms paints keeps the synthetic
+  // streaming bubble off the per-chunk render path. Leaving 'working' flushes
+  // synchronously so the final text never waits out the timer.
+  const [hookPreview, setHookPreview] = useState(hookPreviewRaw)
+  const hookPreviewRef = useRef(hookPreviewRaw)
+  hookPreviewRef.current = hookPreviewRaw
+  const publishHookPreview = useCallback(() => {
+    if (previewTimerRef.current !== null) {
+      clearTimeout(previewTimerRef.current)
+      previewTimerRef.current = null
+    }
+    previewPublishedAtRef.current = Date.now()
+    setHookPreview(hookPreviewRef.current)
+  }, [])
+  useEffect(() => {
+    const elapsed = Date.now() - previewPublishedAtRef.current
+    if (elapsed >= STREAM_PREVIEW_THROTTLE_MS) {
+      publishHookPreview()
+      return
+    }
+    if (previewTimerRef.current === null) {
+      previewTimerRef.current = setTimeout(publishHookPreview, STREAM_PREVIEW_THROTTLE_MS - elapsed)
+    }
+  }, [hookPreviewRaw, publishHookPreview])
+  useEffect(() => {
+    if (!liveWorking) {
+      publishHookPreview()
+    }
+  }, [liveWorking, publishHookPreview])
+  useEffect(
+    () => () => {
+      if (previewTimerRef.current !== null) {
+        clearTimeout(previewTimerRef.current)
+      }
+    },
+    []
+  )
   // Why: Stop suppression must clear on a newer working epoch even when status
   // never leaves 'working' (interrupt + immediate next turn coalesced).
   const hookWorkingEpoch = useAppStore(
@@ -189,7 +236,7 @@ function NativeChatResolvedView({
   )
   const interactivePtyId = transcriptOnly ? null : targetPtyId
   const canSend = useNativeChatCanSend(interactivePtyId)
-  const terminalAttention = useNativeChatTerminalAttention({
+  const terminalState = useNativeChatTerminalState({
     agent,
     isVisible,
     readTerminalScreen
@@ -363,11 +410,16 @@ function NativeChatResolvedView({
     }
   }, [sessionAfterCommandBoundaries, pending, pendingMessages, commandMarkers, streamingText])
   const attention =
-    terminalAttention ?? detectNativeChatMessageAttention(sessionWithPending.messages)
+    terminalState.attention ?? detectNativeChatMessageAttention(sessionWithPending.messages)
   // Derive the view state from the pending-augmented session so a send into an
   // otherwise-empty conversation flips to the list (showing the queued bubble)
   // instead of staying on the empty state.
-  const viewState = selectNativeChatViewState(sessionWithPending)
+  const viewState = selectNativeChatViewState(sessionWithPending, {
+    transcriptSettled:
+      session.readPhase === 'ready' || terminalState.attention === 'agent-auth-required'
+  })
+  const showFullPaneAuth =
+    terminalState.attention === 'agent-auth-required' && sessionWithPending.messages.length === 0
 
   const isConversation = viewState.kind === 'ready'
   useEffect(() => {
@@ -403,6 +455,20 @@ function NativeChatResolvedView({
     interactiveSend.cancel()
   }, [interactiveSend, pendingScope])
   const nativeChatFileLinkClick = useNativeChatFileLinkClick(fileLinkContext)
+  const launchClaudeUpdate = useCallback(
+    (command: string) => {
+      if (launchClaudeUpdateInNewTab(terminalTabId, command)) {
+        return
+      }
+      toast.error(
+        translate(
+          'components.native-chat.terminalNotice.updateAvailable.failed',
+          'Could not open the Claude update terminal.'
+        )
+      )
+    },
+    [terminalTabId]
+  )
 
   // Chat-only font zoom via Cmd/Ctrl +/-/0, gated to the live conversation so
   // the chord is inert on the loading/empty/error states and elsewhere.
@@ -443,10 +509,21 @@ function NativeChatResolvedView({
       onMouseUpCapture={contextMenu.onSelectionCapture}
       onKeyUpCapture={contextMenu.onSelectionCapture}
       onContextMenuCapture={contextMenu.onContextMenuCapture}
-      className="flex h-full min-h-0 w-full flex-col bg-background focus:outline-none"
+      className="native-chat-container flex h-full min-h-0 w-full flex-col bg-background focus:outline-none"
     >
+      <NativeChatTerminalNotice notice={terminalState.notice} onUpdate={launchClaudeUpdate} />
       <div className="flex min-h-0 flex-1 flex-col">
-        {viewState.kind === 'loading' ? (
+        {showFullPaneAuth ? (
+          <NativeChatEmptyState
+            kind="auth-required"
+            agent={agent}
+            actionLabel={translate(
+              'components.native-chat.terminalAttention.auth.action',
+              'Log in in Terminal'
+            )}
+            onAction={onSwitchToTerminal}
+          />
+        ) : viewState.kind === 'loading' ? (
           <NativeChatEmptyState kind="loading" />
         ) : viewState.kind === 'error' ? (
           <NativeChatEmptyState
@@ -478,6 +555,7 @@ function NativeChatResolvedView({
         attention={attention}
         agent={agent}
         onSwitchToTerminal={onSwitchToTerminal}
+        suppressAlert={showFullPaneAuth}
       >
         {/* Live interactive prompt (question / approval) is the bottom input region
             (mobile parity). A question card supplies its own answer input, so it

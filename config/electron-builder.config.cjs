@@ -142,6 +142,19 @@ module.exports = {
     // Why: .bug-hunter/ is local agent evidence, not an application runtime input;
     // excluding it also prevents a concurrent local scan from racing packaging.
     '!.bug-hunter{,/**/*}',
+    // Why: dist/ is packaging output, never an input. A stale dist/win-unpacked
+    // left beside dist/prod otherwise gets packed whole into app.asar.
+    '!dist{,/**/*}',
+    // Why: the Rust workspace belongs to the Tauri lane; `target/` alone is tens
+    // of GiB of cargo output the Electron packager must never traverse.
+    '!target{,/**/*}',
+    '!src-tauri{,/**/*}',
+    '!crates{,/**/*}',
+    '!tools{,/**/*}',
+    '!{Cargo.lock,Cargo.toml}',
+    // Why: local benchmark/e2e/profiling output with no runtime consumer.
+    '!{test-results-*,ui-redesign-*,ui-audit-*,playwright-report}{,/**/*}',
+    '!{prof,.bench-fixtures,.impeccable,.session-keep,.dev.log}',
     '!Casks{,/**/*}',
     '!{AGENTS.md,CLAUDE.md,DEVELOPING.md,bundle-size-progress.md,ORCHESTRATION_IMPLEMENTATION_CHECKLIST.md,ORCHESTRATION_STRUCTURED_OUTPUT_DESIGN.md}',
     '!out/**/*.test.js',

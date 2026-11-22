@@ -13,7 +13,7 @@ export function TabBarQuickCommandAddActions({
     return null
   }
   return (
-    <div className="border-t border-border/50 p-1">
+    <div className="mt-2 rounded-lg border border-border/60 bg-muted/20 p-1">
       {hosts.map((host) => (
         <button
           key={host.hostId}

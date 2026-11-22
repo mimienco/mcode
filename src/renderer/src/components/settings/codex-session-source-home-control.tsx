@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Info } from 'lucide-react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { normalizeGlobalWindowsRuntimeDefault } from '../../../../shared/project-execution-runtime'
+import { createGlobalSettingsNestedWriteQueue } from './global-settings-nested-write-queue'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
@@ -14,6 +15,14 @@ export type AgentSessionSourceHomeControl = {
 }
 
 type UpdateSettings = (updates: Partial<GlobalSettings>) => void | Promise<void>
+type CodexSourceHomeBase = Pick<GlobalSettings, 'codexSessionSourceHome'>
+
+type CodexSourceHomeWriteArgs =
+  | { runtime: 'host'; value: string }
+  | { runtime: 'wsl'; distro: string; value: string }
+
+// Why: module-level so the chain survives re-renders rebuilding this control.
+const enqueueSourceHomeWrite = createGlobalSettingsNestedWriteQueue<CodexSourceHomeBase>()
 
 /**
  * Builds the Codex session-history source control scoped to the runtime the
@@ -33,7 +42,8 @@ function findWslSourceHomeKey(
 
 export function buildCodexSessionSourceHomeControl(
   settings: Pick<GlobalSettings, 'codexSessionSourceHome' | 'localWindowsRuntimeDefault'>,
-  updateSettings: UpdateSettings
+  updateSettings: UpdateSettings,
+  getLatestSettings: () => CodexSourceHomeBase | null | undefined
 ): AgentSessionSourceHomeControl {
   const runtimeScope = normalizeGlobalWindowsRuntimeDefault(settings.localWindowsRuntimeDefault)
   const sourceHome = settings.codexSessionSourceHome
@@ -48,7 +58,7 @@ export function buildCodexSessionSourceHomeControl(
       // Save under the existing key when one matches (case-insensitively), so
       // editing updates it in place instead of adding a differently-cased key.
       onSave: (value: string) =>
-        saveCodexSessionSourceHome(settings, updateSettings, {
+        saveCodexSessionSourceHome(settings, updateSettings, getLatestSettings, {
           runtime: 'wsl',
           distro: existingKey ?? wslDistro,
           value
@@ -59,20 +69,36 @@ export function buildCodexSessionSourceHomeControl(
     runtimeLabel: '~/.codex',
     value: sourceHome?.host ?? '',
     onSave: (value: string) =>
-      saveCodexSessionSourceHome(settings, updateSettings, { runtime: 'host', value })
+      saveCodexSessionSourceHome(settings, updateSettings, getLatestSettings, {
+        runtime: 'host',
+        value
+      })
   }
 }
 
 function saveCodexSessionSourceHome(
-  settings: Pick<GlobalSettings, 'codexSessionSourceHome'>,
+  settings: CodexSourceHomeBase,
   updateSettings: UpdateSettings,
-  args: { runtime: 'host'; value: string } | { runtime: 'wsl'; distro: string; value: string }
+  getLatestSettings: () => CodexSourceHomeBase | null | undefined,
+  args: CodexSourceHomeWriteArgs
 ): void {
-  const current = settings.codexSessionSourceHome ?? {}
+  // Why: rebuild from the store inside the chain so a commit racing a previous
+  // persist extends the reconciled state instead of a stale render snapshot.
+  void enqueueSourceHomeWrite({
+    getSettings: getLatestSettings,
+    fallback: settings,
+    updateSettings
+  })((latest) => buildCodexSessionSourceHomeUpdate(latest.codexSessionSourceHome, args))
+}
+
+function buildCodexSessionSourceHomeUpdate(
+  currentCodexSessionSourceHome: GlobalSettings['codexSessionSourceHome'],
+  args: CodexSourceHomeWriteArgs
+): Partial<GlobalSettings> {
+  const current = currentCodexSessionSourceHome ?? {}
   const trimmed = args.value.trim()
   if (args.runtime === 'host') {
-    updateSettings({ codexSessionSourceHome: { ...current, host: trimmed || undefined } })
-    return
+    return { codexSessionSourceHome: { ...current, host: trimmed || undefined } }
   }
   const nextWsl = { ...current.wsl }
   // Why: reuse an existing case-insensitive match so we never leave a stale
@@ -83,12 +109,12 @@ function saveCodexSessionSourceHome(
   } else {
     delete nextWsl[targetKey]
   }
-  updateSettings({
+  return {
     codexSessionSourceHome: {
       ...current,
       wsl: Object.keys(nextWsl).length > 0 ? nextWsl : undefined
     }
-  })
+  }
 }
 
 export function AgentSessionSourceHomeInput({

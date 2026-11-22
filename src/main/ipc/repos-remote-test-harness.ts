@@ -113,11 +113,20 @@ export function electronModuleMock(mocks: ReposIpcMocks): Record<string, unknown
 
 // Why: use real pure helpers so SSH parity tests catch drift in DEFAULT_BASE_REF_PROBES / normalizeRefSearchQuery.
 export function gitRepoModuleMock(actual: typeof RepoModule): Record<string, unknown> {
+  const isGitRepo = vi.fn().mockReturnValue(true)
+  const getGitRepoRoot = vi.fn((path: string) => path)
+  const getLinkedWorktreeMainRepoRoot = vi.fn().mockReturnValue(null)
   return {
     ...actual,
     // Stub only the functions that spawn git / touch the filesystem.
-    isGitRepo: vi.fn().mockReturnValue(true),
-    getGitRepoRoot: vi.fn((path: string) => path),
+    isGitRepo,
+    getGitRepoRoot,
+    getLinkedWorktreeMainRepoRoot,
+    getLocalRepoAddMetadata: vi.fn(async (path: string) => ({
+      isGitRepo: isGitRepo(path),
+      rootPath: getGitRepoRoot(path),
+      linkedMainRepoRoot: getLinkedWorktreeMainRepoRoot(path)
+    })),
     getRepoName: vi.fn().mockImplementation((path: string) => path.split('/').pop()),
     getBaseRefDefault: vi.fn().mockResolvedValue('origin/main'),
     getRemoteCount: vi.fn().mockResolvedValue(1),

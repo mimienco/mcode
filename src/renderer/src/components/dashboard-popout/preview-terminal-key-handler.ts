@@ -56,6 +56,9 @@ export function installPreviewTerminalKeyHandler(args: {
     optionKeyLocations.clear()
     optionKittyReleases.clear()
     nativeOnlyShortcutTracker.clear()
+    // Why: a chord keydown without its keyup (focus lost mid-chord) would leave
+    // a stale entry that swallows the next press of the same chord.
+    consumedClipboardKeys.clear()
   }
   const onNativeOnlyShortcutCompanion = (event: KeyboardEvent): void => {
     if (!nativeOnlyShortcutTracker.consumeCompanion(event)) {

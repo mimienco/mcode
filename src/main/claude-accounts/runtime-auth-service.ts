@@ -1038,8 +1038,10 @@ export class ClaudeRuntimeAuthService {
    * managed storage. Returns the refreshed credentials JSON, or null when no
    * refresh happened (token valid, no refresh token, or network failure).
    *
-   * Caller guarantees this account isn't the live/active one and runs inside the
-   * serialized mutation queue, so the single-use refresh token can't rotate concurrently.
+   * Runs under the shared per-account rotation lock (also held by the
+   * rate-limits inactive-account preview), so a concurrent rotation is detected
+   * via the stored-blob re-read and reused instead of double-spending the
+   * single-use refresh token.
    */
   private async refreshManagedAccountTokenIfNeeded(
     account: ClaudeManagedAccount,
@@ -1048,14 +1050,18 @@ export class ClaudeRuntimeAuthService {
     if (!isOauthTokenExpiring(credentialsJson)) {
       return null
     }
-    const refreshed = await refreshClaudeOauthCredentials(credentialsJson)
-    if (!refreshed || !this.isValidCredentialsJsonObject(refreshed)) {
-      return null
-    }
+    let refreshed: string | null
     try {
-      await this.writeManagedCredentials(account, refreshed)
+      refreshed = await refreshClaudeOauthCredentials(credentialsJson, Date.now(), {
+        lockKey: account.id,
+        readStoredCredentials: () => this.readManagedCredentials(account),
+        persistCredentials: (json) => this.writeManagedCredentials(account, json)
+      })
     } catch (error) {
       console.warn('[claude-runtime-auth] Failed to persist refreshed Claude token:', error)
+      return null
+    }
+    if (!refreshed || !this.isValidCredentialsJsonObject(refreshed)) {
       return null
     }
     return refreshed

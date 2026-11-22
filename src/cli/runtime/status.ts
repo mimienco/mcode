@@ -99,7 +99,9 @@ function isProcessRunning(pid: number | null | undefined): boolean {
   try {
     process.kill(pid, 0)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    // EPERM means the pid exists but we may not signal it (e.g. an elevated
+    // app); only a missing process counts as not running.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
 }

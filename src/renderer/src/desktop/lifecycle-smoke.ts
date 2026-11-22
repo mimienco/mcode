@@ -1,3 +1,4 @@
+import { runAgentStatusSmoke } from './agent-status-smoke'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -15,6 +16,7 @@ const shouldCheckWindowing = smokeParameters.get('windowing') === 'true'
 const shouldCheckFilesystem = smokeParameters.get('filesystem') === 'true'
 const shouldCheckCrossgrade = smokeParameters.get('crossgrade') === 'true'
 const shouldCheckMenu = smokeParameters.get('menu') === 'true'
+const shouldCheckAgentStatus = smokeParameters.get('agent_status') === 'true'
 const desktopInvoke = createDesktopInvoke((command, args) => invoke(command, args))
 const lifecycle = createTauriDesktopAppLifecycleCapability(desktopInvoke, (event, listener) =>
   listen(event, listener)
@@ -269,6 +271,11 @@ void runLifecycleSmoke({
         document.getElementById('status')?.replaceChildren(`Menu smoke failed: ${message}`)
         throw error
       }
+      await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })
+      return
+    }
+    if (shouldCheckAgentStatus) {
+      await runAgentStatusSmoke(smokeParameters)
       await desktopInvoke('window_set_minimize_to_tray_on_close', { enabled: true })
       return
     }

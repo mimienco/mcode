@@ -171,6 +171,10 @@ export async function ensureSimulatorBooted(udid: string): Promise<void> {
       // Ignore transient simctl failures while CoreSimulator is booting.
     }
   }
+  throw new EmulatorError(
+    'emulator_helper_failed',
+    `Simulator "${udid}" did not finish booting in time.`
+  )
 }
 
 export async function shutdownSimulatorDevice(udid: string): Promise<void> {

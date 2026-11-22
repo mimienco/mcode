@@ -100,6 +100,11 @@ async function fetchViaAuthJson(
       }
     }
     accessToken = refreshResult.accessToken
+    if (refreshResult.newRefreshToken) {
+      console.warn(
+        '[gemini] refresh token rotated but the auth.json lane has no write path; rotation not persisted'
+      )
+    }
   }
   let effectiveProjectId = ''
   try {
@@ -122,6 +127,11 @@ async function fetchViaAuthJson(
   if (result.status === 'error' && result.error?.includes('401')) {
     const refreshResult = await tryRefreshTokenFromBundle(refreshToken, geminiCliOAuthEnabled)
     if (refreshResult?.accessToken) {
+      if (refreshResult.newRefreshToken) {
+        console.warn(
+          '[gemini] refresh token rotated but the auth.json lane has no write path; rotation not persisted'
+        )
+      }
       const newProjectId = await loadProjectId(refreshResult.accessToken).catch(() => {
         return effectiveProjectId
       })
@@ -156,6 +166,7 @@ async function fetchViaOauthCreds(
     currentCreds = {
       ...creds,
       access_token: accessToken,
+      refresh_token: refreshResult.newRefreshToken ?? creds.refresh_token,
       expiry_date: refreshResult.expiresIn
         ? Date.now() + refreshResult.expiresIn * 1000
         : creds.expiry_date
@@ -189,6 +200,7 @@ async function fetchViaOauthCreds(
         await saveGeminiCredentials({
           ...currentCreds,
           access_token: refreshResult.accessToken,
+          refresh_token: refreshResult.newRefreshToken ?? currentCreds.refresh_token,
           expiry_date: refreshResult.expiresIn
             ? Date.now() + refreshResult.expiresIn * 1000
             : currentCreds.expiry_date

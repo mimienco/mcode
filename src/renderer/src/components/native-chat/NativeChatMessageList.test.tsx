@@ -93,7 +93,10 @@ describe('NativeChatMessageList images', () => {
       />
     )
 
-    expect(container.querySelector('[data-native-chat-transcript]')).toHaveClass('max-w-3xl')
+    expect(container.querySelector('[data-native-chat-transcript]')).toHaveClass(
+      'max-w-3xl',
+      '@5xl/native-chat:max-w-4xl'
+    )
     expect(
       container.querySelector('[data-native-chat-role="user"]')?.firstElementChild
     ).toHaveClass('max-w-[min(42rem,88%)]')

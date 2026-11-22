@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use portable_pty::{Child, MasterPty};
 
-use crate::byte_owner::{ByteOwner, OutputBatch, RestoreMarker};
+use crate::byte_owner::{ByteOwner, GlobalCredit, OutputBatch, RestoreMarker};
 use crate::pty::{MAX_INPUT_BYTES, PtyError, PtySpec};
 
 /// Reader control shared between the session and its reader thread.
@@ -176,6 +176,44 @@ impl PtySession {
         self.owner.lock().expect("owner lock").take_batch()
     }
 
+    pub fn reserve_batch(&self, global: &mut GlobalCredit) -> OutputBatch {
+        let mut owner = self.owner.lock().expect("owner lock");
+        let available = owner.available_credit(global);
+        let batch = owner.take_batch_limited(available);
+        let units = batch.delivered_units();
+        owner.record_sent(units);
+        global.record_sent(units);
+        self.control
+            .paused
+            .store(owner.available_credit(global) < 2, Ordering::SeqCst);
+        batch
+    }
+
+    pub fn rollback_batch(&self, global: &mut GlobalCredit, batch: OutputBatch) {
+        let mut owner = self.owner.lock().expect("owner lock");
+        let released = owner.rollback_sent(batch.delivered_units());
+        global.rollback_sent(released);
+        owner.return_batch(batch);
+    }
+
+    pub fn ack_with_global(&self, global: &mut GlobalCredit, processed_chars: u64) {
+        let mut owner = self.owner.lock().expect("owner lock");
+        let released = owner.ack(processed_chars);
+        global.release(released);
+        if owner.available_credit(global) >= 2 {
+            self.resume_producer();
+        }
+    }
+
+    pub fn release_delivery_credit(&self, global: &mut GlobalCredit) {
+        global.release(self.owner.lock().expect("owner lock").ack(u64::MAX));
+    }
+
+    pub fn has_pending_delivery(&self) -> bool {
+        let owner = self.owner.lock().expect("owner lock");
+        owner.has_pending_delivery() || owner.in_flight() != 0
+    }
+
     /// The pty size as known by the kernel (applied resizes included).
     pub fn applied_size(&self) -> Option<(u16, u16)> {
         self.master.get_size()
@@ -203,9 +241,6 @@ impl PtySession {
     /// promptly). The first observation is cached; the poll is a cheap
     /// try_wait.
     pub fn child_exited(&self) -> bool {
-        if self.control.dead.load(Ordering::SeqCst) {
-            return true;
-        }
         let mut child = self.child.lock().expect("child lock");
         matches!(child.try_wait(), Ok(Some(_)))
     }
@@ -219,26 +254,45 @@ impl PtySession {
     /// then return the final batch and cause — mirroring node-pty's
     /// close→drain→exit discipline (PTY_CONTRACT_SPEC.md §5).
     pub fn drain_after_child_exit_and_cause(&mut self) -> (OutputBatch, mcode_process::ExitCause) {
-        let status = {
-            let mut child = self.child.lock().expect("child lock");
-            let status = child.try_wait().ok().flatten();
-            let _ = child.kill();
-            let _ = child.wait();
-            status
-        };
+        let cause = self.stop_reader_after_child_exit();
+        (self.take_batch(), cause)
+    }
+
+    pub fn stop_reader_after_child_exit(&mut self) -> mcode_process::ExitCause {
+        self.resume_producer();
+        let status = self
+            .child
+            .lock()
+            .expect("child lock")
+            .try_wait()
+            .ok()
+            .flatten();
         self.control.dead.store(true, Ordering::SeqCst);
-        // Why first: killing the already-exited shell releases nothing; the
-        // reader unblocks only when the pseudoconsole closes (conhost exits).
         self.master.close();
+        self.join_reader_bounded();
+        status.map_or(mcode_process::ExitCause::StopUnverified, |status| {
+            mcode_process::ExitObservation {
+                exit_code: if status.signal().is_some() {
+                    0
+                } else {
+                    status.exit_code() as i32
+                },
+                signal: None,
+            }
+            .cause()
+        })
+    }
+
+    fn join_reader_bounded(&mut self) {
         if let Some(handle) = self.reader_handle.take() {
-            let _ = handle.join();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while !handle.is_finished() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            if handle.is_finished() {
+                let _ = handle.join();
+            }
         }
-        let batch = self.take_batch();
-        let observation = mcode_process::ExitObservation {
-            exit_code: status.map_or(0, |s| s.exit_code() as i32),
-            signal: None,
-        };
-        (batch, observation.cause())
     }
 
     /// Waits for the child, flushing pending output BEFORE reporting the
@@ -263,26 +317,22 @@ impl PtySession {
             std::thread::sleep(std::time::Duration::from_millis(10));
         };
 
-        // Flush-before-exit: drain the byte owner before the cause is built.
+        if status.is_some() {
+            self.stop_reader_after_child_exit();
+        }
         let batch = self.take_batch();
 
         let Some(status) = status else {
             return Ok((batch, mcode_process::ExitCause::StopUnverified));
         };
 
-        // node-pty discipline: a signalled death is {exitCode: 0, signal: N};
-        // build the cause where both facts are in hand.
-        #[cfg(unix)]
-        let observation = {
-            use std::os::unix::process::ExitStatusExt;
-            mcode_process::ExitObservation {
-                exit_code: status.code().map(|c| c as i32).unwrap_or(0),
-                signal: status.signal().map(|s| s as i32),
-            }
-        };
-        #[cfg(not(unix))]
+        // portable-pty exposes a portable code and signal text, not a native ExitStatus.
         let observation = mcode_process::ExitObservation {
-            exit_code: status.exit_code() as i32,
+            exit_code: if status.signal().is_some() {
+                0
+            } else {
+                status.exit_code() as i32
+            },
             signal: None,
         };
 
@@ -296,9 +346,8 @@ impl PtySession {
         let _ = child.wait();
         drop(child);
         self.control.dead.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.reader_handle.take() {
-            let _ = handle.join();
-        }
+        self.master.close();
+        self.join_reader_bounded();
         Ok(())
     }
 
@@ -317,6 +366,7 @@ impl Drop for PtySession {
             let _ = child.wait();
         }
         self.control.dead.store(true, Ordering::SeqCst);
+        self.master.close();
         // Bounded join: the reader polls every 5 ms when paused and reads
         // to EOF otherwise; killing the child releases the pipe. If the
         // thread somehow still has not exited after the grace period, detach
@@ -327,7 +377,7 @@ impl Drop for PtySession {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
             if !handle.is_finished() {
-                std::mem::forget(handle);
+                drop(handle);
             } else {
                 let _ = handle.join();
             }
@@ -382,6 +432,7 @@ fn start_reader_thread(
                 Err(_) => break,
             }
         }
+        owner.lock().expect("owner lock").finish_utf8();
         control.dead.store(true, Ordering::SeqCst);
     })
 }
@@ -521,5 +572,21 @@ mod tests {
             collected.contains("日本語"),
             "multibyte payload must survive read boundaries, got {collected:?}"
         );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn real_conpty_kill_closes_master_before_joining_reader() {
+        let mut spec = echo_spec();
+        spec.args = vec!["/d".into(), "/c".into(), "ping -n 30 127.0.0.1 >nul".into()];
+        let mut session = PtySession::spawn(PtyHandle(901), spec).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            sender.send(session.kill()).unwrap();
+        });
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("kill must not hang joining ConPTY reader")
+            .unwrap();
     }
 }

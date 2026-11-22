@@ -59,6 +59,7 @@ export const BYPASS_TUI_AGENT_ARGS: Partial<Record<TuiAgent, string>> = {
   hermes: '--yolo',
   copilot: '--yolo',
   grok: '--permission-mode bypassPermissions',
+  omp: '--approval-mode yolo',
   devin: '--permission-mode bypass',
   ante: '--yolo',
   trae: '--yolo'
@@ -72,14 +73,16 @@ const ASK_ARGS: Partial<Record<TuiAgent, string>> = {
   claude: '--permission-mode default',
   codex: '--sandbox read-only --ask-for-approval on-request',
   gemini: '--approval-mode default',
-  grok: '--permission-mode default'
+  grok: '--permission-mode default',
+  omp: '--approval-mode always-ask'
 }
 
 const AUTO_EDIT_ARGS: Partial<Record<TuiAgent, string>> = {
   claude: '--permission-mode acceptEdits',
   codex: '--sandbox workspace-write --ask-for-approval on-request',
   gemini: '--approval-mode auto_edit',
-  grok: '--permission-mode acceptEdits'
+  grok: '--permission-mode acceptEdits',
+  omp: '--approval-mode write'
 }
 
 const COMBINED_PLAN_ARGS: Partial<Record<TuiAgent, string>> = {
@@ -236,9 +239,13 @@ export function getAgentRunProfileCapabilities(agent: AgentType): AgentRunProfil
   const hasBypass = agent in BYPASS_TUI_AGENT_ARGS || agent in BYPASS_TUI_AGENT_ENV
   const hasAutoEdits = agent in AUTO_EDIT_ARGS
   const hasLaunchPlan = agent in COMBINED_PLAN_ARGS || agent in INDEPENDENT_PLAN_ARGS
-  const hasInteractivePlan = agent === 'codex' || agent === 'grok'
+  const hasInteractivePlan = agent === 'codex' || agent === 'grok' || agent === 'omp'
   const interactivePlanAction =
-    agent === 'grok' ? 'Use /plan or Shift+Tab in the Grok terminal' : 'Open Plan in Terminal'
+    agent === 'grok'
+      ? 'Use /plan or Shift+Tab in the Grok terminal'
+      : agent === 'omp'
+        ? 'Use /plan in the OMP terminal'
+        : 'Open Plan in Terminal'
   return {
     permissions: {
       ask: hasBypass ? LAUNCH_ONLY : { kind: 'unsupported', reason: 'No verified approval mode.' },

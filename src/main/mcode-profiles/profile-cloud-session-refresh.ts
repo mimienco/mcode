@@ -6,7 +6,11 @@ import {
   readMCodeCloudSession,
   saveMCodeCloudSessionIfCurrent
 } from './profile-cloud-session-store'
-import { MCodeCloudRequestError, refreshMCodeCloudSession } from './profile-cloud-client'
+import {
+  MCodeCloudRequestError,
+  refreshMCodeCloudSession
+} from './profile-cloud-client'
+import type { MCodeCloudSessionExchangeResponse } from './profile-cloud-session-exchange'
 import { linkMCodeProfileToCloud } from './profile-cloud-index'
 import {
   captureCloudSessionMutation,
@@ -44,6 +48,36 @@ class StaleCloudSessionMutationError extends Error {
 
 function cloudSessionRefreshKey(profileId: string, userDataPath: string): string {
   return `${userDataPath}\0${profileId}`
+}
+
+// Why: refresh tokens rotate, so concurrent refreshes must single-flight;
+// a second POST with the same refresh token can trip server reuse detection
+// and revoke the whole token family. This guards the raw network call so
+// every rotation path — refreshStoredCloudSession below and direct callers
+// like cloud org selection — shares one in-flight POST per profile.
+const inflightCloudSessionRefreshPosts = new Map<
+  string,
+  Promise<MCodeCloudSessionExchangeResponse>
+>()
+
+export async function refreshMCodeCloudSessionSingleFlight(
+  config: MCodeCloudAuthConfig,
+  profileId: string,
+  userDataPath: string,
+  session: MCodeCloudSession
+): Promise<MCodeCloudSessionExchangeResponse> {
+  const key = cloudSessionRefreshKey(profileId, userDataPath)
+  const inflight = inflightCloudSessionRefreshPosts.get(key)
+  if (inflight) {
+    return inflight
+  }
+  const task = refreshMCodeCloudSession(config, session)
+  inflightCloudSessionRefreshPosts.set(key, task)
+  try {
+    return await task
+  } finally {
+    inflightCloudSessionRefreshPosts.delete(key)
+  }
 }
 
 // Why: with refresh-token rotation, only the session that actually failed may
@@ -93,7 +127,12 @@ async function refreshStoredCloudSession(
     }
     const expectedIdentity = cloudSessionIdentity(active.profile.id, active.profile.cloud)
     const snapshot = captureCloudSessionMutation(expectedIdentity, userDataPath)
-    const refreshed = await refreshMCodeCloudSession(config, session)
+    const refreshed = await refreshMCodeCloudSessionSingleFlight(
+      config,
+      active.profile.id,
+      userDataPath,
+      session
+    )
     const refreshedIdentity = cloudSessionIdentity(active.profile.id, refreshed.cloud)
     if (
       refreshedIdentity.cloudUserId !== expectedIdentity.cloudUserId ||

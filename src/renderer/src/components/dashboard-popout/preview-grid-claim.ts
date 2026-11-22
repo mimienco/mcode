@@ -1,5 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
-import { tauriTerminalPreviewClient } from '../../desktop/tauri-terminal-preview-client'
+import { runtimeTerminalPreviewClient } from '../../desktop/runtime-terminal-preview-client'
 
 const FIT_REQUEST_DEBOUNCE_MS = 200
 // Mirror the runtime's clampTerminalViewport so a request always matches what lands.
@@ -67,7 +67,7 @@ export function createPreviewGridClaim(args: {
     // The resize triggers a main-side resync push; the reconnect snapshot
     // carries the new grid. If the claim didn't land (a phone owns the size),
     // the dialog's scaled fallback rendering stays correct as-is.
-    void tauriTerminalPreviewClient.fit(args.ptyId, cols, rows).catch(() => undefined)
+    void runtimeTerminalPreviewClient.fit(args.ptyId, cols, rows).catch(() => undefined)
   }
 
   const schedule = (): void => {

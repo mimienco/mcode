@@ -91,7 +91,7 @@ import type { ResolvedSourceControlAiGenerationParams } from '../../shared/sourc
 import { withLinkedIssueDraftContext } from '../../shared/source-control-ai-action-variables'
 import { validateGitPushTarget } from '../git/push-target-validation'
 import { getRemoteCommitUrl, getRemoteFileUrl } from '../git/repo'
-import { resolveAuthorizedPath, authorizeExternalPath } from './filesystem-auth'
+import { resolveAuthorizedPath, authorizeRendererExternalPath } from './filesystem-auth'
 import { resolveRegisteredWorktreePath } from './registered-worktree-roots-cache'
 import { validateGitRelativeFilePath, isENOENT } from './filesystem-path-containment'
 import { listQuickOpenFiles } from './filesystem-list-files'
@@ -946,9 +946,11 @@ export function registerFilesystemHandlers(
   registerFilesystemMutationHandlers(store)
   registerFilesystemSearchReplaceHandlers(store)
 
-  ipcMain.handle('fs:authorizeExternalPath', (_event, args: { targetPath: string }): void => {
-    authorizeExternalPath(args.targetPath)
-  })
+  ipcMain.handle(
+    'fs:authorizeExternalPath',
+    (_event, args: { targetPath: string }): Promise<void> =>
+      authorizeRendererExternalPath(args.targetPath, store)
+  )
 
   ipcMain.handle(
     'fs:stat',

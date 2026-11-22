@@ -45,7 +45,10 @@ export function NativeChatComposerActions({
     ? translate('components.native-chat.composer.stopDictation', 'Stop dictation')
     : translate('components.native-chat.composer.startDictation', 'Start dictation')
   return (
-    <div data-native-chat-composer-actions className="flex w-full items-center gap-1.5">
+    <div
+      data-native-chat-composer-actions
+      className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1.5"
+    >
       <div data-native-chat-attach-action className="flex min-w-0 items-center">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -72,7 +75,7 @@ export function NativeChatComposerActions({
         data-native-chat-run-profile
         role="group"
         aria-label={translate('components.native-chat.composer.runProfile', 'Run profile')}
-        className="ml-auto flex min-w-0 items-center rounded-md bg-muted/45 p-0.5"
+        className="flex min-w-0 max-w-full items-center justify-self-end rounded-md bg-muted/45 p-0.5"
       >
         <NativeChatSessionOptionPickers
           surface={sessionOptionsSurface}
@@ -138,7 +141,7 @@ export function NativeChatComposerActions({
           onClick={isWorking ? onStop : onSend}
           variant={isWorking ? 'secondary' : 'default'}
           size="icon"
-          className="size-9 rounded-full pointer-coarse:size-10"
+          className="size-9 rounded-full pointer-coarse:size-11"
         >
           {isWorking ? (
             <Square className="size-3.5 fill-current" />

@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "session-commands",
+  "description": "Durable session persistence for the primary local MCode window.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-session-get",
+    "allow-session-set",
+    "allow-session-patch",
+    "allow-session-flush",
+    "allow-session-read-terminal-scrollback"
+  ]
+}

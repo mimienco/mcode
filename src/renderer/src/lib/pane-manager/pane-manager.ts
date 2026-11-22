@@ -309,9 +309,9 @@ export class PaneManager {
     })
   }
 
-  resumeRendering(): void {
+  resumeRendering(): boolean {
     this.renderingSuspended = false
-    resumePaneRendering(this.panes.values(), this)
+    return resumePaneRendering(this.panes.values(), this)
   }
 
   movePane(sourcePaneId: number, targetPaneId: number, zone: DropZone): void {

@@ -1,5 +1,6 @@
 import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
 import type { GlobalSettings } from './global-settings-types'
+import { isWslExecutable } from './wsl-paths'
 
 type LocalWindowsTerminalRuntimeSettings =
   | Partial<Pick<GlobalSettings, 'terminalWindowsShell' | 'terminalWindowsWslDistro'>>
@@ -10,18 +11,13 @@ export type LocalWindowsTerminalRuntimeOptions = {
   terminalWindowsWslDistro: string | null
 }
 
-export function isWslShellName(shellPath: string | undefined): boolean {
-  const shellName = shellPath?.replaceAll('\\', '/').split('/').pop()?.toLowerCase()
-  return shellName === 'wsl.exe' || shellName === 'wsl'
-}
-
 export function getHostShellForProjectRuntime(
   requestedShell: string | undefined,
   settingsShell: string | undefined,
   fallbackHostShell = 'powershell.exe'
 ): string {
   const candidate = requestedShell ?? settingsShell
-  if (candidate && !isWslShellName(candidate)) {
+  if (candidate && !isWslExecutable(candidate)) {
     return candidate
   }
   return fallbackHostShell

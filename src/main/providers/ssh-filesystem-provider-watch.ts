@@ -142,6 +142,13 @@ export async function closeSshFilesystemWatch(
   rootPath: string
 ): Promise<void> {
   const rootKey = sshFilesystemWatchKey(rootPath)
+  // Why: mark the registration stopping BEFORE the awaited teardown request so
+  // a concurrent watch() for the same root aborts instead of joining a watcher
+  // that is about to stop receiving events.
+  const registration = registrations.get(rootKey)
+  if (registration) {
+    registration.stopping = true
+  }
   try {
     await mux.request('fs.unwatchAndWait', { rootPath })
   } catch (error) {

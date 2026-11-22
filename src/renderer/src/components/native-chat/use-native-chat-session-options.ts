@@ -28,6 +28,7 @@ import {
   resolveNativeChatModelDiscoveryContext
 } from './native-chat-session-option-discovery'
 import { readClaudeSessionOptionsFromTerminalScreen } from './claude-terminal-session-options'
+import { readOmpSessionOptionsFromTerminalScreen } from './omp-terminal-session-options'
 import { useCodexLiveSessionOptions } from './use-codex-live-session-options'
 import { useNativeChatRunProfile } from './use-native-chat-run-profile'
 
@@ -124,9 +125,14 @@ export function useNativeChatSessionOptions(args: {
             readTerminalScreen?.(),
             discoveredModels ?? undefined
           )
-        : agent === 'codex'
-          ? codexLive.reportedValues
-          : null
+        : agent === 'omp'
+          ? readOmpSessionOptionsFromTerminalScreen(
+              readTerminalScreen?.(),
+              discoveredModels ?? getAgentSessionOptionCatalog(agent)?.models ?? []
+            )
+          : agent === 'codex'
+            ? codexLive.reportedValues
+            : null
     return createNativeChatPtySessionOptions({
       agent,
       scopeKey,
@@ -170,7 +176,7 @@ export function useNativeChatSessionOptions(args: {
   ])
 
   useEffect(() => {
-    if (!surface || agent !== 'claude') {
+    if (!surface || (agent !== 'claude' && agent !== 'omp')) {
       return
     }
     let cancelled = false
@@ -193,10 +199,13 @@ export function useNativeChatSessionOptions(args: {
         ? readNativeChatEnrichedModels(agent, discoveryContext.hostKey)
         : null
       for (const screen of [authoritativeScreen, readTerminalScreen?.() ?? null]) {
-        const reportedValues = readClaudeSessionOptionsFromTerminalScreen(
-          screen,
-          models ?? undefined
-        )
+        const reportedValues =
+          agent === 'omp'
+            ? readOmpSessionOptionsFromTerminalScreen(
+                screen,
+                models ?? getAgentSessionOptionCatalog(agent)?.models ?? []
+              )
+            : readClaudeSessionOptionsFromTerminalScreen(screen, models ?? undefined)
         if (!reportedValues) {
           continue
         }
@@ -226,9 +235,11 @@ export function useNativeChatSessionOptions(args: {
       discoveryContext.hostKey,
       (models) => {
         surface.replaceModels(models)
-        const screen = agent === 'claude' ? reportedScreenRef.current : null
+        const screen = agent === 'claude' || agent === 'omp' ? reportedScreenRef.current : null
         const reportedValues = screen
-          ? readClaudeSessionOptionsFromTerminalScreen(screen, models)
+          ? agent === 'omp'
+            ? readOmpSessionOptionsFromTerminalScreen(screen, models)
+            : readClaudeSessionOptionsFromTerminalScreen(screen, models)
           : null
         if (reportedValues) {
           surface.reportSessionOptions(reportedValues)

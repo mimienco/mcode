@@ -207,31 +207,50 @@ export class CodexLiveSessionConnection {
     })
   }
 
+  // Why: before the first turn the Codex TUI already prints a model+effort
+  // banner — the catalog's flagged default with its default reasoning effort.
+  // Surfacing the same values keeps the chat composer's pills honest with the
+  // terminal banner instead of showing bare "Model"/"Effort" until a thread
+  // exists for the settings subscription.
+  private catalogCurrent(): CodexLiveCurrentSettings | null {
+    const model = this.catalog.models.find((entry) => entry.isDefault) ?? this.catalog.models[0]
+    return model ? { model: model.id, effort: model.defaultEffort } : null
+  }
+
   snapshot(): CodexLiveSessionOptionsSnapshot {
-    return !this.rpc.available
-      ? { available: false }
-      : {
-          available: true,
-          models: [...this.models],
-          controls: codexRunProfileControls(this.catalog),
-          ...(this.current ? { current: { ...this.current } } : {})
-        }
+    if (!this.rpc.available) {
+      return { available: false }
+    }
+    const current = this.current ?? this.catalogCurrent()
+    return {
+      available: true,
+      models: [...this.models],
+      controls: codexRunProfileControls(this.catalog),
+      ...(current ? { current: { ...current } } : {})
+    }
   }
 
   async readySnapshot(): Promise<CodexLiveSessionOptionsSnapshot> {
     if (!this.rpc.available) {
       return { available: false }
     }
-    try {
-      await this.loadedThreadId(350)
-      if (!(await this.ensureSettingsUpdateSupported())) {
-        return { available: false }
-      }
-      void this.trySubscribe()
+    // Why: a pre-thread poll (fresh "Start a chat" pane) must not fail the whole
+    // snapshot — the catalog already knows the default model/effort the TUI
+    // banner prints. Probe settings support only once a thread exists: the
+    // probe itself needs a thread, and a premature false result is cached
+    // permanently, demoting the session to command fallbacks forever.
+    const threadReady = await this.loadedThreadId(350).then(
+      () => true,
+      () => false
+    )
+    if (!threadReady) {
       return this.snapshot()
-    } catch {
+    }
+    if (!(await this.ensureSettingsUpdateSupported())) {
       return { available: false }
     }
+    void this.trySubscribe()
+    return this.snapshot()
   }
 
   async update(
@@ -243,6 +262,11 @@ export class CodexLiveSessionConnection {
     if (!(await this.ensureSettingsUpdateSupported())) {
       return { outcome: 'unavailable' }
     }
+    // Why: loadedThreadId starts this subscription without awaiting it. A fast
+    // picker change could otherwise be accepted and echoed by Codex before the
+    // confirmation waiter exists, making the UI falsely demote the session to
+    // the Terminal-only fallback.
+    await this.trySubscribe()
     const prepared = prepareCodexLiveSessionUpdate({
       catalog: this.catalog,
       update,
@@ -251,7 +275,7 @@ export class CodexLiveSessionConnection {
     if (!prepared) {
       return { outcome: 'unavailable' }
     }
-    const { currentModel, effort, runProfileUpdate } = prepared
+    const { currentModel, effort, runProfileUpdate, accepted } = prepared
     try {
       const threadId = await this.loadedThreadId()
       const changesEffectiveSettings =
@@ -278,9 +302,18 @@ export class CodexLiveSessionConnection {
           ...(confirmed.interactionMode ? { interactionMode: confirmed.interactionMode } : {})
         }
       }
+      if (changesEffectiveSettings && !this.subscribed) {
+        // Before the first turn Codex has a loaded in-memory thread but no
+        // rollout file, so thread/resume cannot subscribe and no settings echo
+        // is available. A fulfilled settings/update is the provider's only
+        // confirmation in that state; the TUI has already applied the change.
+        this.current = { ...accepted }
+        return { outcome: 'applied', ...accepted }
+      }
       // An accepted RPC only proves the update was queued. Changed settings
       // require the provider's effective-state notification before the UI can
-      // claim success; a genuine no-op does not emit one.
+      // claim success when a subscription exists; a genuine no-op does not
+      // emit one.
       if (changesEffectiveSettings) {
         return { outcome: 'unavailable' }
       }

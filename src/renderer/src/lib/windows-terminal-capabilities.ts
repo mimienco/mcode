@@ -121,6 +121,10 @@ export function hasCachedWindowsTerminalCapabilities(ownerKey = 'local'): boolea
   return cachedCapabilitiesByOwnerKey.has(ownerKey)
 }
 
+// Why: PERF-10 — concurrent forced callers that join an in-flight probe must
+// schedule ONE follow-up revalidation in total, not one chained probe each.
+const pendingForcedRevalidationByOwnerKey = new Map<string, Promise<WindowsTerminalCapabilities>>()
+
 export function loadWindowsTerminalCapabilities(
   options: {
     force?: boolean
@@ -148,11 +152,22 @@ export function loadWindowsTerminalCapabilities(
     if (!options.force) {
       return pendingCapabilities
     }
-    // Why: PERF-10 — force joins the identical in-flight read and schedules at
-    // most one revalidation afterwards instead of launching a duplicate probe.
-    return pendingCapabilities.then(() =>
-      loadWindowsTerminalCapabilities({ ...options, now: Date.now() })
-    )
+    // Why: PERF-10 — forced callers join the identical in-flight read, then
+    // share a single scheduled revalidation so the joined answer is never
+    // treated as final without exactly one freshness check.
+    const existingRevalidation = pendingForcedRevalidationByOwnerKey.get(ownerKey)
+    if (existingRevalidation) {
+      return existingRevalidation
+    }
+    const revalidation = pendingCapabilities
+      .then(() => loadWindowsTerminalCapabilities({ ...options, force: true, now: Date.now() }))
+      .finally(() => {
+        if (pendingForcedRevalidationByOwnerKey.get(ownerKey) === revalidation) {
+          pendingForcedRevalidationByOwnerKey.delete(ownerKey)
+        }
+      })
+    pendingForcedRevalidationByOwnerKey.set(ownerKey, revalidation)
+    return revalidation
   }
 
   // Why: Settings, status bar, and paired web tab bars need one shared answer.
@@ -163,7 +178,7 @@ export function loadWindowsTerminalCapabilities(
     .then((capabilities) => {
       if (requestId === latestCapabilityRequestIdByOwnerKey.get(ownerKey)) {
         pendingCapabilitiesByOwnerKey.delete(ownerKey)
-        publish(capabilities, ownerKey, now)
+        publish(capabilities, ownerKey, options.now ?? Date.now())
         return capabilities
       }
       return getCachedWindowsTerminalCapabilities(ownerKey)
@@ -171,7 +186,7 @@ export function loadWindowsTerminalCapabilities(
     .catch(() => {
       if (requestId === latestCapabilityRequestIdByOwnerKey.get(ownerKey)) {
         pendingCapabilitiesByOwnerKey.delete(ownerKey)
-        publish(UNAVAILABLE_CAPABILITIES, ownerKey, now)
+        publish(UNAVAILABLE_CAPABILITIES, ownerKey, options.now ?? Date.now())
         return UNAVAILABLE_CAPABILITIES
       }
       return getCachedWindowsTerminalCapabilities(ownerKey)

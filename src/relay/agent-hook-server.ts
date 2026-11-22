@@ -4,7 +4,7 @@
 // reattaching MCode only needs each pane's current status, never its history, and the bound keeps a
 // long-lived relay from growing with every event.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 
 import { MCODE_HOOK_PROTOCOL_VERSION } from '../shared/agent-hook-types'
@@ -228,7 +228,13 @@ export class RelayAgentHookServer {
       res.end()
       return
     }
-    if (req.headers['x-mcode-agent-hook-token'] !== this.token) {
+    // Why: hash both sides so the token check is constant-time.
+    const presentedToken = req.headers['x-mcode-agent-hook-token']
+    const expectedDigest = createHash('sha256').update(this.token).digest()
+    if (
+      typeof presentedToken !== 'string' ||
+      !timingSafeEqual(expectedDigest, createHash('sha256').update(presentedToken).digest())
+    ) {
       res.writeHead(403)
       res.end()
       return

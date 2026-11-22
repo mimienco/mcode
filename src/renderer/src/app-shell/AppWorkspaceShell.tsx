@@ -12,6 +12,7 @@ import { TitlebarLeftControls } from './TitlebarLeftControls'
 import { TitlebarMainStrip } from './TitlebarMainStrip'
 import { PageLoadingSurface } from './page-loading-surface'
 import { useStableActiveView } from './use-stable-active-view'
+import { APP_PAGE_IMPORTERS } from './app-page-chunks'
 import type { AppChromeLayout } from './use-app-chrome-layout'
 import type { FloatingWorkspacePanelState } from './use-floating-workspace-panel'
 
@@ -19,14 +20,14 @@ const Landing = lazy(() => import('../components/Landing'))
 const WorktreeCreationPanel = lazy(
   () => import('../components/worktree-creation/WorktreeCreationPanel')
 )
-const TaskPage = lazy(() => import('../components/TaskPage'))
-const AutomationsPage = lazy(() => import('../components/automations/AutomationsPage'))
-const ActivityPrototypePage = lazy(() => import('../components/activity/ActivityPrototypePage'))
-const Settings = lazy(() => import('../components/settings/Settings'))
-const SkillsPage = lazy(() => import('../components/skills/SkillsPage'))
-const ArtifactsPage = lazy(() => import('../components/artifacts/ArtifactsPage'))
-const WorkspaceSpacePage = lazy(() => import('../components/workspace-space/WorkspaceSpacePage'))
-const MobilePage = lazy(() => import('../components/mobile/MobilePage'))
+const TaskPage = lazy(APP_PAGE_IMPORTERS.tasks)
+const AutomationsPage = lazy(APP_PAGE_IMPORTERS.automations)
+const ActivityPrototypePage = lazy(APP_PAGE_IMPORTERS.activity)
+const Settings = lazy(APP_PAGE_IMPORTERS.settings)
+const SkillsPage = lazy(APP_PAGE_IMPORTERS.skills)
+const ArtifactsPage = lazy(APP_PAGE_IMPORTERS.artifacts)
+const WorkspaceSpacePage = lazy(APP_PAGE_IMPORTERS.space)
+const MobilePage = lazy(APP_PAGE_IMPORTERS.mobile)
 const Terminal = lazy(() => import('../components/Terminal'))
 
 type WorktreeSidebarScrollRefs = {

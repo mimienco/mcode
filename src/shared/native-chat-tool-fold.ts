@@ -35,6 +35,63 @@ export function foldToolMessages(messages: readonly NativeChatMessage[]): Native
   return output
 }
 
+export type NativeChatToolFoldCache = {
+  /** Fold with per-run caching: runs whose source messages are unchanged keep
+   *  their folded identity, so downstream memoized rows skip re-rendering. */
+  fold(messages: readonly NativeChatMessage[]): NativeChatMessage[]
+}
+
+/** Why: PERF-08 — the transcript re-folds on every stream tick; caching folded
+ *  output per source run keeps earlier rows' identities stable across ticks so
+ *  only the growing tail produces fresh objects. Every source reference is
+ *  validated before a hit, so a replaced mid-run message can never serve stale
+ *  blocks. */
+export function createNativeChatToolFoldCache(): NativeChatToolFoldCache {
+  const runs = new WeakMap<
+    NativeChatMessage,
+    { sources: readonly NativeChatMessage[]; folded: NativeChatMessage }
+  >()
+  return {
+    fold(messages) {
+      const output: NativeChatMessage[] = []
+      let index = 0
+      while (index < messages.length) {
+        const previous = output.at(-1)
+        const message = messages[index]!
+        if (!(isToolOnlyMessage(message) && previous?.role === 'assistant')) {
+          output.push(message)
+          index += 1
+          continue
+        }
+        let end = index
+        while (end + 1 < messages.length && isToolOnlyMessage(messages[end + 1]!)) {
+          end += 1
+        }
+        const sources = messages.slice(index, end + 1)
+        const tailKey = sources.at(-1)!
+        const cached = runs.get(tailKey)
+        if (
+          cached &&
+          cached.sources.length === sources.length &&
+          cached.sources.every((source, offset) => source === sources[offset])
+        ) {
+          // Same shape as foldToolMessages: the run replaces the trailing
+          // assistant rather than appending after it.
+          output.pop()
+          output.push(cached.folded)
+        } else {
+          const folded = foldToolMessages([previous, ...sources])[0]!
+          runs.set(tailKey, { sources, folded })
+          output.pop()
+          output.push(folded)
+        }
+        index = end + 1
+      }
+      return output
+    }
+  }
+}
+
 export type NativeChatToolPair = {
   call?: NativeChatToolCallBlock
   result?: NativeChatToolResultBlock

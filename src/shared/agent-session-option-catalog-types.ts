@@ -1,4 +1,5 @@
 import type { AgentType } from './agent-status-types'
+import type { ModelCatalogMetadata } from './model-catalog-metadata'
 import type {
   SessionOptionDescriptor,
   SessionOptionSelectChoice,
@@ -50,6 +51,7 @@ export type CatalogModel = {
   label: string
   description?: string
   isDefault?: boolean
+  modelMetadata?: ModelCatalogMetadata
   options: CatalogOption[]
 }
 

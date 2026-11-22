@@ -323,6 +323,9 @@ async function scanDarwinLsofPorts(
   const metadata = await loadDarwinProcessMetadata(
     new Set(ports.flatMap((p) => (p.pid ? [p.pid] : [])))
   )
+  if (!metadata) {
+    return { ports, metadataAvailable: false }
+  }
   return {
     ports: ports.map((port) => ({ ...metadata.get(port.pid ?? -1), ...port })),
     metadataAvailable: true
@@ -340,6 +343,9 @@ async function scanWindowsNetstatPorts(
   const metadata = await loadWindowsProcessMetadata(
     new Set(ports.flatMap((p) => (p.pid ? [p.pid] : [])))
   )
+  if (!metadata) {
+    return { ports, metadataAvailable: false }
+  }
   return {
     ports: ports.map((port) => ({ ...metadata.get(port.pid ?? -1), ...port })),
     metadataAvailable: true
@@ -435,7 +441,9 @@ async function loadLinuxProcessMetadata(pid: number): Promise<ProcessMetadata> {
   }
 }
 
-async function loadDarwinProcessMetadata(pids: Set<number>): Promise<Map<number, ProcessMetadata>> {
+async function loadDarwinProcessMetadata(
+  pids: Set<number>
+): Promise<Map<number, ProcessMetadata> | null> {
   const result = new Map<number, ProcessMetadata>()
   const pidList = Array.from(pids).join(',')
   if (!pidList) {
@@ -461,6 +469,13 @@ async function loadDarwinProcessMetadata(pids: Set<number>): Promise<Map<number,
     'command='
   ]).catch(() => null)
 
+  // Why (#11161): a failed probe leaves ports unattributed, and reconciling
+  // unattributed ports reads as "the listener vanished", evicting live URLs.
+  // Report metadata unavailable so the caller skips reconciliation this cycle.
+  if (cwdOutput === null || commandOutput === null) {
+    return null
+  }
+
   let currentPid: number | null = null
   for (const line of cwdOutput?.stdout.split('\n') ?? []) {
     if (line.startsWith('p')) {
@@ -485,7 +500,7 @@ async function loadDarwinProcessMetadata(pids: Set<number>): Promise<Map<number,
 
 async function loadWindowsProcessMetadata(
   pids: Set<number>
-): Promise<Map<number, ProcessMetadata>> {
+): Promise<Map<number, ProcessMetadata> | null> {
   const result = new Map<number, ProcessMetadata>()
   if (pids.size === 0) {
     return result
@@ -512,7 +527,10 @@ async function loadWindowsProcessMetadata(
       }
     }
   } catch {
-    // Process metadata is optional; port rows still render without attribution.
+    // Why: a failed probe leaves ports unattributed, and reconciling unattributed
+    // ports reads as "the listener vanished", evicting live URLs (#11161). Port
+    // rows still render without attribution; the caller just skips reconciliation.
+    return null
   }
   return result
 }

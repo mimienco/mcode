@@ -26,7 +26,7 @@ import { checkRgAvailable } from './rg-availability'
 import { resolveAuthorizedPath } from './filesystem-auth'
 import { getLocalGitOptionsForRegisteredWorktree } from './local-worktree-runtime-options'
 import { QuickOpenSubprocessPathAccumulator } from '../../shared/quick-open-listing-limits'
-import { buildRipgrepRequiredMessage } from '../../shared/quick-open-install-rg'
+import { buildRipgrepRequiredMessage } from '../../shared/quick-open-install-rg-node'
 
 export type QuickOpenFilePathSearchResult = {
   paths: string[]

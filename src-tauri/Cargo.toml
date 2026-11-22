@@ -26,12 +26,16 @@ tauri-build.workspace = true
 unexpected_cfgs = { level = "allow", check-cfg = ["cfg(rust_analyzer)", "cfg(devtools)"] }
 
 [dependencies]
+mcode-agent-status = { path = "../crates/mcode-agent-status" }
+parking_lot = "0.12"
+getrandom.workspace = true
 mcode-diagnostics = { path = "../crates/mcode-diagnostics" }
 mcode-app = { path = "../crates/mcode-app" }
 arboard.workspace = true
 mcode-wire = { path = "../crates/mcode-wire" }
 crossbeam-channel = "0.5"
 mcode-fs = { path = "../crates/mcode-fs" }
+mcode-git = { path = "../crates/mcode-git" }
 notify = { version = "7", features = ["crossbeam-channel"] }
 mcode-pty = { path = "../crates/mcode-pty" }
 mcode-process = { path = "../crates/mcode-process" }
@@ -63,3 +67,4 @@ tokio = { version = "1", features = ["sync", "io-util", "time", "rt", "macros", 
 
 [dev-dependencies]
 tempfile = "3"
+tauri = { workspace = true, features = ["tray-icon", "test"] }

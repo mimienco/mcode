@@ -63,7 +63,7 @@ export class AutomationService {
 
   setRendererReady(): void {
     this.rendererReady = true
-    void this.evaluateDueRuns()
+    void this.evaluateDueRuns().catch(() => {})
   }
 
   start(): void {
@@ -71,12 +71,12 @@ export class AutomationService {
       return
     }
     this.timer = setInterval(() => {
-      void this.evaluateDueRuns()
+      void this.evaluateDueRuns().catch(() => {})
     }, this.tickMs)
     // Why: headless serve never gets a renderer-ready IPC, but due runs still
     // need the same startup catch-up pass desktop gets after renderer attach.
     if (this.rendererReady || this.headlessDispatcher) {
-      void this.evaluateDueRuns()
+      void this.evaluateDueRuns().catch(() => {})
     }
   }
 
@@ -242,7 +242,15 @@ export class AutomationService {
         if (!automation.enabled || automation.nextRunAt > now) {
           continue
         }
-        await this.evaluateAutomation(automation, now)
+        try {
+          await this.evaluateAutomation(automation, now)
+        } catch (error) {
+          // Why: a throw before advanceAutomationNextRun would otherwise
+          // abort the whole pass, starve every later automation, and re-fire
+          // the same failure every tick.
+          console.error('automation-evaluation-failed', automation.id, error)
+          this.store.advanceAutomationNextRun(automation.id, now)
+        }
       }
     } finally {
       this.evaluating = false

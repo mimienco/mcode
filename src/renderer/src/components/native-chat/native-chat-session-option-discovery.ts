@@ -4,6 +4,7 @@ import {
   getAgentSessionOptionCatalog,
   type CatalogModel
 } from '../../../../shared/agent-session-option-catalog'
+import { createOmpCatalogOptions } from '../../../../shared/agent-session-option-catalog-omp'
 import {
   getCommitMessageModelDiscoveryHostKeyForLocalRuntime,
   getCommitMessageModelDiscoveryHostKeyForScope
@@ -89,6 +90,7 @@ export async function discoverNativeChatCatalogModels(
     id: model.id,
     label: model.label,
     ...(model.description ? { description: model.description } : {}),
+    ...(model.modelMetadata ? { modelMetadata: { ...model.modelMetadata } } : {}),
     ...(model.isDefault ? { isDefault: true as const } : {}),
     options:
       agent === 'claude'
@@ -96,6 +98,8 @@ export async function discoverNativeChatCatalogModels(
             effortLevelIds: model.thinkingLevels?.map(({ id }) => id) ?? [],
             supportsFastMode: model.supportsFastMode
           })
-        : []
+        : agent === 'omp'
+          ? createOmpCatalogOptions(model.thinkingLevels?.map(({ id }) => id) ?? [])
+          : []
   }))
 }

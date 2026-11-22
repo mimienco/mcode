@@ -42,7 +42,7 @@ pub struct CreatedWorktree {
 pub enum RemoveForce {
     /// Refuse when the worktree is dirty or locked.
     Never,
-    /// `--force`: allows removing dirty/locked worktrees.
+    /// `--force`: allows removing dirty worktrees; locked worktrees remain protected.
     Yes,
 }
 
@@ -74,6 +74,9 @@ impl<'a> WorktreeService<'a> {
     ) -> Result<CreatedWorktree, GitError> {
         self.runner()?.require_worktree_support()?;
 
+        let resolved = self.resolve_path(path);
+        let path = resolved.as_path();
+
         // Safety: refuse existing non-empty destinations.
         match std::fs::read_dir(path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -102,6 +105,7 @@ impl<'a> WorktreeService<'a> {
         if let Some(b) = branch_arg {
             args.push(b);
         }
+        args.push(OsStr::new("--"));
         args.push(path.as_os_str());
         if let Some(base) = base_ref {
             args.push(OsStr::new(base));
@@ -131,7 +135,18 @@ impl<'a> WorktreeService<'a> {
                 OsStr::new("--porcelain"),
             ],
         )?;
-        parse_worktree_porcelain(&out)
+        let mut entries = parse_worktree_porcelain(&out)?;
+        for entry in &mut entries {
+            if !entry.bare
+                && entry.locked_reason.is_none()
+                && entry.prunable_reason.is_none()
+                && std::fs::metadata(&entry.path)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            {
+                entry.prunable_reason = Some("worktree path is missing".into());
+            }
+        }
+        Ok(entries)
     }
 
     /// Remove a worktree with safety gates:
@@ -141,6 +156,8 @@ impl<'a> WorktreeService<'a> {
     /// - refuse locked worktrees unless `force`.
     pub fn remove(&self, path: &Path, force: RemoveForce) -> Result<(), GitError> {
         self.runner()?.require_worktree_support()?;
+        let resolved = self.resolve_path(path);
+        let path = resolved.as_path();
 
         let entries = self.list()?;
         let target = entries
@@ -159,8 +176,10 @@ impl<'a> WorktreeService<'a> {
         }
 
         // The main worktree is the one whose gitdir is the repo's own .git.
-        let main_path = self.repo.root.to_string_lossy().replace('\\', "/");
-        if target.path.replace('\\', "/") == main_path {
+        if entries
+            .first()
+            .is_some_and(|main| same_path(&main.path, path))
+        {
             return Err(GitError::GitOperationFailed {
                 command: "worktree remove".to_string(),
                 stderr_redacted: "<cannot remove the main worktree>".to_string(),
@@ -189,6 +208,7 @@ impl<'a> WorktreeService<'a> {
         if force == RemoveForce::Yes {
             args.push(OsStr::new("--force"));
         }
+        args.push(OsStr::new("--"));
         args.push(path.as_os_str());
         self.run(TimeoutClass::Mutate, &args).map(|_| ())
     }
@@ -200,6 +220,7 @@ impl<'a> WorktreeService<'a> {
             args.push(OsStr::new("--reason"));
             args.push(OsStr::new(r));
         }
+        args.push(OsStr::new("--"));
         args.push(path.as_os_str());
         self.run(TimeoutClass::Fast, &args).map(|_| ())
     }
@@ -211,24 +232,20 @@ impl<'a> WorktreeService<'a> {
             &[
                 OsStr::new("worktree"),
                 OsStr::new("unlock"),
+                OsStr::new("--"),
                 path.as_os_str(),
             ],
         )
         .map(|_| ())
     }
 
-    /// Prune stale worktree admin entries; git's `-v` report goes to stderr,
-    /// so we derive the report from the stale-entry snapshot before pruning.
+    /// Report only entries actually removed by Git's pruning policy.
     pub fn prune(&self) -> Result<Option<String>, GitError> {
         self.runner()?.require_worktree_support()?;
 
         // Snapshot the stale entries first (stderr capture is unavailable on
         // success in `run`, so we derive the report from the entry delta).
         let before = self.list()?;
-        let stale_before: Vec<String> = before
-            .iter()
-            .filter_map(|e| e.prunable_reason.clone().map(|_| e.path.clone()))
-            .collect();
 
         self.run(
             TimeoutClass::Fast,
@@ -239,23 +256,33 @@ impl<'a> WorktreeService<'a> {
             ],
         )?;
 
-        if stale_before.is_empty() {
+        let after = self.list()?;
+        let removed: Vec<_> = before
+            .iter()
+            .filter(|entry| !after.iter().any(|remaining| remaining.path == entry.path))
+            .collect();
+        if removed.is_empty() {
             return Ok(None);
         }
-        let report = stale_before
+        let report = removed
             .iter()
-            .map(|p| format!("Removing worktrees/{p}"))
+            .map(|entry| format!("Removing worktrees/{}", entry.path))
             .collect::<Vec<_>>()
             .join("\n");
         Ok(Some(report))
     }
     pub fn repair(&self) -> Result<(), GitError> {
-        self.runner()?.require_worktree_support()?;
-        self.run(
-            TimeoutClass::Fast,
-            &[OsStr::new("worktree"), OsStr::new("repair")],
-        )
-        .map(|_| ())
+        let runner = self.runner()?;
+        runner.require_worktree_support()?;
+        runner
+            .capability_cache
+            .worktree_repair(&runner.capabilities().version, || {
+                self.run(
+                    TimeoutClass::Fast,
+                    &[OsStr::new("worktree"), OsStr::new("repair")],
+                )
+                .map(|_| ())
+            })
     }
 
     /// Orphan-gitdir proof: list worktrees whose admin gitdir points at a
@@ -286,6 +313,14 @@ impl<'a> WorktreeService<'a> {
         )?;
         Ok(String::from_utf8_lossy(&out).trim().to_string())
     }
+
+    fn resolve_path(&self, path: &Path) -> PathBuf {
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.repo.root.join(path)
+        }
+    }
 }
 
 /// Parse `git worktree list --porcelain` output into entries.
@@ -309,7 +344,7 @@ pub fn parse_worktree_porcelain(raw: &[u8]) -> Result<Vec<WorktreeEntry>, GitErr
                     entries.push(std::mem::take(&mut current));
                 }
                 current = WorktreeEntry {
-                    path: value.to_string(),
+                    path: decode_quoted_path(value)?,
                     ..WorktreeEntry::default()
                 };
                 have_current = true;
@@ -341,8 +376,62 @@ pub fn parse_worktree_porcelain(raw: &[u8]) -> Result<Vec<WorktreeEntry>, GitErr
     Ok(entries)
 }
 
+fn decode_quoted_path(value: &str) -> Result<String, GitError> {
+    if !value.starts_with('"') {
+        return Ok(value.to_owned());
+    }
+    let invalid = || GitError::GitOperationFailed {
+        command: "worktree list".into(),
+        stderr_redacted: "invalid quoted worktree path".into(),
+    };
+    let quoted = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .ok_or_else(invalid)?;
+    let mut input = quoted.bytes();
+    let mut decoded = Vec::new();
+    while let Some(byte) = input.next() {
+        if byte != b'\\' {
+            decoded.push(byte);
+            continue;
+        }
+        let escaped = input.next().ok_or_else(invalid)?;
+        decoded.push(match escaped {
+            b'a' => 7,
+            b'b' => 8,
+            b't' => 9,
+            b'n' => 10,
+            b'v' => 11,
+            b'f' => 12,
+            b'r' => 13,
+            b'\\' => b'\\',
+            b'"' => b'"',
+            b'0'..=b'3' => {
+                let second = input
+                    .next()
+                    .filter(|byte| matches!(byte, b'0'..=b'7'))
+                    .ok_or_else(invalid)?;
+                let third = input
+                    .next()
+                    .filter(|byte| matches!(byte, b'0'..=b'7'))
+                    .ok_or_else(invalid)?;
+                (escaped - b'0') * 64 + (second - b'0') * 8 + (third - b'0')
+            }
+            _ => return Err(invalid()),
+        });
+    }
+    String::from_utf8(decoded).map_err(|_| invalid())
+}
+
 fn same_path(a: &str, b: &Path) -> bool {
-    let norm = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_string();
+    let norm = |s: &str| {
+        let path = if cfg!(windows) {
+            s.replace('\\', "/").to_lowercase()
+        } else {
+            s.to_owned()
+        };
+        path.trim_end_matches('/').to_string()
+    };
     norm(a) == norm(&b.to_string_lossy())
 }
 
@@ -403,9 +492,30 @@ worktree /wt3\nHEAD bbb\nbranch refs/heads/x\nprunable gitdir file points to non
     }
 
     #[test]
+    #[cfg(windows)]
     fn same_path_normalizes_separators() {
         assert!(same_path(r"D:\repo\wt", Path::new("D:/repo/wt")));
         assert!(same_path("D:/repo/wt/", Path::new(r"D:\repo\wt")));
         assert!(!same_path("D:/repo/wt", Path::new("D:/other")));
+    }
+
+    #[test]
+    fn parses_legacy_quoted_paths_without_losing_whitespace_or_unicode() {
+        let entries = parse_worktree_porcelain(
+            b"worktree \"/repo/line\\n\\tquote\\\"\\\\caf\\303\\251\"\nHEAD abc\n\n",
+        )
+        .unwrap();
+        assert_eq!(entries[0].path, "/repo/line\n\tquote\"\\caf\u{e9}");
+        assert!(parse_worktree_porcelain(b"worktree \"/bad\\q\"\n").is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn unix_paths_keep_case_and_literal_backslashes() {
+        assert!(!same_path("/repo/Case", Path::new("/repo/case")));
+        assert!(!same_path(
+            r"/repo/back\slash",
+            Path::new("/repo/back/slash")
+        ));
     }
 }

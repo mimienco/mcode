@@ -17,6 +17,7 @@ import {
 import { registerRepoHandlers, setRepoRemoteClientNotifier } from '../ipc/repos'
 import { registerWorktreeHandlers } from '../ipc/worktrees'
 import { registerWorkspaceCleanupHandlers } from '../ipc/workspace-cleanup'
+import { authorizeExternalPath } from '../ipc/filesystem-auth'
 import {
   getLocalPtyProvider,
   registerPtyHandlers,
@@ -543,8 +544,19 @@ function registerFileDropRelay(mainWindow: BrowserWindow): void {
     ) {
       return
     }
-    if (!isNativeFileDropPayload(args)) {
+    if (!isNativeFileDropPayload(args) || args.target === 'rejected') {
       return
+    }
+
+    // Why: native drops carry real OS paths outside allowed roots, and the renderer-facing
+    // fs:authorizeExternalPath channel no longer admits arbitrary paths. The relay hop is the
+    // trusted provenance point (preload extracts paths via webUtils.getPathForFile), so grants
+    // happen here before the payload reaches renderer fs flows.
+    for (const droppedPath of args.paths) {
+      authorizeExternalPath(droppedPath)
+    }
+    if ('destinationDir' in args) {
+      authorizeExternalPath(args.destinationDir)
     }
 
     // Why: one IPC event per drop gesture so the renderer gets the full path batch without timer-based reconstruction.

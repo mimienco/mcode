@@ -1,5 +1,10 @@
 import { getCommitMessageAgentSpec, type CommitMessageAgentSpec } from './commit-message-agent-spec'
 import { GROK_MODEL_LIST_ARGS, parseGrokModelList } from './grok-model-list-probe'
+import {
+  OMP_DEFAULT_MODEL_ID,
+  OMP_MODEL_LIST_ARGS,
+  parseOmpModelList
+} from './omp-model-list-probe'
 import type { TuiAgent } from './tui-agent'
 
 /** Why: model discovery reads only these fields; excluding the prompt-delivery
@@ -22,6 +27,19 @@ const MODEL_DISCOVERY_ONLY_SPECS: Partial<Record<TuiAgent, AgentModelProbeSpec>>
     // second model list here that can drift from it.
     models: [],
     defaultModelId: 'grok-4.6'
+  },
+  omp: {
+    id: 'omp',
+    label: 'OMP',
+    binary: 'omp',
+    modelSource: 'dynamic',
+    modelDiscovery: {
+      binary: 'omp',
+      args: [...OMP_MODEL_LIST_ARGS],
+      parse: parseOmpModelList
+    },
+    models: [],
+    defaultModelId: OMP_DEFAULT_MODEL_ID
   }
 }
 

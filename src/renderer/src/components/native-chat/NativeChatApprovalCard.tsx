@@ -25,7 +25,7 @@ export function NativeChatApprovalCard({
 }: NativeChatApprovalCardProps): React.JSX.Element {
   return (
     <div className="shrink-0 bg-background">
-      <div className="mx-auto w-full max-w-3xl px-3 pt-2 pb-1 sm:px-5">
+      <div className="mx-auto w-full max-w-3xl px-3 pt-2 pb-1 sm:px-5 @5xl/native-chat:max-w-4xl">
         <div
           role="region"
           aria-label={translate(

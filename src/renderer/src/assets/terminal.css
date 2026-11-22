@@ -374,38 +374,54 @@
 }
 
 .pane-title-bar[data-chromeless] .pane-title-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
   pointer-events: auto;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
-.pane-title-bar[data-chromeless] .pane-title-split-trigger,
+.pane-title-bar[data-chromeless][data-active-pane] .pane-title-actions,
+.pane-title-bar[data-chromeless]:hover .pane-title-actions,
+.pane-title-bar[data-chromeless]:focus-within .pane-title-actions {
+  background: color-mix(
+    in srgb,
+    var(--mcode-pane-title-bg, var(--background)) 94%,
+    var(--mcode-pane-title-button-hover-fg) 6%
+  );
+  border-color: color-mix(in srgb, var(--mcode-pane-title-button-hover-fg) 12%, transparent);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.28);
+}
+
+.pane-title-bar[data-chromeless] .pane-title-action-trigger,
 .pane-title-bar[data-chromeless] .pane-title-close {
   position: relative;
-  width: 18px;
-  min-width: 18px;
-  height: var(--mcode-pane-title-height);
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
   padding: 0;
+  border-radius: 6px;
 }
 
 .pane-title-bar[data-chromeless] .pane-title-close {
-  margin-left: -1px;
+  margin-left: 0;
 }
 
-.pane-title-bar[data-chromeless] .pane-title-split-trigger::before,
+.pane-title-bar[data-chromeless] .pane-title-action-trigger::before,
 .pane-title-bar[data-chromeless] .pane-title-close::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 23px;
-  height: 23px;
-  background: radial-gradient(
-    circle,
-    var(--mcode-pane-title-bg, var(--background)) 0 44%,
-    color-mix(in srgb, var(--mcode-pane-title-bg, var(--background)) 74%, transparent) 62%,
-    transparent 100%
-  );
-  border-radius: 9999px;
-  transform: translate(-50%, -50%);
+  content: none;
 }
 
 .pane-title-close {
@@ -424,24 +440,25 @@
   z-index: 3;
 }
 
-.pane-title-split-trigger {
+.pane-title-action-trigger {
   color: var(--mcode-pane-title-button-fg, rgb(255 255 255 / 0.3));
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
-.pane-title-bar[data-chromeless] .pane-title-split-trigger svg,
+.pane-title-bar[data-chromeless] .pane-title-action-trigger svg,
 .pane-title-bar[data-chromeless] .pane-title-close svg {
-  /* Why: chromeless controls overlap row-one terminal text; the rounded backing
-     clears text inside open glyphs without adding one shared toolbar fill. */
   position: relative;
-  stroke-width: 2.75px;
+  stroke-width: 2.1px;
 }
 
-.pane-title-bar[data-active-pane] .pane-title-split-trigger,
+.pane-title-bar[data-active-pane] .pane-title-action-trigger,
 .pane-title-bar[data-active-pane] .pane-title-close,
-.pane-title-bar:hover .pane-title-split-trigger,
-.pane-title-bar:focus-within .pane-title-split-trigger {
+.pane-title-bar:hover .pane-title-action-trigger,
+.pane-title-bar:focus-within .pane-title-action-trigger {
   opacity: 1;
 }
 
@@ -455,12 +472,24 @@
 .pane-title-close:active,
 .pane-title-close[data-state='delayed-open'],
 .pane-title-close[data-state='instant-open'],
-.pane-title-split-trigger:hover,
-.pane-title-split-trigger:active,
-.pane-title-split-trigger[data-state='delayed-open'],
-.pane-title-split-trigger[data-state='instant-open'] {
+.pane-title-action-trigger:hover,
+.pane-title-action-trigger:active,
+.pane-title-action-trigger[data-state='delayed-open'],
+.pane-title-action-trigger[data-state='instant-open'] {
   background: transparent;
   color: var(--mcode-pane-title-button-hover-fg, rgb(255 255 255 / 0.8));
+}
+
+.pane-title-bar[data-chromeless] .pane-title-close:hover,
+.pane-title-bar[data-chromeless] .pane-title-close:active,
+.pane-title-bar[data-chromeless] .pane-title-action-trigger:hover,
+.pane-title-bar[data-chromeless] .pane-title-action-trigger:active {
+  background: color-mix(in srgb, var(--mcode-pane-title-button-hover-fg) 12%, transparent);
+}
+
+.pane-title-action-trigger[data-maximized='true'] {
+  background: color-mix(in srgb, var(--ai-action-accent) 14%, transparent);
+  color: var(--ai-action-accent);
 }
 
 /* Inline edit input — matches the title text styling exactly to prevent

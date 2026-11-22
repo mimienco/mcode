@@ -18,6 +18,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { promisify } from 'node:util'
 import type { CliInstallMethod, CliInstallStatus } from '../../shared/cli-install-types'
 import { expandWindowsEnvironmentVariables } from '../../shared/windows-environment-expansion'
+import { quotePosixQuoteSplice, quotePowerShellString } from '../../shared/shell-quoting'
 import { buildAppImageCliWrapper } from './appimage-cli-wrapper'
 import { getBundledLauncherPath, LINUX_CLI_COMMAND_NAME } from './bundled-cli-launcher-path'
 import {
@@ -403,8 +404,8 @@ export class CliInstaller {
 
       // Why: fall back to an elevated shell to place the /usr/local/bin symlink (VS Code-style) when direct write is denied.
       await this.privilegedRunner(
-        `mkdir -p ${quoteShell(dirname(status.commandPath as string))} && ` +
-          `ln -sfn ${quoteShell(status.launcherPath as string)} ${quoteShell(status.commandPath as string)}`
+        `mkdir -p ${quotePosixQuoteSplice(dirname(status.commandPath as string))} && ` +
+          `ln -sfn ${quotePosixQuoteSplice(status.launcherPath as string)} ${quotePosixQuoteSplice(status.commandPath as string)}`
       )
     }
   }
@@ -417,7 +418,7 @@ export class CliInstaller {
         throw error
       }
       await this.privilegedRunner(
-        `if [ -L ${quoteShell(commandPath)} ]; then rm ${quoteShell(commandPath)}; fi`
+        `if [ -L ${quotePosixQuoteSplice(commandPath)} ]; then rm ${quotePosixQuoteSplice(commandPath)}; fi`
       )
     }
   }
@@ -948,9 +949,9 @@ function buildUnixDevLauncher(
 ): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
-ELECTRON=${quoteShell(execPathValue)}
-CLI=${quoteShell(cliEntryPath)}
-export MCODE_USER_DATA_PATH=${quoteShell(userDataPath)}
+ELECTRON=${quotePosixQuoteSplice(execPathValue)}
+CLI=${quotePosixQuoteSplice(cliEntryPath)}
+export MCODE_USER_DATA_PATH=${quotePosixQuoteSplice(userDataPath)}
 if [ -z "\${MCODE_APP_EXECUTABLE:-}" ]; then
   export MCODE_APP_EXECUTABLE="$ELECTRON"
   export MCODE_APP_EXECUTABLE_NEEDS_APP_ROOT=1
@@ -1126,10 +1127,6 @@ function isWindowsUserPathPermissionError(error: unknown): boolean {
   )
 }
 
-function quoteShell(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`
-}
-
 async function runMacPrivilegedCommand(command: string): Promise<void> {
   await execFileAsync('osascript', [
     '-e',
@@ -1153,7 +1150,7 @@ async function writeWindowsUserPath(value: string): Promise<void> {
     '-NoProfile',
     '-Command',
     // Why: user-scoped PATH avoids requiring elevation or mutating machine-wide state.
-    `[Environment]::SetEnvironmentVariable('Path', ${quotePowerShell(value)}, 'User')`
+    `[Environment]::SetEnvironmentVariable('Path', ${quotePowerShellString(value)}, 'User')`
   ])
 }
 
@@ -1194,10 +1191,6 @@ function runWindowsPathCommand(args: string[]): Promise<string> {
       finish(error instanceof Error ? error : new Error(String(error)))
     }
   })
-}
-
-function quotePowerShell(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`
 }
 
 export { getBundledLauncherPath }

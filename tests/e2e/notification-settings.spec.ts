@@ -91,4 +91,24 @@ test.describe('Notification settings', () => {
       })
       .toEqual({ enabled: true, agentTaskComplete: true })
   })
+
+  test('plays an app cue when testing the system-default sound', async ({ mcodePage }) => {
+    const result = await mcodePage.evaluate(async () => {
+      const settings = (await window.api.settings.get()) as GlobalSettings
+      await window.api.settings.set({
+        notifications: {
+          ...settings.notifications,
+          customSoundId: 'system',
+          customSoundPath: null
+        }
+      })
+      return window.api.notifications.playSound({
+        force: true,
+        volume: 50,
+        systemFallback: true
+      })
+    })
+
+    expect(result).toEqual({ played: true })
+  })
 })

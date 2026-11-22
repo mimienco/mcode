@@ -23,6 +23,10 @@ export function installDispatcherEventPort(instanceClient: PtyApi): void {
         if (payload.restoreMarker) {
           restoreMarkerBaselines.set(id, deduped.nextBaseline)
         }
+        // Salvaged probes are unsequenced delivery and must settle their own ACK credit.
+        if (payload.dropped) {
+          listener({ id, data: payload.dropped.data, droppedOutput: true })
+        }
         for (const chunk of deduped.chunks) {
           listener({
             id,
@@ -45,6 +49,12 @@ export function installDispatcherEventPort(instanceClient: PtyApi): void {
         // No seq-dedupe on replay: it is incremental scrollback (ssh-relay-session
         // must not clear the terminal before replay), so every payload forwards.
         listener({ id: String(payload.id), data: payload.data })
+      }),
+    // No dedupe on write-unavailable: it is a flow-control signal (like onExit)
+    // — emit-once per failed write, never seq-keyed, so every payload forwards.
+    onWriteUnavailable: (listener) =>
+      instanceClient.onWriteUnavailable((payload) => {
+        listener({ id: String(payload.id), reason: payload.reason })
       })
   })
 }

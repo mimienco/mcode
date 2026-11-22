@@ -10,8 +10,8 @@ import {
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { getMCodeManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 import {
-  listCodexSessionJsonlFiles,
-  listCodexSessionJsonlFilesIncrementally
+  listCodexSessionRolloutFiles,
+  listCodexSessionRolloutFilesIncrementally
 } from './codex-session-file-listing'
 import { linkCodexSessionFile, tryHardlinkCodexSessionFile } from './codex-session-link'
 import type { CodexSessionBridgeIncrementalOptions } from './codex-session-file-listing'
@@ -52,7 +52,7 @@ export function syncSystemCodexSessionsIntoManagedHome(sourceCodexHomePath?: str
   }
 
   const managedSessionsRoot = join(getMCodeManagedCodexHomePath(), 'sessions')
-  for (const systemSessionFilePath of listCodexSessionJsonlFiles(systemSessionsRoot)) {
+  for (const systemSessionFilePath of listCodexSessionRolloutFiles(systemSessionsRoot)) {
     bridgeSystemCodexSessionFile(systemSessionsRoot, managedSessionsRoot, systemSessionFilePath)
   }
 }
@@ -101,7 +101,7 @@ export async function syncSystemCodexSessionsIntoManagedHomeIncrementally(
 
   const managedSessionsRoot = join(getMCodeManagedCodexHomePath(), 'sessions')
   const summary: CodexSessionBridgeSummary = { scannedFiles: 0, linkedFiles: 0 }
-  for await (const systemSessionFilePath of listCodexSessionJsonlFilesIncrementally(
+  for await (const systemSessionFilePath of listCodexSessionRolloutFilesIncrementally(
     systemSessionsRoot,
     options
   )) {

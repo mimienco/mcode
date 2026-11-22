@@ -1,7 +1,7 @@
-import { Suspense, useMemo } from 'react'
+import { Suspense, useEffect, useMemo } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import { useDroppable } from '@dnd-kit/core'
-import { Ellipsis, X } from 'lucide-react'
+import { Ellipsis, LoaderCircle, X } from 'lucide-react'
 import { useAppStore } from '../../store'
 import {
   DropdownMenu,
@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import TabBar from '../tab-bar/TabBar'
 
 import { TabBarQuickCommandsButton } from '../tab-bar/TabBarQuickCommandsButton'
+import { TabBarSnippetsButton } from '../saved-snippets/TabBarSnippetsButton'
 import { useTabGroupWorkspaceModel } from './useTabGroupWorkspaceModel'
 import TabGroupEmptyState from './TabGroupEmptyState'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
@@ -20,6 +21,7 @@ import { resolveGroupTabFromVisibleId } from './tab-group-visible-id'
 import { getTabPaneBodyDroppableId, type HoveredTabInsertion } from './useTabDragSplit'
 import { tabGroupBodyAnchorName } from './tab-group-body-anchor'
 import { translate } from '@/i18n/i18n'
+import { getEmptyStateAgentLabel } from './tab-group-empty-state-agent-metadata'
 
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 
@@ -35,7 +37,6 @@ export default function TabGroupPanel({
   suppressLeftBorder = false,
   suppressRightBorder = false,
   suppressBottomBorder = false,
-  reserveClosedExplorerToggleSpace,
   reserveCollapsedSidebarHeaderSpace,
   isTabDragActive = false,
   hoveredTabInsertion = null
@@ -51,15 +52,29 @@ export default function TabGroupPanel({
   suppressLeftBorder?: boolean
   suppressRightBorder?: boolean
   suppressBottomBorder?: boolean
-  reserveClosedExplorerToggleSpace: boolean
   reserveCollapsedSidebarHeaderSpace: boolean
   isTabDragActive?: boolean
   hoveredTabInsertion?: HoveredTabInsertion | null
 }): React.JSX.Element {
-  const rightSidebarOpen = useAppStore((state) => state.rightSidebarOpen)
   const sidebarOpen = useAppStore((state) => state.sidebarOpen)
+  const pendingLaunchAgent = useAppStore(
+    (state) => state.pendingWorkspaceLaunchAgentByGroupId?.[groupId]
+  )
+  const clearPendingWorkspaceLaunchGroups = useAppStore(
+    (state) => state.clearPendingWorkspaceLaunchGroups
+  )
 
   const model = useTabGroupWorkspaceModel({ groupId, worktreeId })
+  useEffect(() => {
+    if (pendingLaunchAgent && model.groupTabs.length > 0) {
+      clearPendingWorkspaceLaunchGroups([groupId])
+    }
+  }, [
+    clearPendingWorkspaceLaunchGroups,
+    groupId,
+    model.groupTabs.length,
+    pendingLaunchAgent
+  ])
   const { activeTab, browserItems, commands, editorItems, tabBarOrder, terminalTabs } = model
   const { setNodeRef: setBodyDropRef } = useDroppable({
     id: getTabPaneBodyDroppableId(groupId),
@@ -235,11 +250,14 @@ export default function TabGroupPanel({
           >
             <div className={focusedActionChromeClassName}>
               {isFocused && activeTab?.contentType === 'terminal' ? (
-                <TabBarQuickCommandsButton
-                  worktreeId={worktreeId}
-                  groupId={groupId}
-                  targetTerminalTabId={activeTab.entityId}
-                />
+                <>
+                  <TabBarSnippetsButton />
+                  <TabBarQuickCommandsButton
+                    worktreeId={worktreeId}
+                    groupId={groupId}
+                    targetTerminalTabId={activeTab.entityId}
+                  />
+                </>
               ) : null}
               {isFocused && hasSplitGroups ? (
                 <Tooltip>
@@ -286,18 +304,6 @@ export default function TabGroupPanel({
               ) : null}
             </div>
           </div>
-          {/* Why: Electron drag hit-test respects no-drag only on DOM descendants, not z-index siblings, so this no-drag spacer keeps the floating right-sidebar toggle + window controls clickable. */}
-          {reserveClosedExplorerToggleSpace && !rightSidebarOpen ? (
-            <div
-              className="shrink-0"
-              style={
-                {
-                  width: 'calc(40px + var(--window-controls-width, 0px))',
-                  WebkitAppRegion: 'no-drag'
-                } as React.CSSProperties
-              }
-            />
-          ) : null}
         </div>
       </div>
 
@@ -316,18 +322,36 @@ export default function TabGroupPanel({
           />
         ) : null}
         {model.groupTabs.length === 0 ? (
-          <TabGroupEmptyState
-            worktreeId={worktreeId}
-            groupId={groupId}
-            onNewTerminal={commands.newTerminalTab}
-            onNewBrowser={commands.newBrowserTab}
-            onNewMarkdown={() => {
-              void commands.newFileTab()
-            }}
-            onNewSimulator={commands.newSimulatorTab}
-            onUseTemplate={commands.launchWorkspaceTemplate}
-            onActivateTerminal={commands.activateTerminal}
-          />
+          pendingLaunchAgent ? (
+            <div
+              role="status"
+              aria-live="polite"
+              data-pending-workspace-launch={pendingLaunchAgent}
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background text-xs text-muted-foreground"
+            >
+              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+              <span>
+                {translate(
+                  'auto.components.tab.group.TabGroupPanel.startingAgent',
+                  'Starting {{value0}}…',
+                  { value0: getEmptyStateAgentLabel(pendingLaunchAgent) }
+                )}
+              </span>
+            </div>
+          ) : (
+            <TabGroupEmptyState
+              worktreeId={worktreeId}
+              groupId={groupId}
+              onNewTerminal={commands.newTerminalTab}
+              onNewBrowser={commands.newBrowserTab}
+              onNewMarkdown={() => {
+                void commands.newFileTab()
+              }}
+              onNewSimulator={commands.newSimulatorTab}
+              onUseTemplate={commands.launchWorkspaceTemplate}
+              onActivateTerminal={commands.activateTerminal}
+            />
+          )
         ) : null}
         {activeTab &&
           activeTab.contentType !== 'terminal' &&

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const netFetchMock = vi.hoisted(() => vi.fn())
+const refreshGrokAuthMock = vi.hoisted(() => vi.fn())
 const authState = vi.hoisted<{
   file: string | null
   readError: Error | null
@@ -8,6 +9,10 @@ const authState = vi.hoisted<{
 
 vi.mock('electron', () => ({
   net: { fetch: netFetchMock }
+}))
+
+vi.mock('./grok-auth-refresh', () => ({
+  refreshGrokAuthWithCli: refreshGrokAuthMock
 }))
 
 vi.mock('node:fs', () => ({
@@ -62,6 +67,7 @@ function freshAuthJson(): string {
 describe('fetchGrokRateLimits', () => {
   beforeEach(() => {
     netFetchMock.mockReset()
+    refreshGrokAuthMock.mockReset()
     authState.file = null
     authState.readError = null
   })
@@ -257,16 +263,61 @@ describe('fetchGrokRateLimits', () => {
     expect(result.error).toBe('aborted')
   })
 
-  it('returns error when the session token is expired', async () => {
+  it('silently refreshes an expired session before fetching usage', async () => {
     authState.file = JSON.stringify({
       'https://auth.x.ai::client': {
         key: 'stale',
         expires_at: '2000-01-01T00:00:00.000Z'
       }
     })
-    const result = await fetchGrokRateLimits()
+    netFetchMock.mockResolvedValueOnce(jsonResponse(BILLING_RESPONSE))
+    refreshGrokAuthMock.mockImplementationOnce(async () => {
+      authState.file = freshAuthJson()
+    })
+
+    const result = await fetchGrokRateLimits({
+      authReadResult: {
+        status: 'ok',
+        session: {
+          accessToken: 'stale',
+          userId: null,
+          email: null,
+          teamId: null,
+          expiresAtMs: Date.parse('2000-01-01T00:00:00.000Z'),
+          oidcClientId: 'client'
+        }
+      }
+    })
+
+    expect(result.status).toBe('ok')
+    expect(refreshGrokAuthMock).toHaveBeenCalledOnce()
+    expect(netFetchMock).toHaveBeenCalledWith(
+      'https://cli-chat-proxy.grok.com/v1/billing?format=credits',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' })
+      })
+    )
+  })
+
+  it('falls back to the Grok recovery instruction when silent refresh fails', async () => {
+    refreshGrokAuthMock.mockRejectedValueOnce(new Error('refresh failed'))
+
+    const result = await fetchGrokRateLimits({
+      authReadResult: {
+        status: 'ok',
+        session: {
+          accessToken: 'stale',
+          userId: null,
+          email: null,
+          teamId: null,
+          expiresAtMs: Date.parse('2000-01-01T00:00:00.000Z'),
+          oidcClientId: 'client'
+        }
+      }
+    })
+
     expect(result.status).toBe('error')
-    expect(result.error).toMatch(/expired/i)
+    expect(result.error).toMatch(/could not refresh automatically/i)
     expect(result.error).toMatch(/run grok on the computer running MCode/i)
     expect(result.error).toMatch(/sign in if prompted/i)
     expect(result.error).toMatch(/no chat message is needed/i)
@@ -274,9 +325,6 @@ describe('fetchGrokRateLimits', () => {
       failureKind: 'delegated-refresh-required',
       source: 'oauth'
     })
-    // Why: a stored-but-expired access token is refreshed by Grok CLI on next
-    // use (a genuine sign-out returns 'missing'), so the message must not tell
-    // users to re-run `grok login` (#8497).
     expect(result.error).not.toMatch(/grok login/i)
     expect(netFetchMock).not.toHaveBeenCalled()
   })

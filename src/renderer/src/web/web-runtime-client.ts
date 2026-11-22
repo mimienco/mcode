@@ -601,32 +601,33 @@ export class WebRuntimeClient {
     if (this.intentionallyClosed) {
       return Promise.reject(new Error('Remote MCode runtime connection closed.'))
     }
-    return new Promise((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        const index = this.waiters.findIndex((waiter) => waiter.resolve === resolve)
-        if (index !== -1) {
-          this.waiters.splice(index, 1)
-        }
-        reject(
-          new Error(
-            withRemoteRuntimeTailscaleHint(
-              'Timed out while connecting to the remote MCode runtime.',
-              this.pairing.endpoint
-            )
+    const { promise, resolve, reject } = Promise.withResolvers<void>()
+    const waiter = {
+      resolve: () => {
+        window.clearTimeout(timeout)
+        resolve()
+      },
+      reject: (error: Error) => {
+        window.clearTimeout(timeout)
+        reject(error)
+      }
+    }
+    const timeout = window.setTimeout(() => {
+      const index = this.waiters.indexOf(waiter)
+      if (index !== -1) {
+        this.waiters.splice(index, 1)
+      }
+      reject(
+        new Error(
+          withRemoteRuntimeTailscaleHint(
+            'Timed out while connecting to the remote MCode runtime.',
+            this.pairing.endpoint
           )
         )
-      }, timeoutMs)
-      this.waiters.push({
-        resolve: () => {
-          window.clearTimeout(timeout)
-          resolve()
-        },
-        reject: (error) => {
-          window.clearTimeout(timeout)
-          reject(error)
-        }
-      })
-    })
+      )
+    }, timeoutMs)
+    this.waiters.push(waiter)
+    return promise
   }
 
   private handleSocketClosed(closedWs: WebSocket): void {

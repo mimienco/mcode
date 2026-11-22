@@ -37,7 +37,7 @@ export function importedCookieIdentity(
     name: cookie.name,
     value: cookie.value,
     domain: cookie.domain,
-    hostOnly: isHostPrefixed,
+    hostOnly: isHostPrefixed || !cookie.domain.startsWith('.'),
     path: isHostPrefixed ? '/' : cookie.path,
     secure: cookie.secure,
     httpOnly: cookie.httpOnly,

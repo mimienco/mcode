@@ -85,10 +85,22 @@ export function migrateMobilePairingDataToCanonicalUserDataPath(sourceUserDataDi
   if (migrations.some(({ sourcePath }) => !existsSync(sourcePath))) {
     return
   }
-  if (migrations.some(({ targetPath }) => existsSync(targetPath))) {
+  const existingTargets = migrations.filter(({ targetPath }) => existsSync(targetPath))
+  if (existingTargets.length === migrations.length) {
     return
   }
-
+  // Why: some-but-not-all targets mean a prior run died mid-copy; a leftover
+  // half-pair would mix devices with the wrong key, so clear the torn copies
+  // and redo the migration. If a torn copy cannot be removed, skip this launch
+  // rather than copy onto it.
+  for (const { targetPath } of existingTargets) {
+    try {
+      rmSync(targetPath, { force: true })
+    } catch (error) {
+      console.error('[persistence] Failed to clear partially migrated mobile pairing file:', error)
+      return
+    }
+  }
   mkdirSync(targetUserDataDir, { recursive: true })
   const copied: string[] = []
   try {
@@ -99,7 +111,8 @@ export function migrateMobilePairingDataToCanonicalUserDataPath(sourceUserDataDi
       hardenExistingSecureFile(targetPath)
     }
   } catch (error) {
-    // Why: a half-copied pair mixes devices with the wrong key, and the existing-target guard above would block the retry.
+    // Why: a half-copied pair mixes devices with the wrong key; the rollback below
+    // plus the partial-target cleanup above let the next launch retry cleanly.
     for (const targetPath of copied) {
       try {
         rmSync(targetPath, { force: true })

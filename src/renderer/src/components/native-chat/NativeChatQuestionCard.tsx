@@ -133,7 +133,7 @@ export function NativeChatQuestionCard({
     // composer's width and padding, rendered as the "ask" dialog card directly
     // above the text input. Its free-text row is the answer input.
     <div className="shrink-0 bg-background" aria-busy={isSubmitting}>
-      <div className="mx-auto w-full max-w-3xl px-3 pt-2 pb-4 sm:px-5">
+      <div className="mx-auto w-full max-w-3xl px-3 pt-2 pb-4 sm:px-5 @5xl/native-chat:max-w-4xl">
         {total > 1 ? (
           <div
             role="tablist"

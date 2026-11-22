@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, screen } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -58,5 +60,43 @@ describe('NativeChatComposerActions', () => {
     const pickers = screen.getByTestId('session-option-pickers')
     const dictation = screen.getByRole('button', { name: 'Start dictation' })
     expect(pickers.parentElement?.nextElementSibling?.contains(dictation)).toBe(true)
+  })
+
+  it('pins primary actions around a flexible run-profile column', () => {
+    render(
+      <NativeChatComposerActions
+        attachDisabled={false}
+        dictationDisabled={false}
+        sendDisabled={false}
+        isWorking={false}
+        isDictating={false}
+        isDictationHoldMode={false}
+        onAttach={vi.fn()}
+        onDictationToggle={vi.fn()}
+        onDictationHoldStart={vi.fn()}
+        onDictationHoldEnd={vi.fn()}
+        onSend={vi.fn()}
+        sessionOptionsSurface={null}
+        sessionOptionsSnapshot={[]}
+      />
+    )
+
+    const actions = document.querySelector('[data-native-chat-composer-actions]')
+    expect(actions?.className).toContain('grid')
+    expect(actions?.className).toContain('grid-cols-[auto_minmax(0,1fr)_auto_auto]')
+  })
+
+  it('uses one compact settings trigger in the split-width primary action row', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/renderer/src/assets/main.css'), 'utf8')
+
+    expect(css).toMatch(
+      /@container \(max-width: 35rem\)[\s\S]*?\[data-native-chat-composer-actions\]\s*\{[\s\S]*?grid-template-columns:\s*auto minmax\(0, 1fr\) auto auto[\s\S]*?row-gap:\s*0/
+    )
+    expect(css).toMatch(
+      /@container \(max-width: 35rem\)[\s\S]*?\[data-native-chat-session-options\]\s*\{[\s\S]*?display:\s*none/
+    )
+    expect(css).toMatch(
+      /@container \(max-width: 35rem\)[\s\S]*?\[data-native-chat-compact-options\]\s*\{[\s\S]*?display:\s*flex/
+    )
   })
 })

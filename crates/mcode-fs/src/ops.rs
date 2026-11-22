@@ -208,34 +208,29 @@ pub fn rename_path(source: &AuthorizedPath, destination: &AuthorizedPath) -> Res
 /// Deletes the file or directory tree at `path` to the Recycle Bin.
 ///
 /// ENOENT is swallowed so an external delete racing this one stays idempotent
-/// (spec §4 `fs:deletePath`). UNC paths on Windows skip the Recycle Bin and
-/// hard-delete instead.
+/// (spec §4 `fs:deletePath`). WSL UNC deletion requires a separate in-distro
+/// implementation; a trash failure never authorizes a permanent deletion.
 pub fn delete_path(path: &AuthorizedPath) -> Result<(), FsError> {
-    let target = path.as_path();
-    let metadata = match fs::symlink_metadata(target) {
-        Ok(metadata) => metadata,
+    delete_to_trash(path.as_path(), |target| {
+        trash::delete(target).map_err(|error| FsError::Io(error.to_string()))
+    })
+}
+
+fn delete_to_trash(
+    target: &Path,
+    trash_item: impl FnOnce(&Path) -> Result<(), FsError>,
+) -> Result<(), FsError> {
+    match fs::symlink_metadata(target) {
+        Ok(_) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(FsError::from(error)),
-    };
-    if !metadata.is_dir() {
-        // Move a single file or symlink leaf to the Recycle Bin via trash,
-        // which on Windows uses the shell Recycle Bin API.
-        trash::delete(target).or_else(|error| {
-            // A missing item is still a success; anything else propagates.
-            if target.symlink_metadata().is_err() {
-                Ok(())
-            } else {
-                Err(FsError::Io(error.to_string()))
-            }
-        })?;
-        return Ok(());
     }
-    // trash::delete on a directory sends the tree to the Recycle Bin; fall
-    // back to a hard recursive delete when the shell refuses (spec §4: UNC
-    // paths have no Recycle Bin).
-    match trash::delete(target) {
+    match trash_item(target) {
         Ok(()) => Ok(()),
-        Err(_) => fs::remove_dir_all(target).map_err(FsError::from),
+        Err(error) => match target.symlink_metadata() {
+            Err(missing) if missing.kind() == io::ErrorKind::NotFound => Ok(()),
+            _ => Err(error),
+        },
     }
 }
 
@@ -371,4 +366,37 @@ pub(crate) fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, FsError> {
         .and_then(|mut file| file.read_to_end(&mut buffer))
         .map_err(FsError::from)?;
     Ok(buffer)
+}
+
+#[cfg(test)]
+mod delete_tests {
+    use super::*;
+
+    #[test]
+    fn failed_trash_preserves_file_and_nonempty_directory() {
+        let fixture = tempfile::tempdir().unwrap();
+        let directory = fixture.path().join("keep-directory");
+        fs::create_dir(&directory).unwrap();
+        let file = directory.join("keep-file.txt");
+        fs::write(&file, b"recoverable contents").unwrap();
+        for target in [&file, &directory] {
+            let error = delete_to_trash(target, |_| Err(FsError::Io("trash unavailable".into())))
+                .unwrap_err();
+            assert!(matches!(error, FsError::Io(detail) if detail == "trash unavailable"));
+            assert_eq!(fs::read(&file).unwrap(), b"recoverable contents");
+        }
+    }
+
+    #[test]
+    fn external_delete_race_and_initial_absence_are_idempotent() {
+        let fixture = tempfile::tempdir().unwrap();
+        let file = fixture.path().join("external.txt");
+        fs::write(&file, b"temporary").unwrap();
+        delete_to_trash(&file, |target| {
+            fs::remove_file(target).unwrap();
+            Err(FsError::Io("external delete won".into()))
+        })
+        .unwrap();
+        delete_to_trash(&file, |_| panic!("missing paths must not call trash")).unwrap();
+    }
 }

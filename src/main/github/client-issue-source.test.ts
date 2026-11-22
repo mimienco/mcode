@@ -181,7 +181,7 @@ describe('GitHub issue source split', () => {
   })
 
   it('uses upstream for issues and origin for PRs in mixed recent results', async () => {
-    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
     ghExecFileAsyncMock
       .mockResolvedValueOnce({
@@ -225,7 +225,7 @@ describe('GitHub issue source split', () => {
   })
 
   it('omits gh api cache args for no-cache recent work-item requests', async () => {
-    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' }).mockResolvedValueOnce({
       stdout: '[]'
@@ -245,7 +245,7 @@ describe('GitHub issue source split', () => {
 
   it('lists SSH repo work items with explicit owner/repo and no local cwd', async () => {
     resolveIssueSourceMock.mockResolvedValueOnce({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
@@ -267,7 +267,7 @@ describe('GitHub issue source split', () => {
   })
 
   it('uses upstream for issue-only queries and origin for PR-only queries', async () => {
-    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' })
 
@@ -276,7 +276,7 @@ describe('GitHub issue source split', () => {
     expect(decodedIssueSearchPath(0)).toContain('q=repo:mcode-ide/mcode is:issue')
 
     ghExecFileAsyncMock.mockClear()
-    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' })
 
@@ -321,11 +321,11 @@ describe('GitHub issue source split', () => {
 
   it("uses upstream for recent PRs when preference='upstream'", async () => {
     resolveIssueSourceMock.mockResolvedValueOnce({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
-    mockUpstreamCandidate({ owner: 'stablyai', repo: 'mcode' })
+    mockUpstreamCandidate({ owner: 'mcode-ide', repo: 'mcode' })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' }).mockResolvedValueOnce({
       stdout: '[]'
     })
@@ -339,11 +339,11 @@ describe('GitHub issue source split', () => {
 
   it("uses upstream for queried PRs when preference='upstream'", async () => {
     resolveIssueSourceMock.mockResolvedValueOnce({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
-    mockUpstreamCandidate({ owner: 'stablyai', repo: 'mcode' })
+    mockUpstreamCandidate({ owner: 'mcode-ide', repo: 'mcode' })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' })
 
     await listWorkItems('/repo-root', 10, 'is:pr is:open', undefined, 'upstream')
@@ -356,11 +356,11 @@ describe('GitHub issue source split', () => {
 
   it("uses upstream for PR counts when preference='upstream'", async () => {
     resolveIssueSourceMock.mockResolvedValueOnce({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
-    mockUpstreamCandidate({ owner: 'stablyai', repo: 'mcode' })
+    mockUpstreamCandidate({ owner: 'mcode-ide', repo: 'mcode' })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '9\n' })
 
     const count = await countWorkItems('/repo-root', 'is:pr is:open', 'upstream')
@@ -406,7 +406,7 @@ describe('GitHub issue source split', () => {
   })
 
   it('counts default work items across upstream issues and origin PRs', async () => {
-    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
     ghExecFileAsyncMock
       .mockResolvedValueOnce({ stdout: '7\n' })
@@ -477,7 +477,7 @@ describe('GitHub issue source split', () => {
   })
 
   it('probes the upstream repository for a typed fork PR before origin', async () => {
-    const upstream = { owner: 'stablyai', repo: 'mcode', host: 'github.com' }
+    const upstream = { owner: 'mcode-ide', repo: 'mcode', host: 'github.com' }
     const origin = { owner: 'fork', repo: 'mcode', host: 'github.com' }
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [upstream, origin],
@@ -594,7 +594,7 @@ describe('GitHub issue source split', () => {
   })
 
   it('raw number lookup tries upstream issue before origin PR', async () => {
-    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+    getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
     // Why: simulate a real gh 404 (the only error type that should fall through).
     // Non-404 errors re-throw so transient upstream failures don't misroute to an
     // unrelated origin PR with the same number.
@@ -710,7 +710,7 @@ describe('GitHub issue source split', () => {
 
     it("preference='auto' + upstream exists → queries upstream", async () => {
       resolveIssueSourceMock.mockResolvedValueOnce({
-        source: { owner: 'stablyai', repo: 'mcode' },
+        source: { owner: 'mcode-ide', repo: 'mcode' },
         fellBack: false
       })
       getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
@@ -749,11 +749,11 @@ describe('GitHub issue source split', () => {
       // PR list is almost always empty. 'auto' must resolve PRs upstream-first
       // like issues, or the PRs tab renders "No matching GitHub work" on forks.
       resolveIssueSourceMock.mockResolvedValueOnce({
-        source: { owner: 'stablyai', repo: 'mcode' },
+        source: { owner: 'mcode-ide', repo: 'mcode' },
         fellBack: false
       })
       getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
-      mockUpstreamCandidate({ owner: 'stablyai', repo: 'mcode' })
+      mockUpstreamCandidate({ owner: 'mcode-ide', repo: 'mcode' })
       ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' }).mockResolvedValueOnce({
         stdout: '[]'
       })
@@ -766,17 +766,17 @@ describe('GitHub issue source split', () => {
         { cwd: '/repo-root' }
       )
       expect(result.sources).toEqual({
-        issues: { owner: 'stablyai', repo: 'mcode' },
-        prs: { owner: 'stablyai', repo: 'mcode' },
+        issues: { owner: 'mcode-ide', repo: 'mcode' },
+        prs: { owner: 'mcode-ide', repo: 'mcode' },
         originCandidate: { owner: 'fork', repo: 'mcode' },
-        upstreamCandidate: { owner: 'stablyai', repo: 'mcode' }
+        upstreamCandidate: { owner: 'mcode-ide', repo: 'mcode' }
       })
     })
 
     it('collapses the default count to one query when auto resolves both sides to upstream', async () => {
-      getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'mcode' })
+      getIssueOwnerRepoMock.mockResolvedValueOnce({ owner: 'mcode-ide', repo: 'mcode' })
       getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })
-      mockUpstreamCandidate({ owner: 'stablyai', repo: 'mcode' })
+      mockUpstreamCandidate({ owner: 'mcode-ide', repo: 'mcode' })
       ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: '11\n' })
 
       const count = await countWorkItems('/repo-root')
@@ -798,7 +798,7 @@ describe('GitHub issue source split', () => {
 
     it("preference='upstream' + upstream exists → queries upstream", async () => {
       resolveIssueSourceMock.mockResolvedValueOnce({
-        source: { owner: 'stablyai', repo: 'mcode' },
+        source: { owner: 'mcode-ide', repo: 'mcode' },
         fellBack: false
       })
       getOwnerRepoMock.mockResolvedValueOnce({ owner: 'fork', repo: 'mcode' })

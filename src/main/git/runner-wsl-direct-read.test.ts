@@ -326,19 +326,14 @@ describe('WSL direct Git reads', () => {
     })
   })
 
-  it('falls back and disables the fast path after another direct Git failure', async () => {
+  it('propagates control-flow failures without login-shell fallback or disabling the fast path', async () => {
     await withPlatform('win32', async () => {
       seedWslGitReadEnvironmentForTests(DISTRO, LOGIN_ENVIRONMENT)
-      execFileMock.mockImplementationOnce((_command, _args, _options, callback) => {
+      execFileMock.mockImplementation((_command, _args, _options, callback) => {
         const child = createMockChild()
         queueMicrotask(() =>
           callback?.(Object.assign(new Error('exit 128'), { code: 128 }), '', 'helper failed')
         )
-        return child
-      })
-      execFileMock.mockImplementation((_command, _args, _options, callback) => {
-        const child = createMockChild()
-        queueMicrotask(() => callback?.(null, 'ok', ''))
         return child
       })
       const options = {
@@ -347,26 +342,24 @@ describe('WSL direct Git reads', () => {
         wslDistro: DISTRO
       }
 
-      await gitExecFileAsync(['status', '--short'], options)
-      await gitExecFileAsync(['status', '--short'], options)
+      // Why: exit 128 is normal git control flow (bad ref, helper error), not a
+      // missing-git capability failure — retrying through the interactive login
+      // shell would double-spawn hot paths and can spuriously disable the fast path.
+      await expect(gitExecFileAsync(['status', '--short'], options)).rejects.toThrow('exit 128')
+      await expect(gitExecFileAsync(['status', '--short'], options)).rejects.toThrow('exit 128')
 
       expect(execFileMock.mock.calls[0]?.[1]).toContain('--exec')
-      expect(execFileMock.mock.calls[1]?.[1]?.slice(3, 5)).toEqual(['sh', '-lc'])
-      expect(execFileMock.mock.calls[2]?.[1]?.slice(3, 5)).toEqual(['sh', '-lc'])
+      expect(execFileMock.mock.calls[1]?.[1]).toContain('--exec')
+      for (const call of execFileMock.mock.calls) {
+        expect((call[1] as string[]).slice(3, 5)).not.toEqual(['sh', '-lc'])
+      }
     })
   })
 
-  it('keeps the fast path when direct and login Git both report an expected failure', async () => {
+  it('keeps the fast path when a direct Git read reports an expected failure', async () => {
     await withPlatform('win32', async () => {
       seedWslGitReadEnvironmentForTests(DISTRO, LOGIN_ENVIRONMENT)
       execFileMock
-        .mockImplementationOnce((_command, _args, _options, callback) => {
-          const child = createMockChild()
-          queueMicrotask(() =>
-            callback?.(Object.assign(new Error('exit 128'), { code: 128 }), '', 'missing ref')
-          )
-          return child
-        })
         .mockImplementationOnce((_command, _args, _options, callback) => {
           const child = createMockChild()
           queueMicrotask(() =>
@@ -385,14 +378,21 @@ describe('WSL direct Git reads', () => {
         wslDistro: DISTRO
       }
 
+      // Why: an expected control-flow exit (missing ref) must surface to the
+      // caller directly; the next read keeps using the fast direct-git path.
       await expect(gitExecFileAsync(['rev-parse', '--verify', 'missing'], options)).rejects.toThrow(
         'exit 128'
       )
-      await gitExecFileAsync(['status', '--short'], options)
+      await expect(gitExecFileAsync(['status', '--short'], options)).resolves.toEqual({
+        stdout: 'ok',
+        stderr: ''
+      })
 
       expect(execFileMock.mock.calls[0]?.[1]).toContain('--exec')
-      expect(execFileMock.mock.calls[1]?.[1]?.slice(3, 5)).toEqual(['sh', '-lc'])
-      expect(execFileMock.mock.calls[2]?.[1]).toContain('--exec')
+      expect(execFileMock.mock.calls[1]?.[1]).toContain('--exec')
+      for (const call of execFileMock.mock.calls) {
+        expect((call[1] as string[]).slice(3, 5)).not.toEqual(['sh', '-lc'])
+      }
     })
   })
 

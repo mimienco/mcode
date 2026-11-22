@@ -30,6 +30,9 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::DesktopCommandError;
 
+#[path = "ssh_pty_exit_monitor.rs"]
+mod exit_monitor;
+
 /// Renderer-facing event names (`pty://replay` carries SSH pty output; the
 /// exit announcement reuses the local pty's `pty://exit` shape with a string
 /// `ptyId`).
@@ -285,6 +288,36 @@ impl SshState {
 
     fn remove_pty(&self, pty_id: &str) -> Option<Arc<tokio::sync::Mutex<SshPtyChannel>>> {
         self.0.ptys.lock().expect("ssh ptys lock").remove(pty_id)
+    }
+
+    fn has_pty_instance(
+        &self,
+        pty_id: &str,
+        channel: &Arc<tokio::sync::Mutex<SshPtyChannel>>,
+    ) -> bool {
+        self.0
+            .ptys
+            .lock()
+            .expect("ssh ptys lock")
+            .get(pty_id)
+            .is_some_and(|current| Arc::ptr_eq(current, channel))
+    }
+
+    fn remove_pty_instance(
+        &self,
+        pty_id: &str,
+        channel: &Arc<tokio::sync::Mutex<SshPtyChannel>>,
+    ) -> bool {
+        let mut ptys = self.0.ptys.lock().expect("ssh ptys lock");
+        if ptys
+            .get(pty_id)
+            .is_some_and(|current| Arc::ptr_eq(current, channel))
+        {
+            ptys.remove(pty_id);
+            true
+        } else {
+            false
+        }
     }
 
     fn insert_pending_host_key(
@@ -555,10 +588,17 @@ pub async fn ssh_exec_for(
             .unwrap_or(DEFAULT_EXEC_TIMEOUT_MS)
             .clamp(MIN_EXEC_TIMEOUT_MS, MAX_EXEC_TIMEOUT_MS),
     );
+    let deadline = tokio::time::Instant::now() + timeout;
+    let connection = lock_ssh_exec_connection(&connection, deadline).await?;
+    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+    if remaining.is_zero() {
+        return Err(ssh_error(
+            mcode_ssh::SshError::Timeout("exec"),
+            SSH_EXEC_OPERATION,
+        ));
+    }
     let output = connection
-        .lock()
-        .await
-        .exec(&command, timeout)
+        .exec(&command, remaining)
         .await
         .map_err(|error| ssh_error(error, SSH_EXEC_OPERATION))?;
     Ok(SshExecResponse {
@@ -566,6 +606,34 @@ pub async fn ssh_exec_for(
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         exit_code: i32::try_from(output.exit_code).unwrap_or(i32::MAX),
     })
+}
+
+async fn lock_ssh_exec_connection<T>(
+    connection: &tokio::sync::Mutex<T>,
+    deadline: tokio::time::Instant,
+) -> Result<tokio::sync::MutexGuard<'_, T>, DesktopCommandError> {
+    tokio::time::timeout_at(deadline, connection.lock())
+        .await
+        .map_err(|_| ssh_error(mcode_ssh::SshError::Timeout("exec"), SSH_EXEC_OPERATION))
+}
+
+#[cfg(test)]
+mod queued_exec_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn queued_exec_expires_without_acquiring_busy_connection() {
+        let connection = tokio::sync::Mutex::new(());
+        let held = connection.lock().await;
+        let result = lock_ssh_exec_connection(
+            &connection,
+            tokio::time::Instant::now() + Duration::from_millis(10),
+        )
+        .await;
+        assert_eq!(result.unwrap_err().code, "ssh_timeout");
+        drop(held);
+        assert!(connection.try_lock().is_ok());
+    }
 }
 
 /// `ssh_open_pty` body without the Tauri runtime: opens the channel,
@@ -686,8 +754,8 @@ pub async fn ssh_disconnect_for(
 /// accumulates raw bytes (byte boundaries preserved — a partial multi-byte
 /// sequence stays pending until it completes) and emits `pty://replay` at
 /// most every 2 ms. On EOF it flushes the remainder lossily, awaits the
-/// exit status, announces `pty://exit` exactly once and removes the pty
-/// from the state map so late writes report `ssh_pty_gone`.
+/// host exit evidence before announcing `pty://exit`. Transport loss leaves
+/// the identity present and reports write unavailability as `unverifiable`.
 fn spawn_ssh_pty_forwarder(
     app: AppHandle,
     pty_id: String,
@@ -699,11 +767,18 @@ fn spawn_ssh_pty_forwarder(
         let mut buffer = vec![0u8; SSH_PTY_READ_BUFFER_BYTES];
 
         loop {
+            if !state.has_pty_instance(&pty_id, &channel) {
+                return;
+            }
             // The lock window bounds the read at the flush cadence: a quiet
             // stream times out the 2 ms window and falls through to the emit
             // below, so a batch never lingers longer than one interval.
             let read = {
-                let mut guard = channel.lock().await;
+                let Ok(mut guard) =
+                    tokio::time::timeout(Duration::from_millis(100), channel.lock()).await
+                else {
+                    continue;
+                };
                 tokio::time::timeout(SSH_PTY_FLUSH_INTERVAL, guard.read(&mut buffer)).await
             };
             match read {
@@ -742,38 +817,87 @@ fn spawn_ssh_pty_forwarder(
             }
         }
 
-        let exit_code = {
-            let mut guard = channel.lock().await;
-            match guard.wait().await {
-                Ok(result) => result
-                    .exit_code
-                    .map(|code| code.min(i32::MAX as u32) as i32)
-                    .unwrap_or(-1),
-                Err(error) => {
-                    eprintln!("[ssh-pty] exit wait failed for {pty_id}: {error}");
-                    -1
+        let grace_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut monitor = exit_monitor::ExitMonitor::default();
+        loop {
+            if !state.has_pty_instance(&pty_id, &channel) {
+                return;
+            }
+            let (evidence, closed) = {
+                let Ok(mut guard) =
+                    tokio::time::timeout(Duration::from_millis(100), channel.lock()).await
+                else {
+                    continue;
+                };
+                if !state.has_pty_instance(&pty_id, &channel) {
+                    return;
+                }
+                // Cancellation retains received evidence and releases the lock for explicit close/write.
+                let _ = tokio::time::timeout(Duration::from_millis(100), guard.wait()).await;
+                (guard.exit_evidence(), guard.is_closed())
+            };
+            match monitor.observe(
+                state.has_pty_instance(&pty_id, &channel),
+                &evidence,
+                closed,
+                tokio::time::Instant::now() >= grace_deadline,
+            ) {
+                exit_monitor::Decision::Wait => {}
+                exit_monitor::Decision::Stop => return,
+                exit_monitor::Decision::Unverifiable { finished } => {
+                    if !state.has_pty_instance(&pty_id, &channel) {
+                        return;
+                    }
+                    let event = serde_json::json!({ "ptyId": pty_id, "reason": "unverifiable" });
+                    if let Err(error) =
+                        app.emit(crate::pty_commands::PTY_WRITE_UNAVAILABLE_EVENT, &event)
+                    {
+                        eprintln!("[ssh-pty] failed to emit transport loss: {error}");
+                    }
+                    if finished {
+                        return;
+                    }
+                }
+                exit_monitor::Decision::Exited(code) => {
+                    if state.remove_pty_instance(&pty_id, &channel) {
+                        let event = PtyExitEvent {
+                            pty_id: pty_id.clone(),
+                            code,
+                        };
+                        if let Err(error) = app.emit(SSH_PTY_EXIT_EVENT, &event) {
+                            eprintln!("[ssh-pty] failed to emit exit event for {pty_id}: {error}");
+                        }
+                    }
+                    return;
                 }
             }
-        };
-        state.remove_pty(&pty_id);
-        let exit_event = PtyExitEvent {
-            pty_id: pty_id.clone(),
-            code: exit_code,
-        };
-        if let Err(error) = app.emit(SSH_PTY_EXIT_EVENT, &exit_event) {
-            eprintln!("[ssh-pty] failed to emit exit event for {pty_id}: {error}");
         }
     });
+}
+
+fn confirmed_ssh_exit_code(evidence: &mcode_ssh::session::PtyWaitResult) -> Option<i32> {
+    evidence
+        .exit_code
+        .map(|code| code.min(i32::MAX as u32) as i32)
+        .or_else(|| evidence.exit_signal.as_ref().map(|_| -1))
 }
 
 /// Converts the longest valid UTF-8 prefix of `pending` to a String and
 /// drains it, leaving any partial multi-byte tail buffered for the next
 /// flush so byte boundaries are never torn.
 fn flush_lossy_prefix(pending: &mut Vec<u8>) -> String {
-    let valid_up_to = match std::str::from_utf8(pending) {
-        Ok(_) => pending.len(),
-        Err(error) => error.valid_up_to(),
-    };
+    let mut offset = 0;
+    let mut valid_up_to = pending.len();
+    while let Err(error) = std::str::from_utf8(&pending[offset..]) {
+        offset += error.valid_up_to();
+        match error.error_len() {
+            Some(length) => offset += length,
+            None => {
+                valid_up_to = offset;
+                break;
+            }
+        }
+    }
     let data = String::from_utf8_lossy(&pending[..valid_up_to]).into_owned();
     pending.drain(..valid_up_to);
     data
@@ -784,10 +908,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn transport_loss_cannot_be_reported_as_process_exit() {
+        use mcode_ssh::session::PtyWaitResult;
+        assert_eq!(
+            confirmed_ssh_exit_code(&PtyWaitResult {
+                exit_code: None,
+                exit_signal: None
+            }),
+            None
+        );
+        assert_eq!(
+            confirmed_ssh_exit_code(&PtyWaitResult {
+                exit_code: Some(7),
+                exit_signal: None
+            }),
+            Some(7)
+        );
+        assert_eq!(
+            confirmed_ssh_exit_code(&PtyWaitResult {
+                exit_code: None,
+                exit_signal: Some("TERM".into())
+            }),
+            Some(-1)
+        );
+    }
+
+    #[test]
     fn lossy_prefix_preserves_partial_byte_boundaries() {
         let mut pending = b"caf\xc3".to_vec();
         let data = flush_lossy_prefix(&mut pending);
         assert_eq!(data, "caf");
         assert_eq!(pending, b"\xc3");
+    }
+
+    #[test]
+    fn invalid_utf8_does_not_block_later_output() {
+        let mut pending = b"a\xffb\xc3".to_vec();
+        assert_eq!(flush_lossy_prefix(&mut pending), "a\u{fffd}b");
+        assert_eq!(pending, b"\xc3");
+        pending.push(0xa9);
+        assert_eq!(flush_lossy_prefix(&mut pending), "é");
+        assert!(pending.is_empty());
     }
 }

@@ -25,6 +25,15 @@ import {
   createKeybindingsClient,
   createPersistedUiClient
 } from './tauri-settings-document-client'
+import { createTauriWorkspaceSessionClient } from './tauri-workspace-session-client'
+import { createTauriSessionClient } from './tauri-session-client'
+import { createTauriAgentStatusClient } from './tauri-agent-status-client'
+import { createTauriAgentHooksClient } from './tauri-agent-hooks-client'
+import { createTauriPtyWindowClient } from './tauri-pty-client'
+import { createTauriLocalWorkspaceClient } from './tauri-local-workspace-client'
+import { createTauriOnboardingClient } from './tauri-onboarding-client'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
+import { createTauriRuntimeClient, createTauriRuntimeEnvironmentsClient } from './tauri-runtime-client'
 
 /**
  * Partial `ui` bridge over the native Tauri clipboard commands. Keyed by the
@@ -129,13 +138,40 @@ export function installTauriWindowApiShim(): void {
   const settingsBridge = createSettingsClient(settingsDocumentBridge)
   const keybindingsBridge = createKeybindingsClient(settingsDocumentBridge)
   const persistedUiBridge = createPersistedUiClient(settingsDocumentBridge)
+  const workspaceSessionBridge = createTauriWorkspaceSessionClient((command, args) =>
+    invoke(command, args)
+  )
+  const localWorkspace = createTauriLocalWorkspaceClient((command, args) => invoke(command, args), {
+    getSettings: async () => {
+      const document = await settingsDocumentBridge.getDocument()
+      const settings = document.settings as Partial<GlobalSettings> | undefined
+      return {
+        workspaceDir: settings?.workspaceDir ?? '',
+        nestWorkspaces: settings?.nestWorkspaces ?? true,
+        workspaceDirHistory: settings?.workspaceDirHistory,
+        worktreeVisibilityDefaults: settings?.worktreeVisibilityDefaults
+      }
+    }
+  })
 
   const shimmedApi = {
+    pty: mergeNamespace(existing?.pty, createTauriPtyWindowClient(
+      (command, args) => invoke(command, args),
+      (event, listener) => listen(event, listener)
+    )),
     app: mergeNamespace(
       existing?.app,
       createTauriAppClient((command, args) => invoke(command, args))
     ),
     settings: mergeNamespace(existing?.settings, settingsBridge),
+    onboarding: mergeNamespace(existing?.onboarding, createTauriOnboardingClient(settingsDocumentBridge)),
+    runtime: mergeNamespace(existing?.runtime, createTauriRuntimeClient()),
+    runtimeEnvironments: mergeNamespace(existing?.runtimeEnvironments, createTauriRuntimeEnvironmentsClient((command, args) => invoke(command, args))),
+    repos: mergeNamespace(existing?.repos ?? createUnportedNamespace('repos'), localWorkspace.repos),
+    projects: mergeNamespace(existing?.projects ?? createUnportedNamespace('projects'), localWorkspace.projects),
+    projectGroups: mergeNamespace(existing?.projectGroups ?? createUnportedNamespace('projectGroups'), localWorkspace.projectGroups),
+    folderWorkspaces: mergeNamespace(existing?.folderWorkspaces ?? createUnportedNamespace('folderWorkspaces'), localWorkspace.folderWorkspaces),
+    worktrees: mergeNamespace(existing?.worktrees ?? createUnportedNamespace('worktrees'), localWorkspace.worktrees),
     keybindings: mergeNamespace(existing?.keybindings, keybindingsBridge),
     ui: mergeNamespace(
       mergeNamespace(mergeNamespace(existing?.ui, tauriUiClipboardBridge), persistedUiBridge),
@@ -163,7 +199,24 @@ export function installTauriWindowApiShim(): void {
     terminalPreview: {
       ...existing?.terminalPreview,
       ...tauriTerminalPreviewClient
-    }
+    },
+    session: mergeNamespace(
+      mergeNamespace(existing?.session, workspaceSessionBridge),
+      createTauriSessionClient((command, args) => invoke(command, args))
+    ),
+    // Bridge-first: mergeNamespace(existing, bridge) so the native client wins
+    // over a presence-shim stub if one was already installed.
+    agentStatus: mergeNamespace(
+      existing?.agentStatus,
+      createTauriAgentStatusClient(
+        (command, args) => invoke(command, args),
+        (event, listener) => listen(event, listener)
+      )
+    ),
+    agentHooks: mergeNamespace(
+      existing?.agentHooks,
+      createTauriAgentHooksClient((command, args) => invoke(command, args))
+    )
   } as unknown as Window['api']
   // Any namespace without a native bridge resolves through the presence
   // shim so bootstrap/effect dereferences cannot crash the React tree.

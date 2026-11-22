@@ -11,6 +11,24 @@ describe('agent session option catalog', () => {
     expect(getAgentSessionOptionCatalog('future-agent')).toBeNull()
   })
 
+  it('maps OMP model and thinking selections to verified launch and live controls', () => {
+    const catalog = getAgentSessionOptionCatalog('omp')!
+    expect(catalog.listModels?.command).toBe('omp models --json')
+    expect(catalog.modelApply.midSession).toMatchObject({
+      kind: 'command',
+      build: expect.any(Function)
+    })
+    expect(
+      resolveAgentSessionOptionLaunch('omp', {
+        model: 'openai-codex/gpt-5.6-sol',
+        effort: 'xhigh'
+      })
+    ).toEqual({
+      args: ['--model', 'openai-codex/gpt-5.6-sol', '--thinking', 'xhigh'],
+      appliedValues: { model: 'openai-codex/gpt-5.6-sol', effort: 'xhigh' }
+    })
+  })
+
   it('keeps Claude option sets model-scoped', () => {
     const catalog = getAgentSessionOptionCatalog('claude')
     expect(

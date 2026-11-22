@@ -1,0 +1,526 @@
+{
+  "benchmark": "existing-user-golden-core-flow",
+  "capturedAt": "2026-08-25T16:57:16.393Z",
+  "totalMs": 7392.86,
+  "steps": [
+    {
+      "label": "session-ready",
+      "startMs": 45.06,
+      "durationMs": 47.83
+    },
+    {
+      "label": "add-project",
+      "startMs": 400.8,
+      "durationMs": 3092.13
+    },
+    {
+      "label": "create-workspace",
+      "startMs": 3492.94,
+      "durationMs": 3068.76
+    },
+    {
+      "label": "terminal-ready",
+      "startMs": 6561.7,
+      "durationMs": 39.58
+    },
+    {
+      "label": "open-terminal-tab",
+      "startMs": 6601.29,
+      "durationMs": 377.72
+    },
+    {
+      "label": "split-terminal-pane",
+      "startMs": 6979.01,
+      "durationMs": 365.94
+    }
+  ],
+  "process": {
+    "sampleCount": 48,
+    "cpuPercent": {
+      "mean": 13.97,
+      "p95": 29.48,
+      "max": 34.2
+    },
+    "workingSetMb": {
+      "mean": 743.85,
+      "p95": 833.68,
+      "max": 839.63
+    },
+    "privateMb": {
+      "mean": 802.25,
+      "p95": 913.49,
+      "max": 944.24
+    },
+    "peakProcessCount": 4,
+    "samples": [
+      {
+        "capturedAtMs": 54.07,
+        "cpuPercent": 7.11,
+        "workingSetMb": 609.6,
+        "privateMb": 556.1,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 417.01,
+        "cpuPercent": 24.59,
+        "workingSetMb": 627.93,
+        "privateMb": 588.02,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 1631.6,
+        "cpuPercent": 3.73,
+        "workingSetMb": 647.52,
+        "privateMb": 632.49,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 1756.63,
+        "cpuPercent": 19.19,
+        "workingSetMb": 653.84,
+        "privateMb": 639.21,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 1863.2,
+        "cpuPercent": 27.73,
+        "workingSetMb": 659.96,
+        "privateMb": 645.15,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 1976.17,
+        "cpuPercent": 26.5,
+        "workingSetMb": 662.5,
+        "privateMb": 648.58,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 2329.76,
+        "cpuPercent": 16.87,
+        "workingSetMb": 680.29,
+        "privateMb": 686.05,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 2434.06,
+        "cpuPercent": 28.87,
+        "workingSetMb": 682.02,
+        "privateMb": 731.2,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 2535.09,
+        "cpuPercent": 23.66,
+        "workingSetMb": 685.15,
+        "privateMb": 736.54,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 2893.96,
+        "cpuPercent": 9.67,
+        "workingSetMb": 690.52,
+        "privateMb": 741.75,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3011.57,
+        "cpuPercent": 6.84,
+        "workingSetMb": 690.82,
+        "privateMb": 741.95,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3116.39,
+        "cpuPercent": 15.76,
+        "workingSetMb": 696.99,
+        "privateMb": 748,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3220.45,
+        "cpuPercent": 11.75,
+        "workingSetMb": 699.74,
+        "privateMb": 751.29,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3337.2,
+        "cpuPercent": 13.05,
+        "workingSetMb": 707.72,
+        "privateMb": 760.68,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3442,
+        "cpuPercent": 16.34,
+        "workingSetMb": 720.75,
+        "privateMb": 785.49,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3553.26,
+        "cpuPercent": 18.08,
+        "workingSetMb": 729.41,
+        "privateMb": 806.48,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3657.79,
+        "cpuPercent": 19.5,
+        "workingSetMb": 729.05,
+        "privateMb": 807.93,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3766.34,
+        "cpuPercent": 16.51,
+        "workingSetMb": 727.65,
+        "privateMb": 805.62,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3874.42,
+        "cpuPercent": 29.48,
+        "workingSetMb": 730.32,
+        "privateMb": 808.14,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 3984.52,
+        "cpuPercent": 34.2,
+        "workingSetMb": 732.07,
+        "privateMb": 809.55,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4090.02,
+        "cpuPercent": 28.74,
+        "workingSetMb": 735.87,
+        "privateMb": 812.82,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4197.72,
+        "cpuPercent": 31.83,
+        "workingSetMb": 738.5,
+        "privateMb": 814.32,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4547.33,
+        "cpuPercent": 7.65,
+        "workingSetMb": 740.48,
+        "privateMb": 816.05,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4656.07,
+        "cpuPercent": 3.11,
+        "workingSetMb": 740.5,
+        "privateMb": 816.07,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4762.68,
+        "cpuPercent": 2.85,
+        "workingSetMb": 740.42,
+        "privateMb": 815.91,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4871.25,
+        "cpuPercent": 2.84,
+        "workingSetMb": 740.43,
+        "privateMb": 815.91,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 4976.81,
+        "cpuPercent": 3.26,
+        "workingSetMb": 740.46,
+        "privateMb": 815.82,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5088.16,
+        "cpuPercent": 5.16,
+        "workingSetMb": 744.84,
+        "privateMb": 821.1,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5202.45,
+        "cpuPercent": 6.11,
+        "workingSetMb": 747.39,
+        "privateMb": 821.79,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5309.31,
+        "cpuPercent": 18.72,
+        "workingSetMb": 789.84,
+        "privateMb": 870.31,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5421.15,
+        "cpuPercent": 9.06,
+        "workingSetMb": 774.88,
+        "privateMb": 852.31,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5530.08,
+        "cpuPercent": 8.35,
+        "workingSetMb": 768.77,
+        "privateMb": 844,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5637.57,
+        "cpuPercent": 5.82,
+        "workingSetMb": 768.82,
+        "privateMb": 844.25,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5745.04,
+        "cpuPercent": 2.86,
+        "workingSetMb": 768.91,
+        "privateMb": 844.27,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5853.56,
+        "cpuPercent": 9.15,
+        "workingSetMb": 770.67,
+        "privateMb": 845.89,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 5961.28,
+        "cpuPercent": 7.66,
+        "workingSetMb": 777.98,
+        "privateMb": 852.64,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6069.33,
+        "cpuPercent": 12.47,
+        "workingSetMb": 789.99,
+        "privateMb": 864.9,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6192.28,
+        "cpuPercent": 16.84,
+        "workingSetMb": 806.07,
+        "privateMb": 878.81,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6302.92,
+        "cpuPercent": 13,
+        "workingSetMb": 810.17,
+        "privateMb": 884.13,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6409.58,
+        "cpuPercent": 8.35,
+        "workingSetMb": 816.72,
+        "privateMb": 889.44,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6518.6,
+        "cpuPercent": 5.73,
+        "workingSetMb": 817.78,
+        "privateMb": 889.86,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6622.6,
+        "cpuPercent": 4.18,
+        "workingSetMb": 818.26,
+        "privateMb": 890.77,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6726.44,
+        "cpuPercent": 14.13,
+        "workingSetMb": 824.52,
+        "privateMb": 896.29,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6839.45,
+        "cpuPercent": 13.71,
+        "workingSetMb": 828.63,
+        "privateMb": 900.13,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 6946.32,
+        "cpuPercent": 22.65,
+        "workingSetMb": 839.63,
+        "privateMb": 914.55,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 7069.4,
+        "cpuPercent": 15.09,
+        "workingSetMb": 827.66,
+        "privateMb": 907.87,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 7177.12,
+        "cpuPercent": 9.32,
+        "workingSetMb": 833.68,
+        "privateMb": 913.49,
+        "processCount": 4
+      },
+      {
+        "capturedAtMs": 7281.33,
+        "cpuPercent": 12.48,
+        "workingSetMb": 839.09,
+        "privateMb": 944.24,
+        "processCount": 4
+      }
+    ]
+  },
+  "renderer": {
+    "durationMs": 7358,
+    "longTasks": {
+      "count": 10,
+      "totalDurationMs": 1448,
+      "maxDurationMs": 226,
+      "entries": [
+        {
+          "startMs": 174.9,
+          "durationMs": 206
+        },
+        {
+          "startMs": 1942.6,
+          "durationMs": 63
+        },
+        {
+          "startMs": 3082.2,
+          "durationMs": 226
+        },
+        {
+          "startMs": 3599.2,
+          "durationMs": 187
+        },
+        {
+          "startMs": 4134,
+          "durationMs": 56
+        },
+        {
+          "startMs": 5334.2,
+          "durationMs": 170
+        },
+        {
+          "startMs": 5918.5,
+          "durationMs": 178
+        },
+        {
+          "startMs": 6678.5,
+          "durationMs": 172
+        },
+        {
+          "startMs": 6975.6,
+          "durationMs": 138
+        },
+        {
+          "startMs": 7114.4,
+          "durationMs": 52
+        }
+      ]
+    },
+    "frameGaps": {
+      "countOver50Ms": 19,
+      "maxMs": 250.1,
+      "entries": [
+        {
+          "startMs": 170.5,
+          "durationMs": 236.1
+        },
+        {
+          "startMs": 406.6,
+          "durationMs": 90.3
+        },
+        {
+          "startMs": 1948.4,
+          "durationMs": 90.4
+        },
+        {
+          "startMs": 2052.6,
+          "durationMs": 139
+        },
+        {
+          "startMs": 2191.6,
+          "durationMs": 152.8
+        },
+        {
+          "startMs": 3087.6,
+          "durationMs": 250.1
+        },
+        {
+          "startMs": 3337.7,
+          "durationMs": 97.1
+        },
+        {
+          "startMs": 3594.7,
+          "durationMs": 215.2
+        },
+        {
+          "startMs": 3809.9,
+          "durationMs": 55.5
+        },
+        {
+          "startMs": 4011.3,
+          "durationMs": 55.5
+        },
+        {
+          "startMs": 4136.3,
+          "durationMs": 55.5
+        },
+        {
+          "startMs": 5143.5,
+          "durationMs": 55.4
+        },
+        {
+          "startMs": 5337.9,
+          "durationMs": 166.7
+        },
+        {
+          "startMs": 5914.2,
+          "durationMs": 201.5
+        },
+        {
+          "startMs": 6164.3,
+          "durationMs": 55.6
+        },
+        {
+          "startMs": 6692.2,
+          "durationMs": 166.8
+        },
+        {
+          "startMs": 6886.7,
+          "durationMs": 62.5
+        },
+        {
+          "startMs": 6977,
+          "durationMs": 187.5
+        },
+        {
+          "startMs": 7164.5,
+          "durationMs": 55.7
+        }
+      ]
+    }
+  }
+}

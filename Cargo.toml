@@ -1,7 +1,9 @@
 [workspace]
 members = [
+  "crates/mcode-agent-status",
   "crates/mcode-app",
   "crates/mcode-fs",
+  "crates/mcode-git",
   "crates/mcode-process",
   "crates/mcode-platform",
   "crates/mcode-pty",

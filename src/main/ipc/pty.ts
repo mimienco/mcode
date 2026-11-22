@@ -56,10 +56,8 @@ import {
   type SleepingAgentLaunchConfig
 } from '../../shared/agent-session-resume'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
-import {
-  isWslShellName,
-  resolveLocalWindowsTerminalRuntimeOptions
-} from '../../shared/local-windows-terminal-runtime'
+import { resolveLocalWindowsTerminalRuntimeOptions } from '../../shared/local-windows-terminal-runtime'
+import { isWslExecutable } from '../../shared/wsl-paths'
 import { applyTerminalGitCredentialPromptGuard } from './terminal-git-credential-guard'
 import { openCodeHookService } from '../opencode/hook-service'
 import { mimoCodeHookService } from '../mimo/hook-service'
@@ -360,6 +358,14 @@ const CLAUDE_CHILD_SESSION_STAMP_ENV_KEYS = [
   'CLAUDE_CODE_CHILD_SESSION',
   'CLAUDE_CODE_SESSION_ID',
   'CLAUDE_CODE_BRIDGE_SESSION_ID'
+] as const
+
+// Why: these extension recursion guards contain the PID of the owning Pi/OMP or
+// Prime process. They may flow through an outer agent into MCode itself, but a
+// terminal spawned by MCode is a fresh top-level boundary and must choose its own owner.
+const PI_FAMILY_AGENT_STATUS_OWNER_ENV_KEYS = [
+  'MCODE_PI_STATUS_OWNED',
+  'MCODE_PRIME_AGENT_STATUS_OWNED'
 ] as const
 
 export function getPtyIdForPaneKey(paneKey: string): string | undefined {
@@ -1253,7 +1259,7 @@ function shouldSkipCodexHomeEnvForWindowsShell(
   shellPath: string | undefined,
   cwd: string | undefined
 ): boolean {
-  return isWslShellName(shellPath) || (typeof cwd === 'string' && parseWslPath(cwd) !== null)
+  return isWslExecutable(shellPath) || (typeof cwd === 'string' && parseWslPath(cwd) !== null)
 }
 
 function isCodexStatusHooksEnabled(settings: GlobalSettings | undefined): boolean {
@@ -1341,7 +1347,7 @@ function getCodexSelectionTargetForPty(
   wslDistro?: string | null
 ): CodexAccountSelectionTarget {
   const wslPath = typeof cwd === 'string' ? parseWslPath(cwd) : null
-  if (isWslShellName(shellPath) || wslPath) {
+  if (isWslExecutable(shellPath) || wslPath) {
     return { runtime: 'wsl', wslDistro: wslPath?.distro ?? wslDistro ?? null }
   }
   return { runtime: 'host' }
@@ -4880,7 +4886,8 @@ export function registerPtyHandlers(
         isDaemonHostSpawn || args.connectionId ? LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS : [],
         isDaemonHostSpawn ? getInheritedAgentHookEnvKeysToDelete(env) : [],
         // Why: ungated, unlike the agent-hook keys — the local provider and the relay host also spread their own process.env into every spawn.
-        getInheritedClaudeSessionStampEnvKeysToDelete(env)
+        getInheritedClaudeSessionStampEnvKeysToDelete(env),
+        PI_FAMILY_AGENT_STATUS_OWNER_ENV_KEYS
       )
       if (skipCodexHomeEnv) {
         spawnOptions.envToDelete = mergePtyEnvDeletions(
@@ -6237,7 +6244,7 @@ export function registerPtyHandlers(
           const wslRuntimeOwnsStartupCwd =
             requestedMissingCwdFallback &&
             isPosixStartupCwd &&
-            (isWslShellName(startupTerminalRuntimeOptions?.shellOverride) ||
+            (isWslExecutable(startupTerminalRuntimeOptions?.shellOverride) ||
               isWslUncPath(startupWorkspaceCwd ?? ''))
           const startupWslContext = wslRuntimeOwnsStartupCwd
             ? resolveWslSessionContext({
@@ -6630,6 +6637,7 @@ export function registerPtyHandlers(
           isDaemonHostSpawn || args.connectionId ? LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS : [],
           isDaemonHostSpawn ? getInheritedAgentHookEnvKeysToDelete(spawnEnv) : [],
           getInheritedClaudeSessionStampEnvKeysToDelete(spawnEnv),
+          PI_FAMILY_AGENT_STATUS_OWNER_ENV_KEYS,
           skipCodexHomeEnv ? CODEX_HOME_ENV_KEYS : [],
           // Why: the persistent daemon compares its own merged CODEX_HOME pair;
           // main cannot safely decide ownership for a process it may not parent.
@@ -7567,7 +7575,9 @@ export function registerPtyHandlers(
   // Why: resize is fire-and-forget — ipcMain.on (not .handle) halves IPC traffic by skipping the empty acknowledgement reply.
   ipcMain.removeAllListeners('pty:resize')
   ipcMain.on('pty:resize', (_event, args: { id: string; cols: number; rows: number }) => {
-    // Why: after a desktop-fit override change the renderer's safeFit cascade re-measures ALL panes (background ones at full width), so suppress every pty:resize in this window to avoid corrupting PTY dimensions.
+    if (!isPtyIdPayload(args)) {
+      return
+    }
     if (runtime?.isResizeSuppressed()) {
       return
     }
@@ -7608,11 +7618,17 @@ export function registerPtyHandlers(
   // Why: pty:reportGeometry is a measurement-only sibling of pty:resize — it refreshes the restore-target cache (never resizes) so mobile-fit hold learns real desktop dims even while resize is blocked. See docs/mobile-fit-hold.md.
   ipcMain.removeAllListeners('pty:reportGeometry')
   ipcMain.on('pty:reportGeometry', (_event, args: { id: string; cols: number; rows: number }) => {
+    if (!isPtyIdPayload(args)) {
+      return
+    }
     runtime?.recordRendererGeometry(args.id, args.cols, args.rows)
   })
 
   // Why: fire-and-forget — clears the DaemonPtyAdapter's sticky cold-restore cache after the renderer consumed it; no-op for non-daemon providers.
   ipcMain.on('pty:ackColdRestore', (_event, args: { id: string }) => {
+    if (!isPtyIdPayload(args)) {
+      return
+    }
     const provider = tryGetProviderForPty(args.id)
     if (provider && 'ackColdRestore' in provider && typeof provider.ackColdRestore === 'function') {
       provider.ackColdRestore(args.id)
@@ -7623,6 +7639,9 @@ export function registerPtyHandlers(
   ipcMain.on(
     'pty:ackData',
     (_event, args: { id: string; charCount?: number; processedChars?: number }) => {
+      if (!isPtyIdPayload(args)) {
+        return
+      }
       lastAckReceivedAtMs = Date.now()
       // Why: a live ACK channel means a future unanswered probe is a fresh diagnostic event, not a continuation of the last silent streak.
       deliveryResyncUnansweredWarnLogged = false
@@ -7730,7 +7749,7 @@ export function registerPtyHandlers(
 
   ipcMain.removeAllListeners('pty:setActiveRendererPty')
   ipcMain.on('pty:setActiveRendererPty', (_event, args: { id: string; active: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
+    if (!isPtyIdPayload(args)) {
       return
     }
     // Why: renderer scheduling hint only — active panes just get first chance at the bounded output reserve; reads/state/notifications continue for inactive terminals.
@@ -7747,7 +7766,7 @@ export function registerPtyHandlers(
 
   ipcMain.removeAllListeners('pty:setRendererPtyVisible')
   ipcMain.on('pty:setRendererPtyVisible', (_event, args: { id: string; visible: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
+    if (!isPtyIdPayload(args)) {
       return
     }
     // Why: data produced while no renderer can see this PTY must keep that origin through batching, even if the user switches back before the flush lands.
@@ -7763,7 +7782,7 @@ export function registerPtyHandlers(
 
   ipcMain.removeAllListeners('pty:setHiddenRendererPty')
   ipcMain.on('pty:setHiddenRendererPty', (_event, args: { id: string; hidden: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
+    if (!isPtyIdPayload(args)) {
       return
     }
     mainDeliveryBreadcrumbs.record(args.hidden === true ? 'gate-mark' : 'gate-unmark', {
@@ -7817,7 +7836,7 @@ export function registerPtyHandlers(
 
   ipcMain.removeAllListeners('pty:setPtyDeliveryInterest')
   ipcMain.on('pty:setPtyDeliveryInterest', (_event, args: { id: string; interested: boolean }) => {
-    if (typeof args.id !== 'string' || !args.id) {
+    if (!isPtyIdPayload(args)) {
       return
     }
     // Why: any delivery interest suppresses the hidden-delivery gate (raw-byte consumers keep receiving while hidden); not synced to the daemon pacer so interest churn can't un-pace a flood.
@@ -7831,6 +7850,9 @@ export function registerPtyHandlers(
 
   ipcMain.removeAllListeners('pty:signal')
   ipcMain.on('pty:signal', (_event, args: { id: string; signal: string }) => {
+    if (!isPtyIdPayload(args)) {
+      return
+    }
     tryGetProviderForPty(args.id)
       ?.sendSignal(args.id, args.signal)
       .catch(() => {})
@@ -7839,6 +7861,9 @@ export function registerPtyHandlers(
   ipcMain.removeAllListeners('pty:clearBuffer')
   ipcMain.on('pty:clearBuffer', (_event, args: { id: string }) => {
     // Why: clear PTY-side state (ConPTY/daemon/SSH buffer) so the next prompt repaint doesn't land at a stale cursor row.
+    if (!isPtyIdPayload(args)) {
+      return
+    }
     tryGetProviderForPty(args.id)
       ?.clearBuffer(args.id)
       .catch(() => {})

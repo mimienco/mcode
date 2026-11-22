@@ -19,15 +19,30 @@ const INCREMENTAL_BRIDGE_YIELD_MS = 10
  * that run outside the CLI launch path.
  */
 export function listCodexSessionJsonlFiles(rootPath: string): string[] {
+  return listCodexSessionFiles(rootPath, (fileName) => fileName.endsWith('.jsonl'))
+}
+
+/** Lists both physical representations that current Codex can resume. */
+export function listCodexSessionRolloutFiles(rootPath: string): string[] {
+  return listCodexSessionFiles(
+    rootPath,
+    (fileName) => fileName.endsWith('.jsonl') || fileName.endsWith('.jsonl.zst')
+  )
+}
+
+function listCodexSessionFiles(
+  rootPath: string,
+  isSessionFile: (fileName: string) => boolean
+): string[] {
   const files: string[] = []
   try {
     for (const entry of readdirSync(rootPath, { withFileTypes: true })) {
       const childPath = join(rootPath, entry.name)
       if (entry.isDirectory()) {
-        appendSessionFilePaths(files, listCodexSessionJsonlFiles(childPath))
+        appendSessionFilePaths(files, listCodexSessionFiles(childPath, isSessionFile))
         continue
       }
-      if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+      if (entry.isFile() && isSessionFile(entry.name)) {
         files.push(childPath)
       }
     }

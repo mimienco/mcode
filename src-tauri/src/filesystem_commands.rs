@@ -155,14 +155,16 @@ impl NativeFilesystemState {
     /// Registers `window_id`'s ownership of a worktree watcher.
     ///
     /// The native watcher is keyed by root inside the crate service; the
-    /// per-window map here provides the multi-window refcount so the watcher
-    /// is only torn down when the last owning window leaves (spec §5).
+    /// per-window map here indexes roots for window teardown; the crate owns
+    /// the multi-window refcount (spec §5).
     fn watch_root(&self, window_id: u64, root: &Path) -> Result<(), FsError> {
-        self.0.watchers.subscribe(root, window_id)?;
-        self.0
+        let mut subscriptions = self
+            .0
             .window_subscriptions
             .lock()
-            .expect("window subscriptions lock")
+            .expect("window subscriptions lock");
+        self.0.watchers.subscribe(root, window_id)?;
+        subscriptions
             .entry(window_id)
             .or_default()
             .insert(normalize_drive_case(root));
@@ -173,36 +175,29 @@ impl NativeFilesystemState {
     /// native watcher down only when no other window still holds it.
     fn unwatch_root(&self, window_id: u64, root: &Path) {
         let normalized = normalize_drive_case(root);
-        let still_wanted = {
-            let mut subscriptions = self
-                .0
-                .window_subscriptions
-                .lock()
-                .expect("window subscriptions lock");
-            if let Some(owned) = subscriptions.get_mut(&window_id) {
-                owned.remove(&normalized);
+        let mut subscriptions = self
+            .0
+            .window_subscriptions
+            .lock()
+            .expect("window subscriptions lock");
+        if let Some(owned) = subscriptions.get_mut(&window_id) {
+            owned.remove(&normalized);
+            if owned.is_empty() {
+                subscriptions.remove(&window_id);
             }
-            subscriptions
-                .values()
-                .any(|owned| owned.contains(&normalized))
-        };
-        if !still_wanted {
             self.0.watchers.unsubscribe(&normalized, window_id);
         }
     }
 
     /// Releases every watcher subscription owned by a destroyed window.
     fn release_window(&self, window_id: u64) {
-        let roots: HashSet<PathBuf> = self
+        let mut subscriptions = self
             .0
             .window_subscriptions
             .lock()
-            .expect("window subscriptions lock")
-            .get(&window_id)
-            .cloned()
-            .unwrap_or_default();
-        for root in roots {
-            self.unwatch_root(window_id, &root);
+            .expect("window subscriptions lock");
+        for root in subscriptions.remove(&window_id).unwrap_or_default() {
+            self.0.watchers.unsubscribe(&root, window_id);
         }
     }
 
@@ -2084,6 +2079,40 @@ mod tests {
                 .is_none_or(|owned| owned.is_empty())
         );
 
+        drop(state);
+        std::fs::remove_dir_all(fixture).unwrap();
+    }
+
+    #[test]
+    fn watcher_window_teardown_preserves_other_owner_then_stops_delivery() {
+        let fixture = fixture_path("watch-multiple-windows");
+        let root = fixture.join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        let (state, receiver) =
+            NativeFilesystemState::new(SettingsService::new(fixture.join("mcode-data.json")));
+        state.watch_root(1, &root).unwrap();
+        state.watch_root(1, &root).unwrap();
+        state.watch_root(2, &root).unwrap();
+        state.release_window(1);
+        std::fs::write(root.join("remaining-owner.txt"), "active").unwrap();
+        let batch = receiver
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .unwrap();
+        assert!(
+            batch
+                .events
+                .iter()
+                .any(|event| event.absolute_path.ends_with("remaining-owner.txt"))
+        );
+        state.unwatch_root(2, &root);
+        while receiver.try_recv().is_ok() {}
+        std::fs::write(root.join("after-unwatch.txt"), "inactive").unwrap();
+        assert!(
+            receiver
+                .recv_timeout(std::time::Duration::from_millis(800))
+                .is_err()
+        );
+        assert!(state.0.window_subscriptions.lock().unwrap().is_empty());
         drop(state);
         std::fs::remove_dir_all(fixture).unwrap();
     }

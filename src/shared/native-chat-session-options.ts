@@ -1,3 +1,5 @@
+import type { ModelCatalogMetadata } from './model-catalog-metadata'
+
 export type SessionOptionValue = string | boolean
 
 export type SessionOptionSelectChoice = {
@@ -6,6 +8,7 @@ export type SessionOptionSelectChoice = {
   description?: string
   disabled?: boolean
   disabledReason?: string
+  modelMetadata?: ModelCatalogMetadata
 }
 
 /** `default` is the catalog's own value shown before anything is observed —

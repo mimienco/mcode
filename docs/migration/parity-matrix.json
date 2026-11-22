@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceHead": "6740f9c538120796b687ffe2b6f798b488cdaf76",
-  "updatedAt": "2026-09-06",
+  "updatedAt": "2026-09-08",
   "allowedStatuses": ["not_started", "in_progress", "done", "blocked", "accepted_exception"],
   "features": [
     {
@@ -134,16 +134,33 @@
       "id": "workspace.session",
       "currentFiles": ["src/main", "src/preload/index.ts", "src/renderer/src"],
       "currentBehavior": "Open, switch, restore, group, and persist local workspace state.",
-      "targetRustModule": "crates/mcode-workspace/src/session",
-      "targetCommand": ["workspace_open", "workspace_switch", "workspace_list_recent"],
-      "tests": [],
+      "targetRustModule": "src-tauri/src/workspace_commands.rs",
+      "targetCommand": [
+        "workspace_open", "workspace_switch", "workspace_list_recent",
+        "workspace_catalog_get", "workspace_pick_folder", "workspace_list_detected", "workspace_path_status",
+        "session_get", "session_set", "session_patch", "session_flush", "session_read_terminal_scrollback"
+      ],
+      "tests": [
+        "src-tauri/src/workspace_commands.rs: local open/dedupe, remote rejection, concurrent record ownership, native-picker authorization regressions; fresh Rust gate pending",
+        "src-tauri/src/workspace_catalog_commands_tests.rs: catalog ownership and real Git/folder discovery; fresh Rust gate pending",
+        "src-tauri/tests/session_commands/unit.rs and src-tauri/tests/session_capability_contract.rs: session host partitions, patch semantics and scoped sidecars; fresh Rust gate pending",
+        "src/renderer/src/desktop/tauri-local-workspace-client.test.ts and tauri-local-workspace-store.test.ts: adapter and actual store-flow regression coverage",
+        "src/renderer/src/desktop/tauri-session-client.test.ts: async contract, host partitions, queued flush and scrollback cache"
+      ],
       "platforms": {
-        "windows": "not_started",
+        "windows": "in_progress",
         "macos": "not_started",
         "linux": "not_started"
       },
-      "status": "not_started",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "Production shim now uses real local catalog/picker/add, project/setup projection, Git worktree discovery, folder path status, onboarding and async session get/set/patch/flush adapters; see LOCAL-WORKSPACE-SLICE-2026-09-07.md.",
+        "Workspace open now requires fresh persisted roots or a grant produced by the native picker callback; renderer arguments cannot grant new roots. Remote mutations fail before local filesystem work. Direct-SSH catalog metadata remains visible without local execution.",
+        "Session commands preserve local/non-local partitions and shallow checkpoint patch semantics. Async get prefetches scoped terminal scrollback for synchronous cache reads; unsupported synchronous set throws and lifecycle persistence uses the async checkpoint path.",
+        "REPAIR-REVIEW-2026-09-08.md distinguishes applied repairs from pending native gates. Source-shadowing JavaScript was quarantined and the complete TypeScript suite restarted; no final-suite totals or native repair gate success claimed here.",
+        "Remaining: full add/terminal/edit/diff/stop/restart restore journey; worktree creation/removal and broad catalog mutation parity; remote execution/reconnect; multi-window external change events; macOS/Linux evidence. A native-picked child does not authorize an unpicked parent Git root."
+      ],
+      "updatedAt": "2026-09-08"
     },
     {
       "id": "settings.crossgrade",
@@ -311,6 +328,49 @@
       },
       "status": "not_started",
       "evidence": []
+    },
+    {
+      "id": "agents.status",
+      "currentFiles": [
+        "src/main/agent-hooks",
+        "src/main/ipc/agent-hooks.ts",
+        "src/shared/agent-hook-listener.ts",
+        "src/shared/agent-status-types.ts",
+        "src/preload/api/agent-status-api.ts",
+        "src/preload/api/agent-hook-api.ts"
+      ],
+      "currentBehavior": "Loopback hook HTTP listener ingests CLI form-POSTs, normalizes per-provider events, persists last-status.json v2, infers interrupt/question-answered, and pushes agentStatus:* IPC to the renderer. agentHooks reports per-CLI managed-hook install status.",
+      "targetRustModule": "crates/mcode-agent-status",
+      "targetCommand": [
+        "agent_status_get_snapshot",
+        "agent_status_infer_interrupt",
+        "agent_status_infer_question_answered",
+        "agent_status_get_migration_unsupported_snapshot",
+        "agent_status_drop",
+        "agent_status_drop_by_tab_prefix",
+        "agent_status_retire_pane_authority",
+        "agent_status_restore_pane_authority",
+        "agent_status_transfer_pane_authority",
+        "agent_hooks_status"
+      ],
+      "tests": [
+        "crates/mcode-agent-status (unit: types/endpoint/normalizers/store/infer/http)",
+        "src-tauri/src/agent_status_commands.rs (skipped-status honesty)",
+        "src/renderer/src/desktop/tauri-agent-status-client.test.ts",
+        "src/renderer/src/desktop/tauri-agent-hooks-client.test.ts",
+        "src/renderer/src/desktop/shim-coverage.test.ts",
+        "src/renderer/src/desktop/tauri-window-api-shim.test.ts"
+      ],
+      "platforms": {
+        "windows": "in_progress",
+        "macos": "not_started",
+        "linux": "not_started"
+      },
+      "status": "in_progress",
+      "evidence": [
+        "Wave 37: hook endpoint + claude-family/pi/omp/prime-agent/devin/kimi normalizers + StatusStore/infer/persist v2 + pty env injection + renderer shim (agentStatus + agentHooks). Remaining provider normalizers = wave 38. agentHooks unported providers report state:skipped honestly."
+      ],
+      "updatedAt": "2026-09-07"
     },
     {
       "id": "ssh.transport",

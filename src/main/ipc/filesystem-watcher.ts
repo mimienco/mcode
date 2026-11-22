@@ -244,8 +244,13 @@ function coalesceEvents(
       }
       // create followed by delete → net no-op, remove both
       if (prev.type === 'create' && evt.type === 'delete') {
+        // Why: when the path existed before this batch (saw an earlier delete→create), the terminal state is still deleted — keep a final delete or the renderer retains a stale entry (§4.4).
+        if (deleteBeforeCreate.has(p)) {
+          lastByPath.set(p, { type: 'delete', index: i })
+          deleteBeforeCreate.delete(p)
+          continue
+        }
         lastByPath.delete(p)
-        deleteBeforeCreate.delete(p)
         continue
       }
     }

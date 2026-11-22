@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  PAIRING_CODE_MAX_CHARACTERS,
+  PAIRING_INPUT_MAX_CHARACTERS
+} from '../../../src/shared/mobile-pairing-protocol-limits'
 import { decodePairingUrl, extractPairingCodeFromUrl, parsePairingCode } from './pairing'
 import type { PairingOffer } from './types'
 
@@ -71,5 +75,25 @@ describe('pairing deep links', () => {
     const code = encodeOffer(proxiedOffer)
 
     expect(parsePairingCode(code)).toEqual(proxiedOffer)
+  })
+
+  it('rejects payloads over the shared size caps before decoding', () => {
+    const oversizedCode = 'A'.repeat(PAIRING_CODE_MAX_CHARACTERS + 1)
+    expect(parsePairingCode(oversizedCode)).toBeNull()
+    expect(decodePairingUrl(`mcode://pair?code=${oversizedCode}`)).toBeNull()
+
+    const oversizedUrl = `mcode://pair?code=${'B'.repeat(
+      PAIRING_INPUT_MAX_CHARACTERS
+    )}`
+    expect(extractPairingCodeFromUrl(oversizedUrl)).not.toBeNull()
+    expect(decodePairingUrl(oversizedUrl)).toBeNull()
+    expect(parsePairingCode(oversizedUrl)).toBeNull()
+  })
+
+  it('rejects wrong-charset codes before atob', () => {
+    const code = encodeOffer()
+    expect(parsePairingCode(`${code}*`)).toBeNull()
+    // Padding is restored internally, so a bare '=' separator is hostile input.
+    expect(parsePairingCode(`${code}==extra==`)).toBeNull()
   })
 })

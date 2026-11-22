@@ -57,7 +57,18 @@ export class AndroidStreamController {
     return info
   }
 
-  stop(serial: string): void {
+  async stop(serial: string): Promise<void> {
+    // A stop racing an in-flight start must tear down the freshly-created
+    // session (server process + adb forward), so wait out the start before
+    // closing whatever handle it produced.
+    const inFlight = this.starts.get(serial)
+    if (inFlight) {
+      try {
+        await inFlight
+      } catch {
+        // A failed start cleans up after itself; nothing left to stop.
+      }
+    }
     const handle = this.handles.get(serial)
     if (handle) {
       handle.close()

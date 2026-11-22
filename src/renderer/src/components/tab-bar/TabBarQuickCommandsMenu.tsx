@@ -261,7 +261,7 @@ export function TabBarQuickCommandsMenu({
           align="end"
           side="bottom"
           sideOffset={6}
-          className="w-80 p-0"
+          className="w-[min(24rem,calc(100vw-2rem))] p-2"
           onCloseAutoFocus={(event) => {
             if (preserveDestinationFocusRef.current) {
               preserveDestinationFocusRef.current = false
@@ -322,11 +322,11 @@ export function TabBarQuickCommandsMenu({
                 onKeyUp={searchInput.onKeyUp}
                 onBlur={searchInput.onBlur}
                 className="h-9 py-2 text-[12px]"
-                wrapperClassName="border-b border-border/50 px-2"
+                wrapperClassName="mb-2 rounded-lg border border-border/70 bg-muted/20 px-2"
                 iconClassName="h-3.5 w-3.5"
               />
             ) : null}
-            <CommandList ref={commandListRef} className="max-h-72 py-1">
+            <CommandList ref={commandListRef} className="grid max-h-72 gap-2 p-0 pr-0.5">
               {filteredVisibleCommands.length === 0 ? (
                 <CommandEmpty className="py-4 text-center text-[11px]">
                   {query.trim()

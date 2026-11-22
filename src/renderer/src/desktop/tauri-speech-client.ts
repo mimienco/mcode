@@ -80,6 +80,7 @@ function subscribe<T>(
   callback: (data: T) => void
 ): () => void {
   let unsubscribed = false
+  let detach: (() => void) | undefined
   const listening = listen<T>(event, (tauriEvent) => {
     if (!unsubscribed) {
       callback(tauriEvent.payload)
@@ -89,12 +90,20 @@ function subscribe<T>(
     (unlisten) => {
       if (unsubscribed) {
         unlisten()
+      } else {
+        detach = unlisten
       }
     },
     () => undefined
   )
   return () => {
+    if (unsubscribed) {
+      return
+    }
     unsubscribed = true
+    const unlisten = detach
+    detach = undefined
+    unlisten?.()
   }
 }
 

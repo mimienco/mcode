@@ -1,6 +1,14 @@
 /* eslint-disable max-lines */
 
-import React, { useEffect, useCallback, useMemo, useRef, useState, Suspense } from 'react'
+import React, {
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -328,7 +336,8 @@ function Terminal(): React.JSX.Element | null {
     [allWorktrees, folderWorkspaces]
   )
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
-  const renderedActiveWorktreeId = activeWorktreeId
+  // Keep the current surface interactive while React prepares a dense workspace off the click task.
+  const renderedActiveWorktreeId = useDeferredValue(activeWorktreeId)
   const activeWorktreeDeferralHostId = useAppStore((s) =>
     getResolvedExecutionHostIdForWorktree(s, renderedActiveWorktreeId)
   )

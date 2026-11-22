@@ -3,6 +3,8 @@ import {
   createIssueCommandRunnerScriptMock,
   getSshFilesystemProviderMock
 } from './worktrees-test-module-mocks'
+import { registerWorktreeRootsForRepo } from './registered-worktree-roots-cache'
+import { makeWorktreeMeta } from './worktrees-test-fixtures'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
 
 vi.mock('electron', async () =>
@@ -90,6 +92,13 @@ describe('registerWorktreeHandlers', () => {
   })
 
   it('creates an issue-command runner for an existing repo/worktree pair', async () => {
+    registerWorktreeRootsForRepo(store as never, 'repo-1', [
+      '/workspace/repo',
+      '/workspace/improve-dashboard'
+    ])
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-1::/workspace/improve-dashboard': makeWorktreeMeta()
+    })
     const result = await handlers['hooks:createIssueCommandRunner'](null, {
       repoId: 'repo-1',
       worktreePath: '/workspace/improve-dashboard',
@@ -111,6 +120,49 @@ describe('registerWorktreeHandlers', () => {
         MCODE_WORKTREE_PATH: '/workspace/improve-dashboard'
       }
     })
+  })
+
+  it('rejects issue-command runner creation for unregistered worktree paths', async () => {
+    await expect(
+      handlers['hooks:createIssueCommandRunner'](null, {
+        repoId: 'repo-1',
+        worktreePath: '/tmp/evil-runner-target',
+        command: 'codex exec "pwned"'
+      })
+    ).rejects.toThrow('Access denied')
+    expect(createIssueCommandRunnerScriptMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects issue-command runner creation when the worktree is registered to another repo', async () => {
+    const repo = {
+      id: 'repo-1',
+      path: '/workspace/repo',
+      displayName: 'repo',
+      badgeColor: '#000',
+      addedAt: 0
+    }
+    const otherRepo = {
+      id: 'repo-2',
+      path: '/workspace/other',
+      displayName: 'other',
+      badgeColor: '#000',
+      addedAt: 0
+    }
+    store.getRepos.mockReturnValue([repo, otherRepo])
+    registerWorktreeRootsForRepo(store as never, 'repo-1', ['/workspace/repo'])
+    registerWorktreeRootsForRepo(store as never, 'repo-2', ['/workspace/other-worktree'])
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-2::/workspace/other-worktree': makeWorktreeMeta()
+    })
+
+    await expect(
+      handlers['hooks:createIssueCommandRunner'](null, {
+        repoId: 'repo-1',
+        worktreePath: '/workspace/other-worktree',
+        command: 'codex exec "pwned"'
+      })
+    ).rejects.toThrow('Access denied')
+    expect(createIssueCommandRunnerScriptMock).not.toHaveBeenCalled()
   })
 
   it('keeps SSH issue-command local overrides usable when shared read fails', async () => {

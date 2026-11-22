@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { shouldWaitForSetupBeforeAgentStartup } from '../shared/setup-agent-startup-policy'
-import { nativeWindowsPathToPosixShellPath } from '../shared/setup-runner-command'
+import { nativeWindowsPathToPosixShellPath } from '../shared/wsl-paths'
 import { scriptDeclaresPosixShell } from '../shared/setup-script-shebang'
 import { resolveWindowsShellStartupFamily } from '../shared/windows-terminal-shell'
 import { resolveWindowsGitBashShellPath } from './git-bash'

@@ -22,5 +22,9 @@ export const NATIVE_CHAT_EMPTY_STATE_COPY = {
   notAgent: {
     title: 'No conversation here',
     subtitle: 'This terminal is not running a recognized coding agent.'
+  },
+  authRequired: {
+    title: '{{value0}} is not logged in',
+    subtitle: 'Log in to load this conversation and start chatting.'
   }
 } as const satisfies Record<string, NativeChatEmptyStateCopy>

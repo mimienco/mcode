@@ -6,13 +6,13 @@ import {
   getSharedManagedScriptPath,
   isPlainObject,
   MANAGED_HOOK_TIMEOUT_SECONDS,
-  quotePowerShellString,
   removeManagedCommands,
   wrapWindowsPowerShellEncodedCommand,
   type HookCommandConfig,
   type HookDefinition,
   type HooksConfig
 } from '../agent-hooks/installer-utils'
+import { quotePowerShellString } from '../../shared/shell-quoting'
 import { wrapRuntimeHomeHookCommand } from '../agent-hooks/runtime-home-hook-command'
 
 export type ClaudeCompatibleHookSettings = {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workspace-path-status"
+description = "Enables the workspace_path_status command without any pre-configured scope."
+commands.allow = ["workspace_path_status"]
+
+[[permission]]
+identifier = "deny-workspace-path-status"
+description = "Denies the workspace_path_status command without any pre-configured scope."
+commands.deny = ["workspace_path_status"]

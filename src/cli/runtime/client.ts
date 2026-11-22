@@ -113,9 +113,15 @@ export class RuntimeClient {
         throw new RuntimeRpcFailureError(response)
       }
       if (this.environmentSelector) {
-        markEnvironmentUsed(this.userDataPath, this.environmentSelector, {
-          runtimeId: response._meta.runtimeId
-        })
+        // Last-used bookkeeping must never fail an already-successful RPC
+        // (e.g. the environment was removed mid-session).
+        try {
+          markEnvironmentUsed(this.userDataPath, this.environmentSelector, {
+            runtimeId: response._meta.runtimeId
+          })
+        } catch {
+          // Ignore: bookkeeping only.
+        }
       }
       return response
     }

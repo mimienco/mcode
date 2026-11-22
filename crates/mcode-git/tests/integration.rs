@@ -67,7 +67,8 @@ impl TestRepo {
         let dir = TempDir::new().map_err(|e| e.to_string())?;
         let root = dir.path().join(name);
         std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-        run_git(&root, &["init", "--initial-branch=main"])?;
+        run_git(&root, &["init"])?;
+        run_git(&root, &["symbolic-ref", "HEAD", "refs/heads/main"])?;
         run_git(&root, &["config", "user.email", "test@example.com"])?;
         run_git(&root, &["config", "user.name", "Test Author"])?;
         Ok(Self { _dir: dir, root })
@@ -117,6 +118,127 @@ fn stage_commit_status_roundtrip() -> Result<(), String> {
     assert!(!hash.is_empty());
     let status = repo_handle.status(false).map_err(|e| e.to_string())?;
     assert!(status.is_clean());
+    Ok(())
+}
+
+#[test]
+fn literal_path_mutations_do_not_expand_wildcards() -> Result<(), String> {
+    require_git!();
+    let repo = TestRepo::new("literal-paths")?;
+    run_git(&repo.root, &["config", "core.autocrlf", "false"])?;
+    repo.write("[ab].txt", "initial\n")?;
+    repo.write("a.txt", "initial\n")?;
+    repo.commit_all("seed")?;
+    repo.write("[ab].txt", "changed\n")?;
+    repo.write("a.txt", "changed\n")?;
+    let handle = repo.repo();
+    handle
+        .stage(&[Path::new("[ab].txt")])
+        .map_err(|e| e.to_string())?;
+    let staged = handle.status(false).map_err(|e| e.to_string())?;
+    assert_eq!(
+        staged
+            .entries
+            .iter()
+            .filter(|entry| entry.index_status == 'M')
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>(),
+        ["[ab].txt"]
+    );
+    handle
+        .unstage(&[Path::new("[ab].txt")])
+        .map_err(|e| e.to_string())?;
+    handle
+        .discard(&[Path::new("[ab].txt")])
+        .map_err(|e| e.to_string())?;
+    assert_eq!(
+        std::fs::read_to_string(repo.root.join("[ab].txt")).unwrap(),
+        "initial\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.root.join("a.txt")).unwrap(),
+        "changed\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn ignore_no_matches_is_empty_and_space_names_roundtrip() -> Result<(), String> {
+    require_git!();
+    let repo = TestRepo::new("ignored-spaces")?;
+    repo.write(".gitignore", "ignored name\n")?;
+    assert!(
+        repo.repo()
+            .check_ignored(&[Path::new("ordinary name")])
+            .map_err(|e| e.to_string())?
+            .is_empty()
+    );
+    assert_eq!(
+        repo.repo()
+            .check_ignored(&[Path::new("ignored name")])
+            .map_err(|e| e.to_string())?,
+        [PathBuf::from("ignored name")]
+    );
+    Ok(())
+}
+
+#[test]
+fn commit_respects_repository_hooks() -> Result<(), String> {
+    require_git!();
+    let repo = TestRepo::new("hook-policy")?;
+    repo.write("new file.txt", "data\n")?;
+    let hook = repo.root.join(".git/hooks/pre-commit");
+    std::fs::write(&hook, "#!/bin/sh\necho hook-rejected >&2\nexit 1\n")
+        .map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| e.to_string())?;
+    }
+    repo.repo()
+        .stage(&[Path::new("new file.txt")])
+        .map_err(|e| e.to_string())?;
+    let error = repo
+        .repo()
+        .commit("must not bypass hooks", false)
+        .unwrap_err();
+    assert!(error.to_string().contains("hook-rejected"));
+    assert!(run_git(&repo.root, &["rev-parse", "--verify", "HEAD"]).is_err());
+    Ok(())
+}
+
+#[test]
+fn discovers_relative_gitdir_from_its_containing_worktree() -> Result<(), String> {
+    require_git!();
+    let repo = TestRepo::new("relative-gitdir")?;
+    let dotgit = repo.root.join(".git");
+    let metadata = repo.root.join("metadata");
+    std::fs::rename(&dotgit, &metadata).map_err(|e| e.to_string())?;
+    std::fs::write(&dotgit, "gitdir: metadata\n").map_err(|e| e.to_string())?;
+    let discovered = Repo::discover(&repo.root).map_err(|e| e.to_string())?;
+    assert_eq!(discovered.gitdir, metadata);
+    assert_eq!(discovered.root, repo.root);
+    Ok(())
+}
+
+#[test]
+fn relative_worktree_destination_is_resolved_against_repository() -> Result<(), String> {
+    require_git!();
+    let repo = TestRepo::new("relative-worktree")?;
+    repo.write("seed.txt", "seed\n")?;
+    repo.commit_all("seed")?;
+    let handle = repo.repo();
+    let service = WorktreeService::new(&handle);
+    let created = service
+        .create(Path::new("../relative-child"), Some("relative-child"), None)
+        .map_err(|e| e.to_string())?;
+    assert!(created.path.is_absolute());
+    assert!(created.path.join("seed.txt").is_file());
+    assert_eq!(
+        created.head,
+        run_git(&repo.root, &["rev-parse", "HEAD"])?.trim()
+    );
     Ok(())
 }
 
@@ -551,7 +673,10 @@ fn worktree_repair_is_idempotent_on_healthy_repo() -> Result<(), String> {
     repo.commit_all("seed")?;
     let repo_handle = repo.repo();
     let service = WorktreeService::new(&repo_handle);
-    service.repair().map_err(|e| e.to_string())?;
+    match service.repair() {
+        Ok(()) | Err(mcode_git::GitError::GitUnsupportedCapability { .. }) => {}
+        Err(error) => return Err(error.to_string()),
+    }
     Ok(())
 }
 

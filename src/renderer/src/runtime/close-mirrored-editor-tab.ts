@@ -48,13 +48,24 @@ export function notifyHostOfMirroredEditorClose(
   )
   // Dynamic import: this helper is imported by the editor slice during store creation, so importing
   // web-runtime-session eagerly imports the store back and trips cyclic init in full-suite import order.
-  void import('./web-runtime-session').then(({ closeWebRuntimeSessionTab }) =>
-    closeWebRuntimeSessionTab({
-      worktreeId,
-      tabId: unifiedTab.id,
-      environmentId: runtimeEnvironmentId,
-      reason: 'user'
+  void import('./web-runtime-session')
+    .then(({ closeWebRuntimeSessionTab }) =>
+      closeWebRuntimeSessionTab({
+        worktreeId,
+        tabId: unifiedTab.id,
+        environmentId: runtimeEnvironmentId,
+        reason: 'user'
+      })
+    )
+    .catch(() => {
+      // Why: without the close RPC the next snapshot resurrects the tab once the
+      // recorded intent expires, so refresh the intent to keep it suppressed.
+      recordWebSessionCloseIntent(
+        { environmentId: runtimeEnvironmentId },
+        worktreeId,
+        toHostSessionTabId(unifiedTab.id),
+        Date.now()
+      )
     })
-  )
   return true
 }

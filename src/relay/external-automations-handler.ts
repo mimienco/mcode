@@ -149,7 +149,10 @@ export class ExternalAutomationsHandler {
       return null
     }
     const [, year, month, day, hour, minute, second] = match
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}`
+    // Why: the filename clock is UTC (see sortableTimeFromRunKey), and merged
+    // sorting Date.parse()s this alongside toISOString() values; a zone-less
+    // suffix would be read as machine-local time on non-UTC hosts.
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}Z`
   }
 
   private runKeyFromHermesOutputFile(filename: string): string | null {

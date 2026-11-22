@@ -68,25 +68,28 @@ function getServeSimEnv(executable: ServeSimExecutable): NodeJS.ProcessEnv {
   return env
 }
 
-// Cached per process: materialization is a one-time copy; later calls only stat.
+// Cached per process on success only; failures stay uncached so a transient
+// error retries on the next call instead of degrading every later command.
 let materializedServeSimPackageDir: string | null | undefined
 
 function resolveMaterializedServeSimPackageDir(bundledPackageDir: string): string | null {
   if (materializedServeSimPackageDir !== undefined) {
     return materializedServeSimPackageDir
   }
-  materializedServeSimPackageDir = materializeServeSimRuntime({
+  const materialized = materializeServeSimRuntime({
     bundledPackageDir,
     targetRootDir: join(app.getPath('userData'), 'serve-sim-runtime'),
     version: app.getVersion()
   })
-  if (materializedServeSimPackageDir === null) {
+  if (materialized === null) {
     console.warn(
       '[serve-sim] runtime materialization failed; running from the app bundle ' +
         '(camera injection may hit Gatekeeper on quarantined installs)'
     )
+    return null
   }
-  return materializedServeSimPackageDir
+  materializedServeSimPackageDir = materialized
+  return materialized
 }
 
 export function resolveServeSimExecutable(): ServeSimExecutable {

@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   detectNativeChatTerminalAttention,
+  detectNativeChatTerminalNotice,
   useNativeChatTerminalAttention
 } from './native-chat-terminal-attention'
 
@@ -28,6 +29,47 @@ describe('native chat terminal attention', () => {
   it('does not classify ordinary output or another agent as a Codex blocker', () => {
     expect(detectNativeChatTerminalAttention('Review hooks before release.', 'codex')).toBeNull()
     expect(detectNativeChatTerminalAttention(CODEX_HOOK_REVIEW_PROMPT, 'claude')).toBeNull()
+  })
+
+  it('promotes Claude terminal authentication failures into Chat', () => {
+    expect(detectNativeChatTerminalAttention('Not logged in · Run /login', 'claude')).toBe(
+      'agent-auth-required'
+    )
+  })
+
+  it('parses a completed Claude update with its changelog counts', () => {
+    expect(
+      detectNativeChatTerminalNotice(
+        'Updated to latest. Got 10 features, 34 bugfixes, and 17 other changes.\ncode.claude.com/docs/en/changelog for details',
+        'claude'
+      )
+    ).toEqual({
+      kind: 'update-complete',
+      features: 10,
+      bugfixes: 34,
+      otherChanges: 17,
+      changelogUrl: 'https://code.claude.com/docs/en/changelog'
+    })
+  })
+
+  it.each([
+    ['Update available! Run: claude update', 'claude update'],
+    ['Update available! Run: brew upgrade claude-code', 'brew upgrade claude-code'],
+    [
+      'Update available! Run: winget upgrade Anthropic.ClaudeCode',
+      'winget upgrade Anthropic.ClaudeCode'
+    ]
+  ])('extracts an allowlisted one-click update command from %s', (screen, command) => {
+    expect(detectNativeChatTerminalNotice(screen, 'claude')).toEqual({
+      kind: 'update-available',
+      command
+    })
+  })
+
+  it('never turns untrusted terminal output into an executable update action', () => {
+    expect(
+      detectNativeChatTerminalNotice('Update available! Run: rm -rf important', 'claude')
+    ).toEqual({ kind: 'update-available', command: null })
   })
 
   it('clears the blocker after the terminal prompt is resolved', () => {

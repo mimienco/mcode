@@ -4,6 +4,11 @@ import type { ActiveRightSidebarTab } from '@/store/slices/editor'
 import type { CheckStatus } from '../../../../shared/github/pull-request-types'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  cancelRightSidebarPanelPrefetch,
+  prefetchRightSidebarPanel,
+  scheduleRightSidebarPanelPrefetch
+} from './prefetch-right-sidebar-panel'
 import { RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME } from './right-sidebar-titlebar-drag-regions'
 import {
   DropdownMenu,
@@ -99,7 +104,19 @@ export function TopActivityOverflowMenu({
           return (
             <DropdownMenuItem
               key={item.id}
-              onSelect={() => onSelect(item.id)}
+              onSelect={() => {
+                prefetchRightSidebarPanel(item.id)
+                onSelect(item.id)
+              }}
+              onPointerEnter={() => {
+                scheduleRightSidebarPanelPrefetch(item.id)
+              }}
+              onPointerLeave={() => {
+                cancelRightSidebarPanelPrefetch(item.id)
+              }}
+              onFocus={() => {
+                prefetchRightSidebarPanel(item.id)
+              }}
               className={cn(active && 'bg-accent text-accent-foreground')}
               aria-current={active ? 'page' : undefined}
               aria-label={activityItemAriaLabel(item, item.statusIndicator)}
@@ -149,7 +166,19 @@ export function ActivityBarButton({
             isTop ? 'h-[36px] w-9' : 'w-10 h-10',
             active ? 'text-foreground' : 'text-muted-foreground/60 hover:text-muted-foreground'
           )}
-          onClick={onClick}
+          onClick={() => {
+            prefetchRightSidebarPanel(item.id)
+            onClick()
+          }}
+          onPointerEnter={() => {
+            scheduleRightSidebarPanelPrefetch(item.id)
+          }}
+          onPointerLeave={() => {
+            cancelRightSidebarPanelPrefetch(item.id)
+          }}
+          onFocus={() => {
+            prefetchRightSidebarPanel(item.id)
+          }}
           aria-label={activityItemAriaLabel(item, effectiveStatus)}
         >
           <Icon size={isTop ? 16 : 18} />

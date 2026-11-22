@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-status-infer-interrupt"
+description = "Enables the agent_status_infer_interrupt command without any pre-configured scope."
+commands.allow = ["agent_status_infer_interrupt"]
+
+[[permission]]
+identifier = "deny-agent-status-infer-interrupt"
+description = "Denies the agent_status_infer_interrupt command without any pre-configured scope."
+commands.deny = ["agent_status_infer_interrupt"]

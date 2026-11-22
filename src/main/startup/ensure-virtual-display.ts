@@ -54,8 +54,11 @@ function isDisplayServerAlive(displayNumber: number): boolean {
     // signal 0 probes existence without affecting the process.
     process.kill(pid, 0)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    // Why: EPERM means the process exists but belongs to another user; only
+    // ESRCH proves it is gone. Treating a live foreign Xvfb as stale would
+    // delete its lock/socket and adopt its display unauthenticated.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
 }
 

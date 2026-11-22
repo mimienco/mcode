@@ -138,6 +138,9 @@ fn execute_shutdown_request(
     app: &AppHandle,
     request: &ShutdownRequest,
 ) -> Result<(), DesktopCommandError> {
+    if let Err(error) = crate::agent_status_http::flush_agent_status() {
+        eprintln!("[agent-hooks] final status persistence failed: {error}");
+    }
     match request.intent {
         ShutdownIntent::Quit => app.exit(0),
         ShutdownIntent::Restart => {

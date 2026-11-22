@@ -44,6 +44,21 @@ describe('getAgentModelProbeSpec', () => {
     expect(listCommitMessageAgentIds()).not.toContain('grok')
   })
 
+  it('discovers OMP models through its JSON catalog without making it a commit agent', () => {
+    const spec = getAgentModelProbeSpec('omp')
+    expect(spec).toMatchObject({
+      id: 'omp',
+      binary: 'omp',
+      modelSource: 'dynamic',
+      defaultModelId: 'openai-codex/gpt-5.6-sol'
+    })
+    expect(spec?.modelDiscovery).toMatchObject({
+      binary: 'omp',
+      args: ['models', '--json']
+    })
+    expect(getCommitMessageAgentSpec('omp')).toBeUndefined()
+  })
+
   it('is undefined for an agent in neither registry', () => {
     expect(getAgentModelProbeSpec('aider')).toBeUndefined()
   })

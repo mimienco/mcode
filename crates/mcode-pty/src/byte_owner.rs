@@ -76,6 +76,23 @@ pub struct OutputBatch {
     pub restore_marker: Option<RestoreMarker>,
 }
 
+impl OutputBatch {
+    pub fn delivered_units(&self) -> u64 {
+        self.chunks
+            .iter()
+            .map(|chunk| chunk.data.encode_utf16().count() as u64)
+            .sum::<u64>()
+            + self
+                .dropped
+                .as_ref()
+                .map_or(0, |dropped| dropped.data.encode_utf16().count() as u64)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.chunks.is_empty() && self.dropped.is_none() && self.restore_marker.is_none()
+    }
+}
+
 /// `{data: salvagedQueryBytes, droppedOutput: true}` sentinel.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +124,8 @@ struct PendingEntry {
 pub struct ByteOwner {
     /// Cumulative output sequence in raw source chars.
     output_seq: u64,
+    utf8_pending: Vec<u8>,
+    delivered_drop_seq: Option<u64>,
     /// FIFO of pending entries in delivery order.
     pending: Vec<PendingEntry>,
     /// Cap in chars, computed once from the spawn-time scrollback rows.
@@ -149,6 +168,13 @@ impl GlobalCredit {
     pub fn in_flight(&self) -> u64 {
         self.sent_chars.saturating_sub(self.acked_chars)
     }
+    pub fn release(&mut self, chars: u64) {
+        self.acked_chars += chars.min(self.in_flight());
+    }
+
+    pub fn rollback_sent(&mut self, chars: u64) {
+        self.sent_chars = self.sent_chars.saturating_sub(chars).max(self.acked_chars);
+    }
 }
 
 impl ByteOwner {
@@ -162,6 +188,8 @@ impl ByteOwner {
     pub fn new(scrollback_rows: u32) -> Self {
         Self {
             output_seq: 0,
+            utf8_pending: Vec::new(),
+            delivered_drop_seq: None,
             pending: Vec::new(),
             cap_chars: Self::cap_chars_for_rows(scrollback_rows),
             overflowed: false,
@@ -181,7 +209,7 @@ impl ByteOwner {
     pub fn pending_chars(&self) -> u64 {
         self.pending
             .iter()
-            .map(|e| e.data.chars().count() as u64)
+            .map(|e| e.data.encode_utf16().count() as u64)
             .sum()
     }
 
@@ -195,28 +223,34 @@ impl ByteOwner {
     ///
     /// Returns `Some(RestoreMarker)` on the transition into overflow.
     pub fn append(&mut self, bytes: &[u8]) -> Option<RestoreMarker> {
-        // Count source chars: valid UTF-8 chars plus one per maximal invalid
-        // sequence (each collapses into one U+FFFD in the delivered text).
-        let mut source_chars: u64 = 0;
-        let mut rest = bytes;
-        while !rest.is_empty() {
-            match std::str::from_utf8(rest) {
-                Ok(valid) => {
-                    source_chars += valid.chars().count() as u64;
-                    break;
-                }
-                Err(e) => {
-                    let good = e.valid_up_to();
-                    if let Ok(prefix) = std::str::from_utf8(&rest[..good]) {
-                        source_chars += prefix.chars().count() as u64;
-                    }
-                    let bad = e.error_len().unwrap_or(rest.len() - good);
-                    source_chars += 1;
-                    rest = &rest[good + bad..];
-                }
+        self.utf8_pending.extend_from_slice(bytes);
+        let mut end = self.utf8_pending.len();
+        let mut offset = 0;
+        while let Err(error) = std::str::from_utf8(&self.utf8_pending[offset..]) {
+            offset += error.valid_up_to();
+            if let Some(length) = error.error_len() {
+                offset += length;
+            } else {
+                end = offset;
+                break;
             }
         }
-        let text = String::from_utf8_lossy(bytes).into_owned();
+        let text = String::from_utf8_lossy(&self.utf8_pending[..end]).into_owned();
+        self.utf8_pending.drain(..end);
+        if text.is_empty() {
+            return None;
+        }
+        let source_chars = text.encode_utf16().count() as u64;
+        self.append_counted(text, source_chars)
+    }
+
+    /// EOF makes an incomplete trailing code point permanently invalid.
+    pub fn finish_utf8(&mut self) -> Option<RestoreMarker> {
+        let text = String::from_utf8_lossy(&std::mem::take(&mut self.utf8_pending)).into_owned();
+        if text.is_empty() {
+            return None;
+        }
+        let source_chars = text.encode_utf16().count() as u64;
         self.append_counted(text, source_chars)
     }
 
@@ -247,7 +281,7 @@ impl ByteOwner {
         if let Some(last) = self.pending.last_mut() {
             last.data.push_str(&text);
             last.source_chars += source_chars;
-            if last.data.chars().count() as u64 != last.source_chars {
+            if last.data.encode_utf16().count() as u64 != last.source_chars {
                 last.transformed = true;
             }
         } else {
@@ -263,7 +297,7 @@ impl ByteOwner {
 
     /// Variant for already-decoded text with an explicit transformed flag.
     pub fn append_str(&mut self, text: String, transformed: bool) -> Option<RestoreMarker> {
-        let source_chars = text.chars().count() as u64;
+        let source_chars = text.encode_utf16().count() as u64;
         if let Some(marker) = self.append_counted(text.clone(), source_chars) {
             return Some(marker);
         }
@@ -309,7 +343,7 @@ impl ByteOwner {
             .pending
             .drain(..)
             .map(|entry| {
-                let delivered = entry.data.chars().count() as u64;
+                let delivered = entry.data.encode_utf16().count() as u64;
                 OutputChunk {
                     data: entry.data,
                     seq: entry.start_seq + entry.source_chars,
@@ -323,6 +357,109 @@ impl ByteOwner {
             })
             .collect();
         batch
+    }
+
+    pub fn has_pending_delivery(&self) -> bool {
+        !self.pending.is_empty()
+            || (self.overflowed && self.delivered_drop_seq != Some(self.output_seq))
+    }
+
+    /// Drain only within actual delivery credit, without splitting a UTF-16 surrogate pair.
+    pub fn take_batch_limited(&mut self, mut available: u64) -> OutputBatch {
+        if self.overflowed {
+            if self.delivered_drop_seq == Some(self.output_seq)
+                || available < DROPPED_QUERY_SALVAGE_MAX_CHARS as u64
+            {
+                return OutputBatch::default();
+            }
+            self.delivered_drop_seq = Some(self.output_seq);
+            return self.take_batch();
+        }
+        let mut batch = OutputBatch::default();
+        while available > 0 && !self.pending.is_empty() {
+            let entry = &mut self.pending[0];
+            let mut units = 0u64;
+            let mut cut = 0;
+            for (index, ch) in entry.data.char_indices() {
+                let next = units + ch.len_utf16() as u64;
+                if next > available {
+                    break;
+                }
+                units = next;
+                cut = index + ch.len_utf8();
+            }
+            if cut == 0 {
+                break;
+            }
+            let remainder = entry.data.split_off(cut);
+            let data = std::mem::replace(&mut entry.data, remainder);
+            let source_units = if entry.data.is_empty() {
+                entry.source_chars
+            } else {
+                units.min(entry.source_chars)
+            };
+            entry.start_seq += source_units;
+            entry.source_chars -= source_units;
+            batch.chunks.push(OutputChunk {
+                data,
+                seq: entry.start_seq,
+                raw_length: (source_units != units).then_some(source_units),
+                transformed: entry.transformed.then_some(true),
+            });
+            available -= units;
+            if entry.data.is_empty() {
+                self.pending.remove(0);
+            }
+        }
+        batch
+    }
+
+    pub fn return_batch(&mut self, batch: OutputBatch) {
+        if batch.restore_marker.is_some() {
+            self.delivered_drop_seq = None;
+        }
+        if let Some(dropped) = batch.dropped {
+            self.push_dropped_tail(&dropped.data);
+        }
+        for chunk in batch.chunks.into_iter().rev() {
+            let source_chars = chunk
+                .raw_length
+                .unwrap_or_else(|| chunk.data.encode_utf16().count() as u64);
+            if self.overflowed {
+                self.push_dropped_tail(&chunk.data);
+                continue;
+            }
+            self.pending.insert(
+                0,
+                PendingEntry {
+                    start_seq: chunk.seq.saturating_sub(source_chars),
+                    data: chunk.data,
+                    transformed: chunk.transformed.unwrap_or(false),
+                    source_chars,
+                },
+            );
+        }
+        if self.pending_chars() > self.cap_chars as u64 {
+            self.overflowed = true;
+            self.delivered_drop_seq = None;
+            for entry in std::mem::take(&mut self.pending) {
+                self.push_dropped_tail(&entry.data);
+            }
+        }
+    }
+
+    pub fn available_credit(&self, global: &GlobalCredit) -> u64 {
+        let per_cap = PER_PTY_INFLIGHT_CAP_CHARS as u64;
+        let global_cap = GLOBAL_INFLIGHT_CAP_CHARS as u64;
+        per_cap
+            .saturating_sub(self.in_flight())
+            .min(global_cap.saturating_sub(global.in_flight()))
+    }
+
+    pub fn rollback_sent(&mut self, chars: u64) -> u64 {
+        let before = self.in_flight();
+        self.sent_chars = self.sent_chars.saturating_sub(chars).max(self.acked_chars);
+        before.saturating_sub(self.in_flight())
     }
 
     /// Salvages reply-eliciting probes out of a dropped span (≤4096 chars):
@@ -411,12 +548,11 @@ impl ByteOwner {
         None
     }
 
-    /// Cumulative max-merge ACK: idempotent, reorder-tolerant, clamped.
-    pub fn ack(&mut self, processed_chars: u64) {
-        let clamped = processed_chars.min(self.sent_chars);
-        if clamped > self.acked_chars {
-            self.acked_chars = clamped;
-        }
+    /// Return the newly acknowledged credit, never the untrusted cumulative input.
+    pub fn ack(&mut self, processed_chars: u64) -> u64 {
+        let before = self.acked_chars;
+        self.acked_chars = self.acked_chars.max(processed_chars.min(self.sent_chars));
+        self.acked_chars - before
     }
 
     /// Records how many chars were actually handed to the renderer.
@@ -526,10 +662,10 @@ mod tests {
         owner3.append(&[0x8C, 0x80]);
         let batch3 = owner3.take_batch();
         let chunk3 = &batch3.chunks[0];
-        assert_eq!(chunk3.data, "héllo \u{FFFD}\u{FFFD}\u{FFFD}");
+        assert_eq!(chunk3.data, "héllo \u{1f300}");
         assert_eq!(chunk3.raw_length, None);
         assert_eq!(chunk3.transformed, None);
-        assert_eq!(chunk3.seq, 9);
+        assert_eq!(chunk3.seq, 8);
     }
 
     #[test]
@@ -635,5 +771,93 @@ mod tests {
         owner.record_sent(10);
         owner.ack(50); // corrupt ACK beyond sent
         assert_eq!(owner.in_flight(), 0);
+    }
+    #[test]
+    fn sequence_and_pending_budget_use_utf16_units() {
+        let mut owner = ByteOwner::new(1000);
+        owner.append("a😀b".as_bytes());
+        assert_eq!(owner.seq(), 4);
+        assert_eq!(owner.pending_chars(), 4);
+        assert_eq!(owner.take_batch().chunks[0].seq, 4);
+    }
+
+    #[test]
+    fn utf8_split_at_every_byte_boundary_is_lossless_and_eof_flushes_incomplete_tail() {
+        let text = "a€😀z";
+        for cut in 0..=text.len() {
+            let mut owner = ByteOwner::new(1000);
+            owner.append(&text.as_bytes()[..cut]);
+            let mut output: String = owner
+                .take_batch()
+                .chunks
+                .into_iter()
+                .map(|c| c.data)
+                .collect();
+            owner.append(&text.as_bytes()[cut..]);
+            owner.finish_utf8();
+            output.extend(owner.take_batch().chunks.into_iter().map(|c| c.data));
+            assert_eq!(output, text, "split at {cut}");
+            assert_eq!(owner.seq(), text.encode_utf16().count() as u64);
+        }
+        let mut owner = ByteOwner::new(1000);
+        owner.append(&[0xe2]);
+        assert!(owner.take_batch().chunks.is_empty());
+        owner.finish_utf8();
+        assert_eq!(owner.take_batch().chunks[0].data, "\u{fffd}");
+        assert_eq!(owner.seq(), 1);
+    }
+
+    fn reserve(owner: &mut ByteOwner, global: &mut GlobalCredit) -> OutputBatch {
+        let batch = owner.take_batch_limited(owner.available_credit(global));
+        owner.record_sent(batch.delivered_units());
+        global.record_sent(batch.delivered_units());
+        batch
+    }
+
+    #[test]
+    fn credit_bounds_delivery_and_ack_release_is_per_session_delta() {
+        let mut global = GlobalCredit::default();
+        let mut owners = Vec::new();
+        for _ in 0..16 {
+            let mut owner = ByteOwner::new(1000);
+            owner.append(&vec![b'x'; PER_PTY_INFLIGHT_CAP_CHARS + 1]);
+            let batch = reserve(&mut owner, &mut global);
+            assert_eq!(batch.delivered_units(), PER_PTY_INFLIGHT_CAP_CHARS as u64);
+            assert!(reserve(&mut owner, &mut global).is_empty());
+            owners.push(owner);
+        }
+        assert_eq!(global.in_flight(), GLOBAL_INFLIGHT_CAP_CHARS as u64);
+        let mut extra = ByteOwner::new(1000);
+        extra.append(b"hello");
+        assert!(reserve(&mut extra, &mut global).is_empty());
+        global.release(owners[0].ack(3));
+        assert_eq!(reserve(&mut extra, &mut global).chunks[0].data, "hel");
+        assert_eq!(owners[0].ack(3), 0);
+        assert_eq!(owners[0].ack(2), 0);
+        assert_eq!(global.in_flight(), GLOBAL_INFLIGHT_CAP_CHARS as u64);
+    }
+
+    #[test]
+    fn failed_delivery_rolls_back_credit_and_keeps_exact_sequence_and_utf8() {
+        let mut owner = ByteOwner::new(1000);
+        let mut global = GlobalCredit::default();
+        owner.append("a😀b".as_bytes());
+        let batch = reserve(&mut owner, &mut global);
+        let expected = batch.clone();
+        let released = owner.rollback_sent(batch.delivered_units());
+        global.rollback_sent(released);
+        owner.return_batch(batch);
+        assert_eq!(owner.in_flight(), 0);
+        assert_eq!(global.in_flight(), 0);
+        assert_eq!(reserve(&mut owner, &mut global), expected);
+        global.release(owner.ack(u64::MAX));
+        assert_eq!(global.in_flight(), 0);
+        let mut owner = ByteOwner::new(1000);
+        owner.append("😀b".as_bytes());
+        assert!(owner.take_batch_limited(1).is_empty());
+        let first = owner.take_batch_limited(2);
+        assert_eq!(first.chunks[0].data, "😀");
+        assert_eq!(first.chunks[0].seq, 2);
+        assert_eq!(owner.take_batch_limited(1).chunks[0].seq, 3);
     }
 }

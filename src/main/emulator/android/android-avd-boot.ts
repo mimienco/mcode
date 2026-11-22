@@ -74,7 +74,15 @@ async function waitForNewBootedSerial(
     )
     for (const device of fresh) {
       const booted = await runner(sdk.adb, bootCompletedArgs(device.serial))
-      if (isBootCompleted(booted.stdout)) {
+      if (!isBootCompleted(booted.stdout)) {
+        continue
+      }
+      // A concurrent or already-in-flight boot can surface its own serial
+      // here; only claim a serial that actually hosts the requested AVD.
+      const avdSerial = await findRunningAvdSerial(runner, sdk, avdName, [device]).catch(
+        () => null
+      )
+      if (avdSerial) {
         return device.serial
       }
     }

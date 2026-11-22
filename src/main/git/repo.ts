@@ -25,6 +25,12 @@ const DEFAULT_BASE_REF_PROBE_TIMEOUT_MS = 15_000
 type GitRepoProbeResult = 'repo' | 'not-repo' | 'indeterminate'
 type GitMarkerScanResult = { status: 'valid'; rootPath: string } | { status: 'absent' | 'invalid' }
 
+export type LocalRepoAddMetadata = {
+  isGitRepo: boolean
+  rootPath: string
+  linkedMainRepoRoot: string | null
+}
+
 function gitExecOptions(
   cwd: string,
   options: LocalGitExecOptions = {}
@@ -159,6 +165,67 @@ function canonicalizeGitDirPath(path: string): string {
   return resolveRealPathSync(path) ?? path
 }
 
+function linkedWorktreeMainRootFromGitDirs(
+  path: string,
+  gitDir: string,
+  commonDir: string
+): string | null {
+  // Why realpath both: git answers one flag absolutely (already symlink-resolved) and the other
+  // relative to cwd, so a repo under a symlinked root (macOS /var -> /private/var) compares
+  // unequal on raw strings and a main checkout gets misread as a linked worktree.
+  const absoluteCommonDir = canonicalizeGitDirPath(resolve(path, commonDir))
+  if (canonicalizeGitDirPath(resolve(path, gitDir)) === absoluteCommonDir) {
+    return null
+  }
+  // A bare/separate git dir has no adjacent working checkout to point at.
+  if (basename(absoluteCommonDir) !== '.git') {
+    return null
+  }
+  return normalizeGitRepoRootForInputPath(path, dirname(absoluteCommonDir))
+}
+
+/**
+ * Collect the Git facts needed by repos:add with one asynchronous child process.
+ * The legacy probes remain the fallback for bare repos, WSL paths, and unusual Git failures.
+ */
+export async function getLocalRepoAddMetadata(path: string): Promise<LocalRepoAddMetadata> {
+  try {
+    if (!existsSync(path) || !statSync(path).isDirectory()) {
+      return { isGitRepo: false, rootPath: path, linkedMainRepoRoot: null }
+    }
+
+    // Why: Git reports Linux-native git-dir/common-dir paths for WSL UNC inputs. Keep the existing
+    // WSL-aware probes until those metadata paths have an explicit UNC conversion contract.
+    if (!parseWslUncPath(path)) {
+      const { stdout } = await gitExecFileAsync(
+        ['rev-parse', '--is-inside-work-tree', '--show-toplevel', '--git-dir', '--git-common-dir'],
+        { cwd: path }
+      )
+      const [insideWorkTree, rootPath, gitDir, commonDir] = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+      if (insideWorkTree === 'true' && rootPath && gitDir && commonDir) {
+        const linkedMainRepoRoot = linkedWorktreeMainRootFromGitDirs(path, gitDir, commonDir)
+        return {
+          isGitRepo: true,
+          rootPath: normalizeGitRepoRootForInputPath(path, rootPath),
+          // Linked adds are uncommon; preserve the existing final canonicalization for that path.
+          linkedMainRepoRoot: linkedMainRepoRoot ? getGitRepoRoot(linkedMainRepoRoot) : null
+        }
+      }
+    }
+  } catch {
+    // Fall through to the resilience-preserving legacy probes below.
+  }
+
+  const validRepo = isGitRepo(path)
+  return {
+    isGitRepo: validRepo,
+    rootPath: validRepo ? getGitRepoRoot(path) : path,
+    linkedMainRepoRoot: validRepo ? getLinkedWorktreeMainRepoRoot(path) : null
+  }
+}
+
 /**
  * Main-checkout path when `path` is a *linked* worktree, else null (main worktree, bare repo,
  * non-repo, or any git failure). A linked worktree's `--git-dir` is `<common>/worktrees/<name>`
@@ -182,20 +249,13 @@ export function getLinkedWorktreeMainRepoRoot(path: string): string | null {
     if (!gitDir || !commonDir) {
       return null
     }
-    // Why realpath both: git answers one flag absolutely (already symlink-resolved) and the other
-    // relative to cwd, so a repo under a symlinked root (macOS /var -> /private/var) compares
-    // unequal on raw strings and a main checkout gets misread as a linked worktree.
-    const absoluteCommonDir = canonicalizeGitDirPath(resolve(path, commonDir))
-    if (canonicalizeGitDirPath(resolve(path, gitDir)) === absoluteCommonDir) {
-      return null
-    }
-    // A bare/separate git dir has no adjacent working checkout to point at.
-    if (basename(absoluteCommonDir) !== '.git') {
+    const mainRoot = linkedWorktreeMainRootFromGitDirs(path, gitDir, commonDir)
+    if (!mainRoot) {
       return null
     }
     // Re-resolve through getGitRepoRoot so the returned path matches the canonical form
     // add-project stores for the main checkout (symlinks resolved the way git reports them).
-    return getGitRepoRoot(dirname(absoluteCommonDir))
+    return getGitRepoRoot(mainRoot)
   } catch {
     return null
   }

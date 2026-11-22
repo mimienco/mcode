@@ -7,6 +7,8 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+mod agent_status_commands;
+mod agent_status_http;
 mod app_dialogs;
 mod app_menu;
 mod app_menu_events;
@@ -21,7 +23,9 @@ mod fs_log_tail_commands;
 mod notification_commands;
 mod os_permissions;
 mod pty_commands;
+mod runtime_environment_commands;
 mod runtime_rpc;
+mod session_commands;
 mod settings_document_commands;
 mod shell_commands;
 mod skill_share_deep_link;
@@ -32,7 +36,16 @@ mod terminal_preview;
 mod updater_commands;
 mod updater_extra_commands;
 mod windows_tray;
+mod workspace_catalog_commands;
+mod workspace_commands;
 
+use agent_status_commands::{
+    agent_hooks_status, agent_status_drop, agent_status_drop_by_tab_prefix,
+    agent_status_get_migration_unsupported_snapshot, agent_status_get_snapshot,
+    agent_status_infer_interrupt, agent_status_infer_question_answered,
+    agent_status_restore_pane_authority, agent_status_retire_pane_authority,
+    agent_status_transfer_pane_authority,
+};
 use app_dialogs::{pick_floating_markdown_document, pick_floating_workspace_directory};
 use app_menu::ui_popup_app_menu;
 #[cfg(debug_assertions)]
@@ -85,6 +98,10 @@ use pty_commands::{
     kill_all_sessions_for_shutdown, pty_ack_data, pty_get_size, pty_has_pty, pty_kill, pty_resize,
     pty_spawn, pty_write,
 };
+use runtime_environment_commands::runtime_environments_list;
+use session_commands::{
+    session_flush, session_get, session_patch, session_read_terminal_scrollback, session_set,
+};
 use settings_document_commands::{settings_get_document, settings_set_document};
 use shell_commands::{
     shell_copy_file, shell_open_file_path, shell_open_file_uri, shell_open_in_external_editor,
@@ -121,6 +138,10 @@ use updater_extra_commands::{
     update_get_linux_package_install_instructions, update_get_version, update_list_builds,
     update_show_linux_package,
 };
+use workspace_catalog_commands::{
+    workspace_catalog_get, workspace_list_detected, workspace_path_status, workspace_pick_folder,
+};
+use workspace_commands::{workspace_list_recent, workspace_open, workspace_switch};
 
 /// One-shot pending skill-share consume (mirrors `ui:consumePendingSkillShare`).
 #[tauri::command(rename_as = "ui_consumePendingSkillShare")]
@@ -287,6 +308,7 @@ enum SmokeTestMode {
     Pty,
     Crossgrade,
     Menu,
+    AgentStatus,
 }
 
 fn smoke_test_mode() -> Option<SmokeTestMode> {
@@ -326,6 +348,10 @@ fn smoke_test_mode() -> Option<SmokeTestMode> {
             std::env::var_os("MCODE_TAURI_SMOKE_MENU_MARKER")?;
             return Some(SmokeTestMode::Menu);
         }
+        if intent.eq_ignore_ascii_case("agent_status") {
+            std::env::var_os("MCODE_TAURI_SMOKE_AGENT_STATUS_MARKER")?;
+            return Some(SmokeTestMode::AgentStatus);
+        }
         Some(SmokeTestMode::Quit)
     }
     #[cfg(not(debug_assertions))]
@@ -339,6 +365,86 @@ fn expected_windowing_inner_size() -> Option<(u32, u32)> {
     let (width, height) = value.split_once('x')?;
     Some((width.parse().ok()?, height.parse().ok()?))
 }
+/// Stable-pane-id UUID (v4 + variant bits) used by the agent_status smoke so
+/// the renderer URL and the synthetic hook POST share one paneKey.
+const AGENT_STATUS_SMOKE_PANE_KEY: &str = "smoke:3f2b8c64-9a1e-4c7d-8b2a-1f6e5d4c3b2a";
+
+fn agent_status_smoke_endpoint_path() -> Option<std::path::PathBuf> {
+    let settings = std::env::var_os("MCODE_TAURI_SETTINGS_PATH")?;
+    let parent = std::path::Path::new(&settings).parent()?;
+    Some(parent.join("agent-hooks").join(if cfg!(windows) {
+        "endpoint.cmd"
+    } else {
+        "endpoint.env"
+    }))
+}
+
+fn form_encode_smoke(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else if byte == b' ' {
+            encoded.push('+');
+        } else {
+            use std::fmt::Write as _;
+            write!(encoded, "%{byte:02X}").expect("writing to a string is infallible");
+        }
+    }
+    encoded
+}
+
+fn smoke_post_agent_hook(endpoint_path: &std::path::Path, pane_key: &str) -> Result<(), String> {
+    let raw = std::fs::read_to_string(endpoint_path)
+        .map_err(|error| format!("endpoint file unreadable: {error}"))?;
+    let mut port = None;
+    let mut token = None;
+    for line in raw.lines() {
+        let line = line.strip_prefix("set ").unwrap_or(line);
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        match key.trim() {
+            "MCODE_AGENT_HOOK_PORT" => port = Some(value.trim().to_string()),
+            "MCODE_AGENT_HOOK_TOKEN" => token = Some(value.trim().to_string()),
+            _ => {}
+        }
+    }
+    let port = port.ok_or_else(|| "endpoint missing MCODE_AGENT_HOOK_PORT".to_string())?;
+    let token = token.ok_or_else(|| "endpoint missing MCODE_AGENT_HOOK_TOKEN".to_string())?;
+    let payload = r#"{"hook_event_name":"UserPromptSubmit","prompt":"wave37 smoke"}"#;
+    let body = format!(
+        "paneKey={}&tabId=smoke&env=development&version=1&payload={}",
+        form_encode_smoke(pane_key),
+        form_encode_smoke(payload)
+    );
+    let mut stream = std::net::TcpStream::connect((
+        "127.0.0.1",
+        port.parse::<u16>()
+            .map_err(|error| format!("invalid hook port: {error}"))?,
+    ))
+    .map_err(|error| format!("hook connect failed: {error}"))?;
+    let request = format!(
+        "POST /hook/claude HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/x-www-form-urlencoded\r\nX-MCode-Agent-Hook-Token: {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    use std::io::{Read, Write};
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("hook write failed: {error}"))?;
+    let _ = stream.flush();
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+    if response.starts_with("HTTP/1.1 204") || response.starts_with("HTTP/1.0 204") {
+        Ok(())
+    } else {
+        Err(format!(
+            "hook POST expected 204, got {}",
+            response.lines().next().unwrap_or("<empty>")
+        ))
+    }
+}
+
 fn encode_query_component(value: &str) -> String {
     let mut encoded = String::with_capacity(value.len());
     for byte in value.bytes() {
@@ -400,6 +506,15 @@ fn build_main_window(
                 encode_query_component(&marker)
             )
         }
+        Some(SmokeTestMode::AgentStatus) => {
+            let marker = std::env::var("MCODE_TAURI_SMOKE_AGENT_STATUS_MARKER")
+                .expect("agent_status smoke marker must be configured");
+            format!(
+                "lifecycle-smoke.html?intent=quit&agent_status=true&marker={}&paneKey={}",
+                encode_query_component(&marker),
+                encode_query_component(AGENT_STATUS_SMOKE_PANE_KEY)
+            )
+        }
         Some(SmokeTestMode::Filesystem) => {
             let root = std::env::var("MCODE_TAURI_SMOKE_FILESYSTEM_ROOT")
                 .expect("filesystem smoke root must be configured");
@@ -429,7 +544,8 @@ fn build_main_window(
             smoke_mode.is_none()
                 || smoke_mode == Some(SmokeTestMode::Windowing)
                 || smoke_mode == Some(SmokeTestMode::Crossgrade)
-                || smoke_mode == Some(SmokeTestMode::Menu),
+                || smoke_mode == Some(SmokeTestMode::Menu)
+                || smoke_mode == Some(SmokeTestMode::AgentStatus),
         );
     // Debug builds only: expose the WebView2 DevTools protocol so renderer
     // consoles can be captured for crash triage. MCODE_TAURI_WEBVIEW_REMOTE_
@@ -618,6 +734,7 @@ pub fn run() {
                     DesktopWindowPreferences::default()
                 });
             let native_window_state = NativeWindowState::new(settings.clone(), preferences);
+            app.manage(workspace_commands::WorkspacePathScopeHandle::new(settings.clone()));
             app.manage(settings);
             app.manage(telemetry_commands::TelemetryConsentState::new());
             app.manage(native_window_state.clone());
@@ -662,6 +779,15 @@ pub fn run() {
                 Err(error) => {
                     eprintln!("[runtime-rpc] app data dir unavailable: {error}");
                 }
+            }
+            // agentStatus hook server (server.ts:2402-2536): loopback HTTP
+            // endpoint the installed CLI hooks POST to; failure is logged, not
+            // fatal — an app without hooks is degraded, not broken.
+            if let Err(error) = agent_status_http::start_agent_status_hook_server(app.handle().clone()) {
+                eprintln!(
+                    "[agent-hooks] failed to start; installed CLI hooks will not reach this instance: {:?}",
+                    error
+                );
             }
             match smoke_mode {
                 Some(SmokeTestMode::Quit) | Some(SmokeTestMode::Updater) => {
@@ -793,7 +919,7 @@ pub fn run() {
                         for _ in 0..120 {
                             if let Ok(value) = std::fs::read_to_string(&marker) {
                                 let value = value.trim();
-                                if value == "passed" || value == "renderer-failed" {
+                                if value == "passed" || value.starts_with("renderer-failed") {
                                     verdict = Some(value.to_owned());
                                     break;
                                 }
@@ -826,7 +952,7 @@ pub fn run() {
                         for _ in 0..120 {
                             if let Ok(value) = std::fs::read_to_string(&marker) {
                                 let value = value.trim();
-                                if value == "passed" || value == "renderer-failed" {
+                                if value == "passed" || value.starts_with("renderer-failed") {
                                     verdict = Some(value.to_owned());
                                     break;
                                 }
@@ -867,6 +993,68 @@ pub fn run() {
                             eprintln!("[smoke] menu smoke renderer verdict: {value}");
                         } else {
                             eprintln!("[smoke] menu smoke marker never reached a verdict");
+                        }
+                        app_handle.exit(i32::from(!passed));
+                    });
+                }
+                Some(SmokeTestMode::AgentStatus) => {
+                    let marker = std::env::var_os("MCODE_TAURI_SMOKE_AGENT_STATUS_MARKER")
+                        .expect("agent_status smoke marker must be configured");
+                    let endpoint = agent_status_smoke_endpoint_path();
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        // Renderer-verdict discipline: wait for "ready", POST the
+                        // synthetic hook (curl equivalent; CSP blocks renderer
+                        // fetch to the ephemeral loopback port), then poll the
+                        // marker the renderer writes.
+                        let marker = std::path::PathBuf::from(marker);
+                        let mut ready = false;
+                        for _ in 0..60 {
+                            if let Ok(value) = std::fs::read_to_string(&marker)
+                                && value.trim() == "ready"
+                            {
+                                ready = true;
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        if !ready {
+                            eprintln!("[smoke] agent_status renderer never signaled ready");
+                            app_handle.exit(1);
+                            return;
+                        }
+                        let Some(path) = endpoint else {
+                            eprintln!(
+                                "[smoke] agent_status endpoint path unresolved (MCODE_TAURI_SETTINGS_PATH)"
+                            );
+                            app_handle.exit(1);
+                            return;
+                        };
+                        if let Err(error) =
+                            smoke_post_agent_hook(&path, AGENT_STATUS_SMOKE_PANE_KEY)
+                        {
+                            eprintln!("[smoke] agent_status hook POST failed: {error}");
+                            app_handle.exit(1);
+                            return;
+                        }
+                        let mut verdict: Option<String> = None;
+                        for _ in 0..120 {
+                            if let Ok(value) = std::fs::read_to_string(&marker) {
+                                let value = value.trim();
+                                if value == "passed" || value.starts_with("renderer-failed") {
+                                    verdict = Some(value.to_owned());
+                                    break;
+                                }
+                            }
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        let passed = verdict.as_deref() == Some("passed");
+                        if let Some(value) = verdict {
+                            eprintln!("[smoke] agent_status smoke renderer verdict: {value}");
+                        } else {
+                            eprintln!(
+                                "[smoke] agent_status smoke marker never reached a verdict"
+                            );
                         }
                         app_handle.exit(i32::from(!passed));
                     });
@@ -989,6 +1177,29 @@ pub fn run() {
             telemetry_get_consent,
             telemetry_set_consent,
             telemetry_acknowledge_banner,
+            agent_status_get_snapshot,
+            agent_status_infer_interrupt,
+            agent_status_infer_question_answered,
+            agent_status_get_migration_unsupported_snapshot,
+            agent_status_drop,
+            agent_status_drop_by_tab_prefix,
+            agent_status_retire_pane_authority,
+            agent_status_restore_pane_authority,
+            agent_status_transfer_pane_authority,
+            agent_hooks_status,
+            workspace_list_recent,
+            workspace_catalog_get,
+            runtime_environments_list,
+            workspace_pick_folder,
+            workspace_list_detected,
+            workspace_path_status,
+            session_get,
+            session_set,
+            session_patch,
+            session_flush,
+            session_read_terminal_scrollback,
+            workspace_open,
+            workspace_switch,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build MCode Tauri application");

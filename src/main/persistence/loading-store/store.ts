@@ -127,6 +127,7 @@ import { getRepoIdFromWorktreeId, getWorktreePathBasenameFromId } from '../../..
 import { hasWorktreeRemovalRepoOwnerOnOtherHost } from '../../worktree-removal-repo-owner'
 import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
 import { normalizeTerminalQuickCommands } from '../../../shared/terminal-quick-commands'
+import { normalizeSavedSnippets } from '../../../shared/saved-snippets'
 import { normalizeTaskProviderSettings } from '../../../shared/task-providers'
 import { normalizeAutoRenameBranchFromWorkDefaultOn } from '../../../shared/auto-rename-branch-from-work-settings'
 import {
@@ -1322,6 +1323,7 @@ export class Store {
             terminalQuickCommands: normalizeTerminalQuickCommands(
               parsed.settings?.terminalQuickCommands
             ),
+            savedSnippets: normalizeSavedSnippets(parsed.settings?.savedSnippets),
             terminalCustomThemes: normalizeTerminalCustomThemes(
               parsed.settings?.terminalCustomThemes
             ),
@@ -2028,66 +2030,78 @@ export class Store {
       this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
       return
     }
+    const pendingSaveRequests = this.saveRequestsSinceLastPersist
     this.saveRequestsSinceLastPersist = 0
-    const splitClient = this.serializeSplitClient
-    const { payload, stateHash, protectedSecretUpdates } = await this.buildStateToSave({
-      offloadSplit: splitClient
-        ? (serialized, sentinels) => splitClient.split(serialized, sentinels)
-        : undefined
-    })
-    // Why: don't rewrite a byte-identical multi-MB file when state nets out to already-persisted.
-    if (stateHash === this.lastWrittenStateHash) {
-      this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
-      return
-    }
-    const dataFile = this.dataFile
-    const dir = dirname(dataFile)
-    await mkdir(dir, { recursive: true }).catch(() => {})
-    const tmpFile = durableWriteTempPath(dataFile)
-
-    // Why: on any write/rename failure, remove the tmp file so it doesn't leave a multi-MB orphan.
     let renamed = false
     try {
-      // Why: fsync before rename, then fsync the directory; see writeFileDurable.
-      const handle = await open(tmpFile, 'w')
-      try {
-        await handle.writeFile(payload, 'utf-8')
-        await handle.sync()
-      } finally {
-        await handle.close()
-      }
-      // Why: if flush() bumped writeGeneration mid-write, it already wrote fresher state; don't overwrite it.
-      if (this.writeGeneration !== gen) {
+      const splitClient = this.serializeSplitClient
+      const { payload, stateHash, protectedSecretUpdates } = await this.buildStateToSave({
+        offloadSplit: splitClient
+          ? (serialized, sentinels) => splitClient.split(serialized, sentinels)
+          : undefined
+      })
+      // Why: don't rewrite a byte-identical multi-MB file when state nets out to already-persisted.
+      if (stateHash === this.lastWrittenStateHash) {
+        this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
         return
       }
-      this.inFlightAsyncTmpFile = tmpFile
+      const dataFile = this.dataFile
+      const dir = dirname(dataFile)
+      await mkdir(dir, { recursive: true }).catch(() => {})
+      const tmpFile = durableWriteTempPath(dataFile)
+
+      // Why: on any write/rename failure, remove the tmp file so it doesn't leave a multi-MB orphan.
       try {
-        await renameDurable(tmpFile, dataFile)
-        renamed = true
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || this.writeGeneration === gen) {
-          throw error
+        // Why: fsync before rename, then fsync the directory; see writeFileDurable.
+        const handle = await open(tmpFile, 'w')
+        try {
+          await handle.writeFile(payload, 'utf-8')
+          await handle.sync()
+        } finally {
+          await handle.close()
+        }
+        // Why: if flush() bumped writeGeneration mid-write, it already wrote fresher state; don't overwrite it.
+        if (this.writeGeneration !== gen) {
+          return
+        }
+        this.inFlightAsyncTmpFile = tmpFile
+        try {
+          await renameDurable(tmpFile, dataFile)
+          renamed = true
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || this.writeGeneration === gen) {
+            throw error
+          }
+        } finally {
+          if (this.inFlightAsyncTmpFile === tmpFile) {
+            this.inFlightAsyncTmpFile = null
+          }
+        }
+        // Why re-check gen: a mutation or sync flush during rename makes the installed hash ambiguous; invalidate the no-op guard.
+        if (renamed && this.writeGeneration === gen) {
+          this.lastWrittenStateHash = stateHash
+          this.saveRequestsSinceLastPersist = 0
+          this.protectedSecrets.commitRetentionUpdates(protectedSecretUpdates)
+        } else if (renamed) {
+          this.lastWrittenStateHash = null
+        }
+        if (renamed) {
+          this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
         }
       } finally {
-        if (this.inFlightAsyncTmpFile === tmpFile) {
-          this.inFlightAsyncTmpFile = null
+        if (!renamed) {
+          await rm(tmpFile).catch(() => {})
         }
       }
-      // Why re-check gen: a mutation or sync flush during rename makes the installed hash ambiguous; invalidate the no-op guard.
-      if (renamed && this.writeGeneration === gen) {
-        this.lastWrittenStateHash = stateHash
-        this.saveRequestsSinceLastPersist = 0
-        this.protectedSecrets.commitRetentionUpdates(protectedSecretUpdates)
-      } else if (renamed) {
-        this.lastWrittenStateHash = null
-      }
-      if (renamed) {
-        this.lastDurableWriteGeneration = Math.max(this.lastDurableWriteGeneration, gen)
-      }
-    } finally {
-      if (!renamed) {
-        await rm(tmpFile).catch(() => {})
-      }
+    } catch (error) {
+      // Why: clearing the counter before the write succeeded would let the quit
+      // flush's no-op guard skip these mutations; put the pending count back so
+      // the next flush retries the durable write.
+      this.saveRequestsSinceLastPersist = Math.max(
+        this.saveRequestsSinceLastPersist,
+        pendingSaveRequests
+      )
+      throw error
     }
     if (!renamed) {
       return
@@ -2096,7 +2110,7 @@ export class Store {
     if (this.writeGeneration !== gen) {
       return
     }
-    await this.rotateBackupsAsync(dataFile)
+    await this.rotateBackupsAsync(this.dataFile)
   }
 
   // Why: sync variant only for flush() at shutdown, where the process may exit before an async write completes.

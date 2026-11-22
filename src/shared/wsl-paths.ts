@@ -21,6 +21,34 @@ export function isWslUncPath(path: string): boolean {
 }
 
 /**
+ * Share-root-tolerant UNC check: also accepts the bare share root
+ * (`\\wsl.localhost\` / `\\wsl$\`, no distro segment), which
+ * {@link isWslUncPath} rejects. Kept as a second predicate because the setup
+ * runner resolver must route even degenerate share-root inputs to bash (where
+ * {@link wslUncToLinuxPath} yields `/`) rather than misread them as cmd paths;
+ * every other consumer wants the strict distro-scoped answer.
+ */
+export function isWslUncShareRootPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, '/')
+  return /^\/\/(wsl\.localhost|wsl\$)\//i.test(normalized)
+}
+
+/** Linux path of a WSL UNC path; the distro-less share root folds to `/`. */
+export function wslUncToLinuxPath(windowsPath: string): string {
+  return parseWslUncPath(windowsPath)?.linuxPath ?? '/'
+}
+
+export function foldWslUncPathToComparisonKey(path: string): string | null {
+  // Why not parseWslUncPath: Linux path tails may contain line breaks, which
+  // the parser's `.`-based tail regex rejects.
+  const match = path.match(/^\/\/(?:wsl\.localhost|wsl\$)\/([^/]+)(\/[\s\S]*)?$/i)
+  if (!match) {
+    return null
+  }
+  return `//wsl/${match[1].toLowerCase()}${match[2] ?? ''}`
+}
+
+/**
  * Convert a Windows path to a Linux path for commands that will execute inside WSL.
  * Returns the path unchanged if it is already POSIX-style.
  *
@@ -45,6 +73,37 @@ export function toLinuxPath(windowsPath: string): string {
   const driveLetter = driveMatch[1].toLowerCase()
   const rest = driveMatch[2].replace(/\\/g, '/')
   return `/mnt/${driveLetter}/${rest}`
+}
+
+/**
+ * Windows drive path to the Git Bash form (`C:\x\y` → `/c/x/y`). Distinct from
+ * {@link toLinuxPath}: no UNC handling and a non-`/mnt` drive prefix, because
+ * Git Bash expects `/c/...` when replaying deferred setup scripts.
+ */
+export function nativeWindowsPathToPosixShellPath(value: string): string {
+  const driveMatch = value.match(/^([A-Za-z]):[\\/](.*)$/)
+  if (driveMatch) {
+    return `/${driveMatch[1].toLowerCase()}/${driveMatch[2].replace(/\\/g, '/')}`
+  }
+  return value.replace(/\\/g, '/')
+}
+
+/**
+ * Windows drive path to the WSL drvfs form (`C:\x\y` → `/mnt/c/x/y`) without
+ * UNC handling; callers must have ruled out WSL UNC input first.
+ */
+export function nativeWindowsPathToWslShellPath(value: string): string {
+  const driveMatch = value.match(/^([A-Za-z]):[\\/](.*)$/)
+  if (driveMatch) {
+    return `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2].replace(/\\/g, '/')}`
+  }
+  return value.replace(/\\/g, '/')
+}
+
+/** Whether a shell path names the WSL executable (`wsl.exe` / `wsl`). */
+export function isWslExecutable(value: string | undefined): boolean {
+  const basename = value?.trim().replaceAll('\\', '/').split('/').pop()?.toLowerCase() ?? ''
+  return basename === 'wsl.exe' || basename === 'wsl'
 }
 
 /** Convert an absolute Linux path in a known WSL distro to its Windows form. */

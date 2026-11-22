@@ -51,17 +51,23 @@ export async function launchTabGroupWorkspaceTemplate({
   const slots = TEMPLATE_SLOTS[templateId]
 
   try {
-    for (const [index, slot] of slots.entries()) {
+    const openings = slots.map((slot, index) => {
       const targetGroupId = targetGroupIds[index]
       if (slot === 'agent') {
-        await openAgent(agent, targetGroupId)
-      } else if (slot === 'browser') {
-        await openBrowser(targetGroupId)
-      } else if (slot === 'markdown') {
-        await openMarkdown(targetGroupId)
-      } else {
-        await openTerminal(targetGroupId)
+        return openAgent(agent, targetGroupId)
       }
+      if (slot === 'browser') {
+        return openBrowser(targetGroupId)
+      }
+      if (slot === 'markdown') {
+        return openMarkdown(targetGroupId)
+      }
+      return openTerminal(targetGroupId)
+    })
+    const outcomes = await Promise.allSettled(openings)
+    const failure = outcomes.find((outcome) => outcome.status === 'rejected')
+    if (failure?.status === 'rejected') {
+      throw failure.reason
     }
   } catch (error) {
     closeEmptyGroup(worktreeId, splitGroupId)

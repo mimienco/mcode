@@ -3,6 +3,7 @@ import {
   type SetupRunnerCommandPlatform,
   type SetupRunnerShell
 } from '../../../shared/setup-runner-command'
+import { quotePosixSingleQuote } from '../../../shared/shell-quoting'
 
 const SETUP_COMPLETION_PREFIX = '__MCODE_SETUP_COMPLETE__:'
 const SETUP_COMPLETION_CARRY_LENGTH = SETUP_COMPLETION_PREFIX.length + 96
@@ -42,7 +43,7 @@ export function buildObservedSetupCommand(
     `printf '\\n${completionPrefix(completionToken)}%s\\n' "$status"`,
     'exit "$status"'
   ].join('; ')
-  return { command: `bash -lc ${quotePosixArg(script)}` }
+  return { command: `bash -lc ${quotePosixSingleQuote(script)}` }
 }
 
 export function createSetupCompletionScanner(
@@ -79,6 +80,3 @@ function completionPrefix(completionToken: string): string {
   return `${SETUP_COMPLETION_PREFIX}${completionToken}:`
 }
 
-function quotePosixArg(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`
-}

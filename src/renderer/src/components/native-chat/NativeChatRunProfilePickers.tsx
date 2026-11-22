@@ -89,10 +89,24 @@ export function NativeChatRunProfilePickers(props: {
                     variant="ghost"
                     size="sm"
                     aria-label={`${descriptor.label} · ${scopeLabel} ${label}`}
-                    className="max-w-48 text-muted-foreground"
+                    className="max-w-48 gap-1.5 text-muted-foreground transition-colors hover:text-foreground pointer-coarse:h-11"
                   >
-                    <span className="truncate">{label}</span>
-                    <ChevronDown className="size-3" />
+                    {currentChoice ? (
+                      <>
+                        <span
+                          data-native-chat-picker-category
+                          className="shrink-0 text-[11px] text-muted-foreground/80"
+                        >
+                          {descriptor.label}
+                        </span>
+                        <span className="truncate text-xs font-medium text-foreground">
+                          {label}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="truncate">{label}</span>
+                    )}
+                    <ChevronDown className="size-3 shrink-0 opacity-60" />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>

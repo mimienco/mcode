@@ -13,7 +13,7 @@ import {
 import type { NativeChatLiveSession } from './use-native-chat-live-session'
 import { orderNativeChatMessages } from './native-chat-message-grouping'
 import { stripNoiseMessages } from './native-chat-noise'
-import { foldToolMessages, splitNativeChatBlocks } from './native-chat-tool-fold'
+import { createNativeChatToolFoldCache, splitNativeChatBlocks } from './native-chat-tool-fold'
 import { ShowEarlierInWindowButton, useWindowedTranscript } from './use-windowed-transcript'
 import { isNearBottom, shouldShowJumpToLatest, type ScrollGeometry } from './native-chat-autoscroll'
 import { splitNativeChatSessionContext } from './native-chat-context-disclosure'
@@ -298,9 +298,13 @@ export function NativeChatMessageList({
   // matching the mobile chat. Then fold each turn's tool activity into the
   // assistant message it belongs to, ordered stably, so a turn's tools collapse
   // under one run.
+  // Why: PERF-08 — the fold runs on every stream tick; caching folded output
+  // per source run keeps unchanged rows' identities stable so MessageRow's
+  // memo holds and only the growing tail produces fresh objects.
+  const foldCache = useMemo(createNativeChatToolFoldCache, [])
   const messages = useMemo(
-    () => foldToolMessages(orderNativeChatMessages(stripNoiseMessages(session.messages))),
-    [session.messages]
+    () => foldCache.fold(orderNativeChatMessages(stripNoiseMessages(session.messages))),
+    [foldCache, session.messages]
   )
   // Why: PERF-07 — bounded tail window keeps per-frame DOM diffs small.
   const { visibleMessages, hiddenCount, showEarlierInWindow } = useWindowedTranscript(
@@ -416,9 +420,9 @@ export function NativeChatMessageList({
           aria-live="polite"
           aria-relevant="additions text"
           aria-busy={isWorking}
-          // Why: 3xl keeps assistant prose near the 65–75 character reading
-          // range while matching the composer column below it.
-          className="mx-auto flex w-full max-w-3xl flex-col"
+          // Why: 3xl is the default reading column; 4xl when the pane itself
+          // is wide (container, not viewport) so split views stay compact.
+          className="mx-auto flex w-full max-w-3xl flex-col @5xl/native-chat:max-w-4xl"
           // Why: `zoom` scales the chat transcript's text and layout together,
           // scoped to this container so the rest of the app is untouched. It's
           // the desktop analog of the mobile pinch-zoom (Chromium/Electron only).

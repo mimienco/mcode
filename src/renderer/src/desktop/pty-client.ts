@@ -33,13 +33,23 @@ export type PtyRestoreMarker = {
 export type PtyDataPayload = {
   id: number
   chunks: PtyDataChunk[]
-  dropped?: boolean
+  dropped?: { data: string; droppedOutput: boolean } | null
   restoreMarker?: PtyRestoreMarker
 }
 
 export type PtyExitPayload = {
   id: number
   code: number
+}
+
+export type PtyWriteUnavailablePayload = {
+  ptyId: string
+  reason: string
+}
+
+export type PtyWriteUnavailablePayloadMapped = {
+  id: string
+  reason: string
 }
 
 export type PtyReplayPayload = {
@@ -62,6 +72,9 @@ export type PtyApi = {
   onData: (listener: (payload: PtyDataPayload) => void) => Promise<PtySubscription>
   onExit: (listener: (payload: PtyExitPayload) => void) => Promise<PtySubscription>
   onReplay: (listener: (payload: PtyReplayPayload) => void) => Promise<PtySubscription>
+  onWriteUnavailable: (
+    listener: (payload: PtyWriteUnavailablePayloadMapped) => void
+  ) => Promise<PtySubscription>
 }
 
 type PtyInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -73,6 +86,7 @@ type PtyEventSource = (
 
 export const PTY_DATA_EVENT = 'pty://data'
 export const PTY_EXIT_EVENT = 'pty://exit'
+export const PTY_WRITE_UNAVAILABLE_EVENT = 'pty://write-unavailable'
 export const PTY_REPLAY_EVENT = 'pty://replay'
 
 /**
@@ -165,6 +179,20 @@ export function createTauriPtyClient(invoke: PtyInvoke, listen: PtyEventSource):
           typeof payload.data === 'string'
         ) {
           listener(payload)
+        }
+      })
+      return unlisten
+    },
+    async onWriteUnavailable(listener) {
+      const unlisten = await listen(PTY_WRITE_UNAVAILABLE_EVENT, (event) => {
+        const payload = event.payload as PtyWriteUnavailablePayload | null
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          typeof payload.ptyId === 'string' &&
+          typeof payload.reason === 'string'
+        ) {
+          listener({ id: payload.ptyId, reason: payload.reason })
         }
       })
       return unlisten

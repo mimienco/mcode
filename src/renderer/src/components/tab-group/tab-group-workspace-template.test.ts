@@ -61,6 +61,22 @@ describe('launchTabGroupWorkspaceTemplate', () => {
     expect(harness.openAgent).toHaveBeenCalledWith('claude', 'group-2')
   })
 
+  it('starts independent template panes concurrently', async () => {
+    const harness = templateHarness()
+    const { promise: browserPending, resolve: finishBrowser } = Promise.withResolvers<void>()
+    harness.openBrowser.mockReturnValueOnce(browserPending)
+
+    const launch = launchTabGroupWorkspaceTemplate({
+      ...harness.args,
+      templateId: 'research'
+    })
+
+    expect(harness.openBrowser).toHaveBeenCalledWith('group-1')
+    expect(harness.openAgent).toHaveBeenCalledWith('claude', 'group-2')
+    finishBrowser()
+    await expect(launch).resolves.toBe('launched')
+  })
+
   it('does not open anything when a split cannot be created', async () => {
     const harness = templateHarness()
     harness.createEmptySplitGroup.mockReturnValue(null)

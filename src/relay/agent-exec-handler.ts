@@ -4,12 +4,12 @@ import { delimiter, join } from 'node:path'
 import type { RelayDispatcher, RequestContext } from './dispatcher'
 import { applyTerminalGitCredentialPromptGuard } from '../shared/terminal-git-credential-guard'
 import { mergeGitConfigEnvProtocol } from '../shared/git-credential-prompt-env'
+import { quoteWindowsBatchToken } from '../shared/shell-quoting'
 import { terminateRelaySubprocessTree } from './subprocess-tree-termination'
 
 const DEFAULT_TIMEOUT_MS = 60_000
 const MAX_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024
-const WINDOWS_BATCH_UNSAFE_ARGUMENTS_ERROR = 'UNSAFE_WINDOWS_BATCH_ARGUMENTS'
 
 function getCmdExePath(): string {
   return process.env.ComSpec || `${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\cmd.exe`
@@ -17,17 +17,6 @@ function getCmdExePath(): string {
 
 function isWindowsBatchScript(commandPath: string): boolean {
   return process.platform === 'win32' && /\.(cmd|bat)$/i.test(commandPath)
-}
-
-function hasUnsafeWindowsBatchSyntax(value: string): boolean {
-  return /[&|<>^"%!\r\n]/.test(value)
-}
-
-function quoteWindowsBatchToken(value: string): string {
-  if (hasUnsafeWindowsBatchSyntax(value)) {
-    throw new Error(WINDOWS_BATCH_UNSAFE_ARGUMENTS_ERROR)
-  }
-  return `"${value}"`
 }
 
 function resolveWindowsCommand(binary: string, env: NodeJS.ProcessEnv): string {

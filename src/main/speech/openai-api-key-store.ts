@@ -47,6 +47,19 @@ export function hasOpenAiSpeechApiKey(): boolean {
   return existsSync(getOpenAiKeyPath())
 }
 
+function looksLikePlaintextOpenAiKey(raw: Buffer): boolean {
+  const text = raw.toString('utf8')
+  if (text.includes('\uFFFD')) {
+    return false
+  }
+  // Why: Linux safeStorage ciphertext prefixes its payload with a keyring
+  // version tag, so a 'v10'/'v11' head is never a stored plaintext key.
+  if (/^v1[01]/.test(text)) {
+    return false
+  }
+  return /^[\x20-\x7E\r\n]*$/.test(text)
+}
+
 export function saveOpenAiSpeechApiKey(apiKey: string): void {
   const trimmed = apiKey.trim()
   if (!trimmed) {
@@ -84,9 +97,21 @@ export function readOpenAiSpeechApiKey(): string {
       )
       return cachedOpenAiSpeechApiKey
     }
-    cachedOpenAiSpeechApiKey = safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(raw)
-      : raw.toString('utf8')
+    if (safeStorage.isEncryptionAvailable()) {
+      try {
+        cachedOpenAiSpeechApiKey = safeStorage.decryptString(raw)
+      } catch {
+        // Why: the key may predate safeStorage availability and be stored as
+        // plaintext UTF-8; accept it when the bytes look like plaintext rather
+        // than ciphertext so it stays readable once encryption turns on.
+        if (!looksLikePlaintextOpenAiKey(raw)) {
+          throw new Error('OpenAI API key could not be decrypted')
+        }
+        cachedOpenAiSpeechApiKey = raw.toString('utf8')
+      }
+    } else {
+      cachedOpenAiSpeechApiKey = raw.toString('utf8')
+    }
     return cachedOpenAiSpeechApiKey
   } catch {
     throw new Error('OpenAI API key could not be decrypted')

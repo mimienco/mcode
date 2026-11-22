@@ -64,7 +64,7 @@ describe('github owner/repo resolution', () => {
       repo: 'widgets'
     })
     expect(parseGitHubOwnerRepo('git@github.com:mcode-ide/mcode.git')).toEqual({
-      owner: 'stablyai',
+      owner: 'mcode-ide',
       repo: 'mcode'
     })
     expect(parseGitHubOwnerRepo('git@github.com:TheBoredTeam/boring.notch.git')).toEqual({
@@ -72,11 +72,11 @@ describe('github owner/repo resolution', () => {
       repo: 'boring.notch'
     })
     expect(parseGitHubOwnerRepo('ssh://git@github.com/mcode-ide/mcode.git')).toEqual({
-      owner: 'stablyai',
+      owner: 'mcode-ide',
       repo: 'mcode'
     })
     expect(parseGitHubOwnerRepo('ssh://git@ssh.github.com:443/mcode-ide/mcode.git')).toEqual({
-      owner: 'stablyai',
+      owner: 'mcode-ide',
       repo: 'mcode'
     })
     expect(parseGitHubOwnerRepo('git@example.com:mcode-ide/mcode.git')).toBeNull()
@@ -101,7 +101,7 @@ describe('github owner/repo resolution', () => {
       stdout: 'git@github.com:mcode-ide/mcode.git\n'
     })
 
-    await expect(getOwnerRepo('/repo')).resolves.toEqual({ owner: 'stablyai', repo: 'mcode' })
+    await expect(getOwnerRepo('/repo')).resolves.toEqual({ owner: 'mcode-ide', repo: 'mcode' })
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['remote', 'get-url', 'upstream'], {
       cwd: '/repo',
       timeout: 30_000
@@ -127,7 +127,7 @@ describe('github owner/repo resolution', () => {
       stdout: 'git@github.com:mcode-ide/mcode.git\n'
     })
 
-    await expect(getIssueOwnerRepo('/repo')).resolves.toEqual({ owner: 'stablyai', repo: 'mcode' })
+    await expect(getIssueOwnerRepo('/repo')).resolves.toEqual({ owner: 'mcode-ide', repo: 'mcode' })
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['remote', 'get-url', 'upstream'], {
       cwd: '/repo',
       timeout: 30_000
@@ -160,7 +160,7 @@ describe('github owner/repo resolution', () => {
       repo: 'mcode'
     })
     await expect(getOwnerRepoForRemote('/repo', 'upstream')).resolves.toEqual({
-      owner: 'stablyai',
+      owner: 'mcode-ide',
       repo: 'mcode'
     })
   })
@@ -202,7 +202,7 @@ describe('github owner/repo resolution', () => {
     getSshGitProviderMock.mockReturnValue(sshProvider)
 
     await expect(getOwnerRepo('/home/user/mcode', 'openclaw-2')).resolves.toEqual({
-      owner: 'stablyai',
+      owner: 'mcode-ide',
       repo: 'mcode'
     })
 
@@ -272,7 +272,7 @@ describe('github owner/repo resolution', () => {
       gitExecFileAsyncMock.mockResolvedValueOnce({
         stdout: 'git@github.com:mcode-ide/mcode.git\n'
       })
-      await expect(getOwnerRepo('/repo-a')).resolves.toEqual({ owner: 'stablyai', repo: 'mcode' })
+      await expect(getOwnerRepo('/repo-a')).resolves.toEqual({ owner: 'mcode-ide', repo: 'mcode' })
       expect(_getOwnerRepoCacheSize()).toBe(1)
 
       nowSpy.mockReturnValue(32_000)
@@ -711,7 +711,7 @@ describe('resolveIssueSource', () => {
     })
 
     await expect(resolveIssueSource('/repo', 'auto')).resolves.toEqual({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
   })
@@ -733,7 +733,7 @@ describe('resolveIssueSource', () => {
     })
 
     await expect(resolveIssueSource('/repo', 'upstream')).resolves.toEqual({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
   })
@@ -784,7 +784,7 @@ describe('resolveIssueSource', () => {
     })
 
     await expect(resolveIssueSource('/repo', undefined)).resolves.toEqual({
-      source: { owner: 'stablyai', repo: 'mcode' },
+      source: { owner: 'mcode-ide', repo: 'mcode' },
       fellBack: false
     })
   })

@@ -7,6 +7,7 @@ import {
   parseClaudeModelList
 } from './claude-model-list-probe'
 import { labelFromModelId } from './model-id-label'
+import type { ModelCatalogMetadata } from './model-catalog-metadata'
 
 /* eslint-disable max-lines -- Why: this is the single registry for non-interactive commit-message agents, their model discovery parsers, and UI capabilities. */
 
@@ -33,6 +34,8 @@ export type CommitMessageModel = {
   /** Set when the listing marks this as the id the CLI runs with no --model flag.
    *  Optional so an older remote host that never reports it simply omits it. */
   isDefault?: boolean
+  /** Provider, capacity, price, and host availability published by discovery. */
+  modelMetadata?: ModelCatalogMetadata
 }
 
 export type CommitMessageAgentSpec = {
@@ -71,6 +74,7 @@ export type CommitMessageModelCapability = {
   supportsFastMode?: boolean
   /** Absent from an older remote host, which simply yields no default to display. */
   isDefault?: boolean
+  modelMetadata?: ModelCatalogMetadata
 }
 
 export type CommitMessageAgentCapability = {
@@ -796,7 +800,8 @@ function toCommitMessageAgentCapability(
       ...(model.description ? { description: model.description } : {}),
       ...(model.thinkingLevels ? { thinkingLevels: [...model.thinkingLevels] } : {}),
       ...(model.defaultThinkingLevel ? { defaultThinkingLevel: model.defaultThinkingLevel } : {}),
-      ...(model.supportsFastMode ? { supportsFastMode: true } : {})
+      ...(model.supportsFastMode ? { supportsFastMode: true } : {}),
+      ...(model.modelMetadata ? { modelMetadata: { ...model.modelMetadata } } : {})
     }))
   }
 }

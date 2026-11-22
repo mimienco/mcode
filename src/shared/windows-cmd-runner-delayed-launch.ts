@@ -1,4 +1,5 @@
 import { encodePowerShellCommand } from './powershell-command-encoding'
+import { quotePowerShellString } from './shell-quoting'
 
 // Why: `cmd.exe /c "<path>"` is typed into the terminal's shell, so the path is parsed twice.
 // cmd expands %VAR% even inside quotes (no escape exists on the command line), and PowerShell
@@ -37,6 +38,3 @@ export function buildWindowsCmdRunnerDelayedLaunchCommand(runnerScriptPath: stri
   return `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${encodePowerShellCommand(script)}`
 }
 
-function quotePowerShellString(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
-}

@@ -49,6 +49,7 @@ function containmentFailure(rootPath: string, relativePath: string): boolean {
 }
 
 async function replaceOneFile(args: {
+  store: Store
   rootPath: string
   relativePath: string
   regex: RegExp
@@ -64,9 +65,16 @@ async function replaceOneFile(args: {
   if (args.skipPaths.has(filePath)) {
     return { ...outcomeBase, status: 'skipped', reason: 'dirty-editor-tab' }
   }
+  let authorizedFilePath: string
+  try {
+    // Why: an intermediate directory symlink can redirect stat/read/write outside every allowed root; canonicalize like fs:writeFile does.
+    authorizedFilePath = await resolveAuthorizedPath(filePath, args.store)
+  } catch {
+    return { ...outcomeBase, status: 'failed', reason: 'outside-root' }
+  }
   let mode: number | undefined
   try {
-    const stats = await stat(filePath)
+    const stats = await stat(authorizedFilePath)
     if (stats.size > SEARCH_MAX_FILE_SIZE) {
       return { ...outcomeBase, status: 'skipped', reason: 'too-large' }
     }
@@ -80,7 +88,7 @@ async function replaceOneFile(args: {
 
   let text: string
   try {
-    const buffer = await readFile(filePath)
+    const buffer = await readFile(authorizedFilePath)
     if (isBinaryPrefix(buffer.subarray(0, BINARY_PROBE_BYTES))) {
       return { ...outcomeBase, status: 'skipped', reason: 'binary-file' }
     }
@@ -98,7 +106,7 @@ async function replaceOneFile(args: {
 
   // Why: temp file + rename in the same directory keeps the write atomic per file.
   const tempPath = join(
-    dirname(filePath),
+    dirname(authorizedFilePath),
     `.mcode-replace-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
   )
   try {
@@ -106,7 +114,7 @@ async function replaceOneFile(args: {
       mode,
       flag: 'wx'
     })
-    await rename(tempPath, filePath)
+    await rename(tempPath, authorizedFilePath)
   } catch {
     // Why: never leave the temp file behind; the target itself is untouched on failure.
     try {
@@ -124,6 +132,7 @@ async function replaceOneFile(args: {
  * any file when the query cannot be rewritten precisely.
  */
 export async function performReplace(params: {
+  store: Store
   rootPath: string
   query: string
   replacement: string
@@ -142,6 +151,7 @@ export async function performReplace(params: {
     }
     outcomes.push(
       await replaceOneFile({
+        store: params.store,
         rootPath: params.rootPath,
         relativePath: target.relativePath,
         regex,
@@ -176,6 +186,7 @@ export function registerFilesystemSearchReplaceHandlers(store: Store): void {
       try {
         return await performReplace({
           rootPath,
+          store,
           query: rawArgs.query,
           replacement: rawArgs.replacement,
           options: rawArgs.options ?? {},

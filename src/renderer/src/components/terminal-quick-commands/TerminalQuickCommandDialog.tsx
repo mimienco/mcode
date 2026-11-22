@@ -170,7 +170,7 @@ export function TerminalQuickCommandDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Why: fixed large width so Terminal ↔ Agent content swaps never reflow the shell. */}
       <DialogContent
-        className="flex max-h-[min(90vh,52rem)] w-full max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+        className="flex max-h-[min(90vh,52rem)] w-full max-w-4xl flex-col gap-0 overflow-hidden border-black/14 bg-[rgba(255,255,255,0.82)] p-0 text-black shadow-[0_16px_36px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.14)] dark:border-white/14 dark:bg-[rgba(0,0,0,0.72)] dark:text-white dark:shadow-[0_20px_44px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.04)] sm:max-w-4xl"
         showCloseButton={false}
       >
         <DialogHeader className="px-6 pt-6 pb-0">

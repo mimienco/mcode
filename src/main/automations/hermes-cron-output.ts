@@ -65,7 +65,10 @@ function runAtFromHermesOutputFile(filename: string): string | null {
     return null
   }
   const [, year, month, day, hour, minute, second] = match
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}`
+  // Why: the filename clock is UTC (see sortableTimeFromRunKey), and merged
+  // sorting Date.parse()s this alongside toISOString() values from the
+  // session DB; a zone-less suffix would be read as machine-local time.
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}Z`
 }
 
 function runKeyFromHermesOutputFile(filename: string): string | null {

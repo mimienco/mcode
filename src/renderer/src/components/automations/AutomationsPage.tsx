@@ -50,11 +50,7 @@ import {
 } from './automation-run-open-target'
 import { hasAutomationRunCompletionEvidence } from './automation-run-completion-evidence'
 import { getAutomationRunWorkspaceDisplay } from './automation-run-workspace-display'
-import {
-  AutomationEditorDialog,
-  type AutomationCreateTarget,
-  type AutomationDraft
-} from './AutomationEditorDialog'
+import type { AutomationCreateTarget, AutomationDraft } from './AutomationEditorDialog'
 import {
   getAutomationSetupDecisionDraftValue,
   getVisibleAutomationSetupDecision,
@@ -120,9 +116,52 @@ import { AutomationsDetailPane } from './AutomationsDetailPane'
 import { AutomationsPageSkeleton } from './AutomationsPageSkeleton'
 import { useContextualTour } from '@/components/contextual-tours/use-contextual-tour'
 import { translate } from '@/i18n/i18n'
+import { lazyWithRetry } from '@/lib/lazy-with-retry'
+import {
+  importAutomationEditorDialog,
+  prefetchAutomationEditorDialog
+} from './automation-editor-dialog-chunk'
 
 const AGENTS = getAgentCatalog().map((agent) => agent.id)
 const AUTOMATIONS_CHANGED_EVENT = 'mcode:automations-changed'
+const AutomationEditorDialog = lazyWithRetry(importAutomationEditorDialog, {
+  reloadKey: 'automations.editor-dialog'
+})
+
+function AutomationEditorDialogLoadingSurface(): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+    >
+      <div className="flex h-[min(880px,90vh)] w-[min(1080px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-lg">
+        <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
+          <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="m-5 animate-pulse rounded-lg bg-muted/60" />
+          <div className="space-y-4 border-l border-border p-5">
+            <div className="h-9 animate-pulse rounded bg-muted/60" />
+            <div className="h-9 animate-pulse rounded bg-muted/60" />
+            <div className="h-24 animate-pulse rounded bg-muted/60" />
+          </div>
+        </div>
+        <div className="flex h-14 shrink-0 items-center justify-end gap-2 border-t border-border px-5">
+          <div className="h-8 w-20 animate-pulse rounded bg-muted/50" />
+          <div className="h-8 w-24 animate-pulse rounded bg-muted/70" />
+        </div>
+        <span className="sr-only">
+          {translate(
+            'auto.components.automations.AutomationsPage.editorLoading',
+            'Loading automation editor…'
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export default function AutomationsPage(): React.JSX.Element {
   const repos = useAppStore((s) => s.repos)
   const projectHostSetups = useAppStore((s) => s.projectHostSetups)
@@ -1064,6 +1103,7 @@ export default function AutomationsPage(): React.JSX.Element {
   }, [])
 
   const openCreateDialog = (template?: AutomationTemplate): void => {
+    void prefetchAutomationEditorDialog().catch(() => {})
     editRequestRef.current += 1
     const target = getDefaultTarget()
     setEditingAutomationId(null)
@@ -1109,6 +1149,7 @@ export default function AutomationsPage(): React.JSX.Element {
   }
 
   const openEditDialog = async (automation: Automation): Promise<void> => {
+    void prefetchAutomationEditorDialog().catch(() => {})
     const requestId = (editRequestRef.current += 1)
     setEditingExternalTarget(null)
     setCreateTarget('mcode')
@@ -1165,6 +1206,7 @@ export default function AutomationsPage(): React.JSX.Element {
     manager: ExternalAutomationManager,
     job: ExternalAutomationJob
   ): void => {
+    void prefetchAutomationEditorDialog().catch(() => {})
     editRequestRef.current += 1
     const rawSchedule = job.rawSchedule?.trim() ?? ''
     const hasCustomSchedule = isValidAutomationCronSchedule(rawSchedule)
@@ -1943,30 +1985,34 @@ export default function AutomationsPage(): React.JSX.Element {
         </h1>
       </header>
 
-      <AutomationEditorDialog
-        open={createOpen}
-        isEditing={editingAutomationId !== null}
-        isSaving={isSaving}
-        canSave={canSaveDraft}
-        isEditingExternal={editingExternalTarget !== null}
-        createTarget={createTarget}
-        repos={repos}
-        projectHostSetups={projectHostSetups}
-        automationYamlHooksByRepoKey={automationYamlHooksByRepoKey}
-        getAutomationHooksCacheKey={getAutomationHooksCacheKey}
-        repoMap={repoMap}
-        worktrees={worktrees}
-        settings={settings}
-        draft={draft}
-        onProjectChange={handleProjectChange}
-        getRepoHostLabel={getAutomationRepoHostLabel}
-        onCreateTargetChange={handleCreateTargetChange}
-        onOpenChange={setCreateOpen}
-        onDraftChange={setDraft}
-        onSetupDecisionTouched={markSetupDecisionTouched}
-        onApplyTemplate={applyTemplateToDraft}
-        onSave={() => void saveAutomation()}
-      />
+      {createOpen ? (
+        <React.Suspense fallback={<AutomationEditorDialogLoadingSurface />}>
+          <AutomationEditorDialog
+            open
+            isEditing={editingAutomationId !== null}
+            isSaving={isSaving}
+            canSave={canSaveDraft}
+            isEditingExternal={editingExternalTarget !== null}
+            createTarget={createTarget}
+            repos={repos}
+            projectHostSetups={projectHostSetups}
+            automationYamlHooksByRepoKey={automationYamlHooksByRepoKey}
+            getAutomationHooksCacheKey={getAutomationHooksCacheKey}
+            repoMap={repoMap}
+            worktrees={worktrees}
+            settings={settings}
+            draft={draft}
+            onProjectChange={handleProjectChange}
+            getRepoHostLabel={getAutomationRepoHostLabel}
+            onCreateTargetChange={handleCreateTargetChange}
+            onOpenChange={setCreateOpen}
+            onDraftChange={setDraft}
+            onSetupDecisionTouched={markSetupDecisionTouched}
+            onApplyTemplate={applyTemplateToDraft}
+            onSave={() => void saveAutomation()}
+          />
+        </React.Suspense>
+      ) : null}
 
       <AutomationDeleteDialog
         deleteTarget={deleteTarget}

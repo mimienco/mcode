@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "workspace-commands",
+  "description": "Workspace open/switch/recents command permissions for the primary local MCode window; no default grants.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-workspace-open",
+    "allow-workspace-switch",
+    "allow-workspace-list-recent"
+  ]
+}

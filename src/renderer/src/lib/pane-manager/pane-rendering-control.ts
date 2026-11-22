@@ -72,10 +72,11 @@ export function suspendPaneRendering(
 export function resumePaneRendering(
   panes: Iterable<ManagedPaneInternal>,
   retentionOwner?: object
-): void {
+): boolean {
   if (retentionOwner) {
     releaseHiddenWebglRetention(retentionOwner)
   }
+  let rendererChanged = false
   for (const pane of panes) {
     // Why: resume (worktree foreground, window wake) is the WebGL retry
     // boundary — Chromium may have restored the GPU process since a context
@@ -87,13 +88,18 @@ export function resumePaneRendering(
     pane.webglRebuildDeferred = false
     if (pane.webglAddon && isPaneWebglContextLost(pane)) {
       disposeWebgl(pane)
+      rendererChanged = true
     }
     if (rebuildDeferred && pane.webglAddon) {
       rebuildAttachedWebgl(pane)
+      rendererChanged = true
       continue
     }
+    const previousAddon = pane.webglAddon
     reattachWebglIfNeeded(pane)
+    rendererChanged ||= previousAddon !== pane.webglAddon
   }
+  return rendererChanged
 }
 
 export function resetPaneWebglTextureAtlases(panes: Iterable<ManagedPaneInternal>): void {

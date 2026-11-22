@@ -9,6 +9,9 @@ import {
   isPathAllowedByCanonicalRegisteredRoot,
   isRegisteredWorktreePath
 } from './registered-worktree-roots-cache'
+import { getAiVaultWslHomeDirs } from '../ai-vault/cached-session-list'
+import { isPathInsideAgentRoots } from '../ai-vault/session-transcript-path-gate'
+import { AI_VAULT_AGENTS } from '../../shared/ai-vault-types'
 
 export const PATH_ACCESS_DENIED_MESSAGE =
   'Access denied: path resolves outside allowed directories. If this blocks a legitimate workflow, please file a GitHub issue.'
@@ -29,13 +32,44 @@ function rememberAuthorizedExternalPath(path: string): void {
   }
 }
 
-export function authorizeExternalPath(targetPath: string): void {
-  const resolvedTarget = resolve(targetPath)
+function rememberAuthorizedExternalPathPair(resolvedTarget: string): void {
   rememberAuthorizedExternalPath(resolvedTarget)
   try {
     // Why: macOS canonicalizes /tmp to /private/tmp during read authorization.
     rememberAuthorizedExternalPath(realpathSync(resolvedTarget))
   } catch {}
+}
+
+// Trusted main-process callers (dialog picks, keybindings, floating workspace, imports) grant directly.
+export function authorizeExternalPath(targetPath: string): void {
+  rememberAuthorizedExternalPathPair(resolve(targetPath))
+}
+
+// Why: the renderer-facing channel must not admit arbitrary paths — a compromised
+// renderer could otherwise self-authorize reads/deletes anywhere on disk. Admit a
+// request only when main can independently verify it: the path is already inside
+// the allow-list/registered worktrees, or it is an AI Vault transcript root that
+// main's own scanners discover sessions under.
+export async function authorizeRendererExternalPath(
+  targetPath: string,
+  store: Store
+): Promise<void> {
+  const resolvedTarget = resolve(targetPath)
+  if (
+    !(await isPathAllowedIncludingRegisteredWorktrees(resolvedTarget, store)) &&
+    !(await isInsideAnyAgentTranscriptRoot(resolvedTarget))
+  ) {
+    throw new Error(PATH_ACCESS_DENIED_MESSAGE)
+  }
+  rememberAuthorizedExternalPathPair(resolvedTarget)
+}
+
+async function isInsideAnyAgentTranscriptRoot(resolvedTarget: string): Promise<boolean> {
+  // Why: WSL home discovery shells out on Windows; only reached after the static allow-list rejected the path.
+  const wslHomeDirs = await getAiVaultWslHomeDirs()
+  return AI_VAULT_AGENTS.some((agent) =>
+    isPathInsideAgentRoots({ agent, filePath: resolvedTarget, wslHomeDirs })
+  )
 }
 
 export function isPathAllowed(targetPath: string, store: Store): boolean {

@@ -11,6 +11,7 @@ import {
   withoutEnvCommand
 } from './tui-agent-startup-shell'
 import type { AiVaultAgent, AiVaultSession } from './ai-vault-types'
+import { quoteWindowsCmdArg } from './shell-quoting'
 
 export function buildAiVaultResumeCommand(args: {
   agent: AiVaultAgent
@@ -263,6 +264,3 @@ function quoteShellArg(value: string, platform: NodeJS.Platform): string {
   return platform === 'win32' ? quoteWindowsCmdArg(value) : quoteStartupArg(value, 'posix')
 }
 
-function quoteWindowsCmdArg(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`
-}

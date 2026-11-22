@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type * as ReactModule from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
@@ -287,11 +287,55 @@ describe('NativeChatSessionOptionPickers', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'Permissions · Applies to this task Auto-accept edits' })).not.toBeNull()
-    expect(screen.getByRole('button', { name: 'Work mode · Applies to this task Build' })).not.toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Permissions · Applies to this task Auto-accept edits' })
+    ).not.toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Work mode · Applies to this task Build' })
+    ).not.toBeNull()
+    const optionRow = document.querySelector('[data-native-chat-session-options]')
+    expect(optionRow?.className).toContain('flex-nowrap')
+    expect(
+      optionRow?.querySelectorAll('[data-native-chat-picker-category]').length
+    ).toBeGreaterThanOrEqual(2)
     expect(
       (screen.getByRole('radio', { name: /Bypass permissions/ }) as HTMLButtonElement).disabled
     ).toBe(true)
+  })
+
+  it('filters the compact settings popup by available option category', () => {
+    const { container } = render(
+      <NativeChatSessionOptionPickers
+        surface={surface}
+        snapshot={[model(), effort, fast]}
+        isWorking={false}
+      />
+    )
+    const compactTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-native-chat-compact-options] button[aria-label="Session settings"]'
+    )
+
+    expect(compactTrigger).not.toBeNull()
+    fireEvent.click(compactTrigger as HTMLButtonElement)
+
+    const filterBar = container.querySelector('[data-native-chat-compact-option-filters]')
+    const filterButtons = Array.from(
+      filterBar?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []
+    )
+    expect(filterButtons.map((button) => button.textContent)).toEqual([
+      'Effort',
+      'Fast mode',
+      'Model'
+    ])
+    expect(
+      container.querySelector('[data-native-chat-compact-option-panel]')?.textContent
+    ).toContain('Low')
+
+    const modelFilter = filterButtons.find((button) => button.textContent === 'Model')
+    fireEvent.click(modelFilter as HTMLButtonElement)
+    const modelPanel = container.querySelector('[data-native-chat-compact-option-panel]')
+    expect(modelPanel?.textContent).toContain('Opus 4.8')
+    expect(modelPanel?.textContent).not.toContain('Low')
   })
 
   it('requires explicit confirmation before applying bypass', async () => {
@@ -526,12 +570,26 @@ describe('NativeChatSessionOptionPickers', () => {
                 {
                   value: 'gpt-5.5',
                   label: 'GPT-5.5',
-                  description: 'Strong reasoning for real-world work'
+                  description: 'Strong reasoning for real-world work',
+                  modelMetadata: {
+                    availability: 'available',
+                    providerId: 'openai-codex',
+                    providerLabel: 'OpenAI Codex',
+                    contextWindowTokens: 272000,
+                    pricing: { inputPerMillion: 1.75, outputPerMillion: 14 }
+                  }
                 },
                 {
                   value: 'gpt-5.6-sol',
                   label: 'GPT-5.6 Sol',
-                  description: 'Best for complex coding and agentic work'
+                  description: 'Best for complex coding and agentic work',
+                  modelMetadata: {
+                    availability: 'available',
+                    providerId: 'openrouter',
+                    providerLabel: 'OpenRouter',
+                    contextWindowTokens: 1000000,
+                    pricing: { inputPerMillion: 0, outputPerMillion: 0 }
+                  }
                 }
               ]
             },
@@ -543,17 +601,28 @@ describe('NativeChatSessionOptionPickers', () => {
       />
     )
 
-    const currentModel = screen.getByRole('radio', {
-      name: 'GPT-5.5 Strong reasoning for real-world work'
-    })
-    const alternative = screen.getByRole('radio', {
-      name: 'GPT-5.6 Sol Best for complex coding and agentic work'
-    })
+    const currentModel = screen.getByRole('radio', { name: /GPT-5.5/ })
+    const alternative = screen.getByRole('radio', { name: /GPT-5.6 Sol/ })
     expect(currentModel.getAttribute('aria-current')).toBe('true')
     expect(
       currentModel.compareDocumentPosition(alternative) & Node.DOCUMENT_POSITION_FOLLOWING
     ).not.toBe(0)
-    expect(screen.getByText('Available choices')).not.toBeNull()
+    expect(screen.getByText('Connected models')).not.toBeNull()
+    expect(screen.getByText('2')).not.toBeNull()
+    expect(screen.getByText('OpenAI Codex')).not.toBeNull()
+    expect(screen.getByText('OpenRouter')).not.toBeNull()
+    expect(screen.getByText('272K')).not.toBeNull()
+    expect(screen.getByText('$1.75/$14')).not.toBeNull()
+    expect(screen.getByText('Free')).not.toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models or providers' }), {
+      target: { value: 'openrouter' }
+    })
+    expect(screen.getByRole('radio', { name: /GPT-5.6 Sol/ })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Free only' }))
+    expect(screen.getByRole('button', { name: 'Free only' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
 
     alternative.click()
 

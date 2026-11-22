@@ -143,10 +143,10 @@ export function NativeChatComposerField({
         ? autocomplete.items.length
         : 0
   return (
-    <div className="shrink-0 border-t border-border/40 bg-background/95">
+    <div data-native-chat-composer className="shrink-0 border-t border-border/40 bg-background/95">
       {/* Extra bottom padding keeps the input box off the window rim. */}
-      <div className="px-3 pt-3 pb-4 sm:px-5">
-        <div className="relative mx-auto w-full max-w-3xl">
+      <div data-native-chat-composer-padding className="px-3 pt-3 pb-4 sm:px-5">
+        <div className="relative mx-auto w-full max-w-3xl @5xl/native-chat:max-w-4xl">
           {autocomplete.mode === 'slash' || autocomplete.mode === 'skill' ? (
             <NativeChatPickerMenu
               autocomplete={autocomplete}
@@ -255,6 +255,7 @@ export function NativeChatComposerField({
               </div>
             ) : null}
             <textarea
+              data-native-chat-composer-input
               ref={textareaRef}
               value={draft}
               disabled={disabled}
@@ -288,7 +289,10 @@ export function NativeChatComposerField({
                 'placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50'
               )}
             />
-            <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2">
+            <div
+              data-native-chat-composer-footer
+              className="mt-1 flex flex-wrap items-center gap-2 border-t border-border/50 pt-2"
+            >
               <NativeChatComposerActions
                 attachDisabled={attachDisabled}
                 dictationDisabled={dictationDisabled}

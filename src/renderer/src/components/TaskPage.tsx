@@ -89,8 +89,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import TaskProjectSourceCombobox from '@/components/task-project-source-combobox'
-import { JiraConnectDialog } from '@/components/jira-connect-dialog'
-import { LinearApiKeyDialog } from '@/components/linear-api-key-dialog'
 import { LinearScopeSelector } from '@/components/linear-scope-selector'
 import RepoBadgeLabel from '@/components/repo/RepoBadgeLabel'
 import IssueSourceIndicator, { sameGitHubOwnerRepo } from '@/components/github/IssueSourceIndicator'
@@ -182,24 +180,19 @@ import {
 } from '@/components/task-page-github-work-item-quiet-state'
 import type { TaskPageGitHubMutationIntent } from '@/components/task-page-github-work-item-mutation-patches'
 import type { TaskPageGitHubPatchWorkItem } from '@/components/task-page-github-work-item-mutation-types'
-import GitHubItemDialog, { type ItemDialogTab } from '@/components/GitHubItemDialog'
-import PullRequestPage from '@/components/PullRequestPage'
-import GitLabItemDialog from '@/components/GitLabItemDialog'
-import ProjectViewWrapper from '@/components/github-project/ProjectViewWrapper'
+import type { ItemDialogTab } from '@/components/GitHubItemDialog'
 import { getSettingsForRepoRuntimeOwner } from '@/lib/repo-runtime-owner'
 import {
   buildExecutionHostRegistry,
   type ExecutionHostRegistryEntry
 } from '../../../shared/execution-host-registry'
 import { getHostDisplayLabelOverrides } from '../../../shared/host-setting-overrides'
-import LinearIssueWorkspace from '@/components/LinearIssueWorkspace'
 import {
   LinearCollectionNotice,
   LinearCustomViewTable,
   LinearProjectOverview,
   LinearProjectTable
 } from '@/components/linear-project-view-surfaces'
-import JiraIssueWorkspace from '@/components/JiraIssueWorkspace'
 import { TaskPageJiraIssueList } from '@/components/task-page-jira-issue-list'
 import {
   getSingleJiraProjectScope,
@@ -207,6 +200,7 @@ import {
   loadTaskPageJiraProjectStatusOrder
 } from '@/components/task-page-jira-status-order'
 import { JiraIcon } from '@/components/icons/JiraIcon'
+import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { cn } from '@/lib/utils'
 import {
   getLinkedWorkItemSuggestedName,
@@ -472,6 +466,71 @@ import {
 } from '@/components/task-page-jira-create-fields'
 import { formatPRDelta } from '@/components/task-page-pr-delta-summary'
 import { getPageNumbers } from '@/components/task-page-pagination-page-numbers'
+import {
+  prefetchTaskPageDetailChunk,
+  TASK_PAGE_DETAIL_IMPORTERS
+} from '@/components/task-page-detail-chunks'
+
+const GitHubItemDialog = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.githubItem, {
+  reloadKey: 'tasks.github-item-detail'
+})
+const PullRequestPage = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.githubPullRequest, {
+  reloadKey: 'tasks.github-pull-request-detail'
+})
+const GitLabItemDialog = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.gitlabItem, {
+  reloadKey: 'tasks.gitlab-item-detail'
+})
+const ProjectViewWrapper = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.githubProject, {
+  reloadKey: 'tasks.github-project-view'
+})
+const LinearIssueWorkspace = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.linearIssue, {
+  reloadKey: 'tasks.linear-issue-detail'
+})
+const JiraIssueWorkspace = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.jiraIssue, {
+  reloadKey: 'tasks.jira-issue-detail'
+})
+const LinearApiKeyDialog = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.linearConnect, {
+  reloadKey: 'tasks.linear-connect-dialog'
+})
+const JiraConnectDialog = lazyWithRetry(TASK_PAGE_DETAIL_IMPORTERS.jiraConnect, {
+  reloadKey: 'tasks.jira-connect-dialog'
+})
+
+function prefetchGitHubWorkItemDetail(item: GitHubWorkItem): void {
+  void prefetchTaskPageDetailChunk(item.type === 'pr' ? 'githubPullRequest' : 'githubItem').catch(
+    () => {}
+  )
+}
+
+function TaskDetailLoadingSurface(): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-md border border-border/50 bg-muted/30"
+    >
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        {translate('auto.components.TaskPage.detailLoading', 'Loading task…')}
+      </div>
+    </div>
+  )
+}
+
+function TaskDialogLoadingSurface(): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-[2px]"
+    >
+      <div className="flex items-center gap-2 rounded-md border border-border/60 bg-popover px-4 py-3 text-sm text-muted-foreground shadow-lg">
+        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        {translate('auto.components.TaskPage.dialogLoading', 'Opening…')}
+      </div>
+    </div>
+  )
+}
 
 function isGitLabMRFilter(value: GitLabTaskFilter | GitLabIssueFilter): value is GitLabTaskFilter {
   return value === 'opened' || value === 'merged' || value === 'closed' || value === 'all'
@@ -3064,6 +3123,8 @@ const GitHubTaskRow = React.memo(function GitHubTaskRow({
       key={`${item.repoId}:${item.id}`}
       role="button"
       tabIndex={0}
+      onPointerEnter={() => prefetchGitHubWorkItemDetail(item)}
+      onFocus={() => prefetchGitHubWorkItemDetail(item)}
       onClick={() => openDetail(item)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -4324,6 +4385,7 @@ export default function TaskPage(): React.JSX.Element {
 
   const openGitHubDetailPage = useCallback(
     (item: GitHubWorkItem, initialTab: ItemDialogTab = 'conversation') => {
+      prefetchGitHubWorkItemDetail(item)
       const scrollTop = githubListScrollRef.current?.scrollTop ?? githubListScrollTopRef.current
       githubListScrollTopRef.current = scrollTop
       pendingGithubScrollRestoreRef.current = scrollTop
@@ -4349,6 +4411,7 @@ export default function TaskPage(): React.JSX.Element {
 
   const openGitLabDetailPage = useCallback(
     (item: GitLabWorkItem) => {
+      void prefetchTaskPageDetailChunk('gitlabItem').catch(() => {})
       openTaskPage(
         {
           taskSource: 'gitlab',
@@ -4627,6 +4690,7 @@ export default function TaskPage(): React.JSX.Element {
 
   const openLinearDetailPage = useCallback(
     (issue: LinearIssue) => {
+      void prefetchTaskPageDetailChunk('linearIssue').catch(() => {})
       openTaskPage(
         {
           taskSource: 'linear',
@@ -4723,6 +4787,7 @@ export default function TaskPage(): React.JSX.Element {
 
   const openJiraDetailPage = useCallback(
     (issue: JiraIssue) => {
+      void prefetchTaskPageDetailChunk('jiraIssue').catch(() => {})
       openTaskPage(
         {
           taskSource: 'jira',
@@ -9311,7 +9376,10 @@ export default function TaskPage(): React.JSX.Element {
                         teamSelectionIsStickyAll={defaultLinearTeamSelection == null}
                         onWorkspaceChange={handleLinearWorkspaceChange}
                         onTeamSelectionChange={handleLinearTeamSelectionChange}
-                        onAddTeamAccess={() => setLinearConnectOpen(true)}
+                        onAddTeamAccess={() => {
+                          void prefetchTaskPageDetailChunk('linearConnect').catch(() => {})
+                          setLinearConnectOpen(true)
+                        }}
                         onOpen={handleLinearScopeOpen}
                       />
                       <Tooltip>
@@ -9423,8 +9491,19 @@ export default function TaskPage(): React.JSX.Element {
                             <button
                               key={mode.id}
                               type="button"
+                              onPointerEnter={() => {
+                                if (mode.id === 'project') {
+                                  void prefetchTaskPageDetailChunk('githubProject').catch(() => {})
+                                }
+                              }}
+                              onFocus={() => {
+                                if (mode.id === 'project') {
+                                  void prefetchTaskPageDetailChunk('githubProject').catch(() => {})
+                                }
+                              }}
                               onClick={() => {
                                 if (mode.id === 'project') {
+                                  void prefetchTaskPageDetailChunk('githubProject').catch(() => {})
                                   setGithubMode('project')
                                   setTaskResumeState({ githubMode: 'project' })
                                   return
@@ -10332,39 +10411,45 @@ export default function TaskPage(): React.JSX.Element {
 
           {taskSource === 'github' && dialogWorkItem ? (
             dialogWorkItem.type === 'pr' ? (
-              <PullRequestPage
-                workItem={dialogWorkItem}
-                initialTab={dialogInitialTab}
-                repoPath={dialogRepoPath}
-                repoId={dialogWorkItem.repoId}
-                sourceContext={dialogSourceContext}
-                backLabel="Pull requests"
-                onUse={(item) => {
-                  setDialogWorkItem(null)
-                  handleUseWorkItem(item)
-                }}
-                onReviewRequestsChange={handleDialogReviewRequestsChange}
-                onClose={closeTaskDetailPage}
-              />
+              <React.Suspense fallback={<TaskDetailLoadingSurface />}>
+                <PullRequestPage
+                  workItem={dialogWorkItem}
+                  initialTab={dialogInitialTab}
+                  repoPath={dialogRepoPath}
+                  repoId={dialogWorkItem.repoId}
+                  sourceContext={dialogSourceContext}
+                  backLabel="Pull requests"
+                  onUse={(item) => {
+                    setDialogWorkItem(null)
+                    handleUseWorkItem(item)
+                  }}
+                  onReviewRequestsChange={handleDialogReviewRequestsChange}
+                  onClose={closeTaskDetailPage}
+                />
+              </React.Suspense>
             ) : (
-              <GitHubItemDialog
-                workItem={dialogWorkItem}
-                initialTab={dialogInitialTab}
-                repoPath={dialogRepoPath}
-                repoId={dialogWorkItem.repoId}
-                sourceContext={dialogSourceContext}
-                backLabel="GitHub list"
-                onUse={(item) => {
-                  setDialogWorkItem(null)
-                  handleUseWorkItem(item)
-                }}
-                onReviewRequestsChange={handleDialogReviewRequestsChange}
-                onClose={closeTaskDetailPage}
-              />
+              <React.Suspense fallback={<TaskDetailLoadingSurface />}>
+                <GitHubItemDialog
+                  workItem={dialogWorkItem}
+                  initialTab={dialogInitialTab}
+                  repoPath={dialogRepoPath}
+                  repoId={dialogWorkItem.repoId}
+                  sourceContext={dialogSourceContext}
+                  backLabel="GitHub list"
+                  onUse={(item) => {
+                    setDialogWorkItem(null)
+                    handleUseWorkItem(item)
+                  }}
+                  onReviewRequestsChange={handleDialogReviewRequestsChange}
+                  onClose={closeTaskDetailPage}
+                />
+              </React.Suspense>
             )
           ) : taskSource === 'github' && githubMode === 'project' ? (
             <div className="mt-3 flex min-h-0 min-w-0 max-h-full flex-col overflow-hidden rounded-md border border-border/50 bg-muted/50 shadow-sm">
-              <ProjectViewWrapper selectedRepoIds={repoSelection} />
+              <React.Suspense fallback={<TaskDetailLoadingSurface />}>
+                <ProjectViewWrapper selectedRepoIds={repoSelection} />
+              </React.Suspense>
             </div>
           ) : taskSource === 'github' ? (
             // Why: bottom of the joined GitHub list card — flush under the filter
@@ -10805,6 +10890,12 @@ export default function TaskPage(): React.JSX.Element {
                       role="button"
                       tabIndex={0}
                       key={item.id}
+                      onPointerEnter={() => {
+                        void prefetchTaskPageDetailChunk('gitlabItem').catch(() => {})
+                      }}
+                      onFocus={() => {
+                        void prefetchTaskPageDetailChunk('gitlabItem').catch(() => {})
+                      }}
                       onClick={() => {
                         useAppStore.getState().recordFeatureInteraction('gitlab-tasks')
                         openGitLabDetailPage(item)
@@ -10895,7 +10986,18 @@ export default function TaskPage(): React.JSX.Element {
                   )}
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  <Button onClick={() => setJiraConnectOpen(true)}>
+                  <Button
+                    onPointerEnter={() => {
+                      void prefetchTaskPageDetailChunk('jiraConnect').catch(() => {})
+                    }}
+                    onFocus={() => {
+                      void prefetchTaskPageDetailChunk('jiraConnect').catch(() => {})
+                    }}
+                    onClick={() => {
+                      void prefetchTaskPageDetailChunk('jiraConnect').catch(() => {})
+                      setJiraConnectOpen(true)
+                    }}
+                  >
                     {translate('auto.components.TaskPage.83bce6be5c', 'Connect Jira')}
                   </Button>
                   <Button variant="outline" onClick={() => hideTaskSource('jira', 'Jira')}>
@@ -10983,24 +11085,30 @@ export default function TaskPage(): React.JSX.Element {
                     statusOrder={displayedJiraStatusOrder}
                   />
                 </div>
-                <JiraIssueWorkspace
-                  issue={selectedJiraIssue}
-                  onUse={handleUseJiraItem}
-                  onClose={closeTaskDetailPage}
-                  sourceContext={jiraDetailSourceContext}
-                />
+                {selectedJiraIssue ? (
+                  <React.Suspense fallback={<TaskDetailLoadingSurface />}>
+                    <JiraIssueWorkspace
+                      issue={selectedJiraIssue}
+                      onUse={handleUseJiraItem}
+                      onClose={closeTaskDetailPage}
+                      sourceContext={jiraDetailSourceContext}
+                    />
+                  </React.Suspense>
+                ) : null}
               </div>
             )
           ) : taskSource === 'linear' && selectedLinearIssue ? (
-            <LinearIssueWorkspace
-              issue={selectedLinearIssue}
-              variant="page"
-              backLabel={activeLinearIssueContextLabel ?? 'Linear list'}
-              onUse={handleUseLinearItem}
-              onOpenIssue={openRelatedLinearIssue}
-              onClose={closeTaskDetailPage}
-              sourceContext={linearDetailSourceContext}
-            />
+            <React.Suspense fallback={<TaskDetailLoadingSurface />}>
+              <LinearIssueWorkspace
+                issue={selectedLinearIssue}
+                variant="page"
+                backLabel={activeLinearIssueContextLabel ?? 'Linear list'}
+                onUse={handleUseLinearItem}
+                onOpenIssue={openRelatedLinearIssue}
+                onClose={closeTaskDetailPage}
+                sourceContext={linearDetailSourceContext}
+              />
+            </React.Suspense>
           ) : !linearStatusReady ? (
             <div className="mt-4 flex items-center justify-center py-14">
               <LoaderCircle className="size-5 animate-spin text-muted-foreground" />
@@ -11019,7 +11127,14 @@ export default function TaskPage(): React.JSX.Element {
               </p>
               <Button
                 className="mt-5"
+                onPointerEnter={() => {
+                  void prefetchTaskPageDetailChunk('linearConnect').catch(() => {})
+                }}
+                onFocus={() => {
+                  void prefetchTaskPageDetailChunk('linearConnect').catch(() => {})
+                }}
                 onClick={() => {
+                  void prefetchTaskPageDetailChunk('linearConnect').catch(() => {})
                   setLinearConnectOpen(true)
                 }}
               >
@@ -11594,6 +11709,12 @@ export default function TaskPage(): React.JSX.Element {
                                 aria-current={selected ? 'true' : undefined}
                                 data-current={selected ? 'true' : undefined}
                                 aria-disabled={updating ? 'true' : undefined}
+                                onPointerEnter={() => {
+                                  void prefetchTaskPageDetailChunk('linearIssue').catch(() => {})
+                                }}
+                                onFocus={() => {
+                                  void prefetchTaskPageDetailChunk('linearIssue').catch(() => {})
+                                }}
                                 onDragStart={(event) =>
                                   handleLinearBoardCardDragStart(issue, event)
                                 }
@@ -11791,6 +11912,12 @@ export default function TaskPage(): React.JSX.Element {
                           tabIndex={0}
                           aria-current={selected ? 'true' : undefined}
                           data-current={selected ? 'true' : undefined}
+                          onPointerEnter={() => {
+                            void prefetchTaskPageDetailChunk('linearIssue').catch(() => {})
+                          }}
+                          onFocus={() => {
+                            void prefetchTaskPageDetailChunk('linearIssue').catch(() => {})
+                          }}
                           onClick={() => {
                             openLinearDetailPage(issue)
                           }}
@@ -13546,28 +13673,40 @@ export default function TaskPage(): React.JSX.Element {
         </DialogContent>
       </Dialog>
 
-      <GitLabItemDialog
-        item={gitlabDialogItem}
-        // Why: repoPath comes from the clicked item's own repo, not primaryRepo — the GitLab fetch is now multi-repo.
-        repoPath={gitlabDialogRepo?.path ?? null}
-        repoId={gitlabDialogItem?.repoId ?? null}
-        sourceContext={gitlabDialogSourceContext}
-        onCreateWorkspace={(item) => {
-          setGitlabDialogItem(null)
-          handleUseGitLabItem(item)
-        }}
-        onClose={() => setGitlabDialogItem(null)}
-      />
+      {gitlabDialogItem ? (
+        <React.Suspense fallback={<TaskDialogLoadingSurface />}>
+          <GitLabItemDialog
+            item={gitlabDialogItem}
+            // Why: repoPath comes from the clicked item's own repo, not primaryRepo — the GitLab fetch is now multi-repo.
+            repoPath={gitlabDialogRepo?.path ?? null}
+            repoId={gitlabDialogItem.repoId}
+            sourceContext={gitlabDialogSourceContext}
+            onCreateWorkspace={(item) => {
+              setGitlabDialogItem(null)
+              handleUseGitLabItem(item)
+            }}
+            onClose={() => setGitlabDialogItem(null)}
+          />
+        </React.Suspense>
+      ) : null}
 
-      <LinearApiKeyDialog
-        open={linearConnectOpen}
-        onOpenChange={setLinearConnectOpen}
-        workspace={selectedLinearWorkspace}
-        connectLabel={selectedLinearWorkspace ? 'Update access' : 'Add Linear access'}
-        onConnected={handleLinearAccessConnected}
-      />
+      {linearConnectOpen ? (
+        <React.Suspense fallback={<TaskDialogLoadingSurface />}>
+          <LinearApiKeyDialog
+            open
+            onOpenChange={setLinearConnectOpen}
+            workspace={selectedLinearWorkspace}
+            connectLabel={selectedLinearWorkspace ? 'Update access' : 'Add Linear access'}
+            onConnected={handleLinearAccessConnected}
+          />
+        </React.Suspense>
+      ) : null}
 
-      <JiraConnectDialog open={jiraConnectOpen} onOpenChange={setJiraConnectOpen} />
+      {jiraConnectOpen ? (
+        <React.Suspense fallback={<TaskDialogLoadingSurface />}>
+          <JiraConnectDialog open onOpenChange={setJiraConnectOpen} />
+        </React.Suspense>
+      ) : null}
     </div>
   )
 }

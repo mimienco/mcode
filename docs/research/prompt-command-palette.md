@@ -4,7 +4,7 @@ Research date: 2026-08-26
 
 ## Recommendation
 
-Extend the existing **Quick Commands** feature into a cross-surface prompt/command palette. Keep one saved-item store and add target adapters for terminal and native chat; do not create a second snippet store or move text through the system clipboard.
+Add a distinct **Snippets** launcher beside the existing **Command** feature. Snippets are generic cards with only a name and plain text; they do not inherit terminal action types, agent selection, repository scope, host ownership, or execution settings. Add target adapters for terminal and native chat, and do not move text through the system clipboard.
 
 Make **Insert** the common primary action. A drop performs the same insertion at the target caret and never sends the chat message or presses Enter in the terminal. Keep **Run** as a separate, explicitly labelled terminal action and **Copy** as an explicit secondary action. This makes drag an accelerator rather than the only way to use an item, as required by WCAG 2.2's dragging guidance and the keyboard-equivalence rule for interactive controls. ([WCAG 2.2 Dragging Movements](https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements), [Using ARIA, rule 3](https://www.w3.org/TR/using-aria/#third))
 
@@ -18,7 +18,7 @@ Make **Insert** the common primary action. A drop performs the same insertion at
 - [`TerminalPane.tsx`](../../src/renderer/src/components/terminal-pane/TerminalPane.tsx) already resolves a drop to the pane under the pointer. Its terminal paste stack handles bracketed paste, control-sequence sanitization, remote transport limits, SSH/Windows differences, and stale-target protection.
 - The repo already has bounded, versioned custom drag payload precedents in [`ai-vault-session-drag.ts`](../../src/renderer/src/lib/ai-vault-session-drag.ts) and [`linear-board-drag-payload.ts`](../../src/renderer/src/lib/linear-board-drag-payload.ts).
 
-The smallest safe change is therefore a new insertion contract and drag codec around these seams, plus UI wording that broadens “Quick Commands” to prompts and commands.
+The smallest safe change is therefore a new insertion contract and drag codec around these seams, plus a small app-level Snippets store that stays independent of the host-aware terminal-command domain.
 
 ## Interaction and accessibility contract
 
@@ -55,17 +55,18 @@ Clipboard Copy remains useful for pasting outside MCode, but it should be explic
 
 ## Implementation structure
 
-1. **Domain and persistence:** retain the existing quick-command schema and migration behavior. Add only optional, backward-compatible presentation/target metadata if needed; keep the existing limits and host/repository ownership rules.
+1. **Domain and persistence:** leave the existing quick-command schema and migration behavior unchanged. Add a bounded `SavedSnippet { id, name, text }` collection to global settings. Snippets are app-level reusable text and intentionally have no execution or target metadata.
 2. **Insertion service:** introduce a small target-neutral operation such as `insertSavedItem(item, target, source)` where `source` is `click | keyboard | drop`. Terminal and chat adapters own their platform-specific insertion and focus behavior. A distinct `runSavedItem` remains explicit.
 3. **Drag codec:** add one shared MIME constant plus pure encode/decode/size-validation functions, following the existing AI Vault/Linear drag modules. Use one synchronous DOM listener boundary and pass decoded plain data to async adapters.
-4. **Palette UI:** evolve the existing tab-bar Quick Commands button/menu rather than adding another launcher. Make Insert the result-row activation, expose Run and Copy as clearly separate actions, preserve configurable cross-platform shortcut handling, and restore/move focus deliberately.
+4. **Palette UI:** leave **Command** alone and add a neighboring **Snippets** launcher that opens a compact menu of draggable cards. Each card shows its name, text preview, drag grip, Copy, Edit, and Delete. The add/edit form asks only for Name and Text. Show Snippets in both project and no-project chats and terminals.
 5. **Drop targets:** add the custom MIME type alongside the existing file MIME checks in terminal and native-chat surfaces. Resolve the precise split pane/composer, show copy-cursor/drop highlighting, and never accept a drop while the target is disabled or stale.
    Keep destination eligibility authoritative if Electron/xterm omits the final DOM `drop`: a synchronous drag-finish handshake may carry final coordinates, but the source row must never insert on the destination's behalf.
 6. **Verification:** unit-test codec version/size/tampering/protected-mode cases; caret/selection insertion; no-submit guarantees; multiline/control-character terminal handling; disabled/stale targets; SSH/remote transport; and IME. Add Playwright coverage for mouse drag plus keyboard/click insertion and focus restoration.
 
 ## Decision summary
 
-- Reuse Quick Commands storage, host ownership, and palette UI.
+- Keep Quick Commands and Snippets as separate domains with clearly different forms and behavior.
+- Keep Command unchanged; make Snippets generic, insert/drag-oriented, and available without a project.
 - Insert directly into the destination; do not use clipboard as transport.
 - Drop and default row activation insert only; Run is explicit.
 - Use native HTML `DataTransfer` with a custom versioned type plus `text/plain` fallback.

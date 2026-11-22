@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const setTabGroupSplitRatioMock = vi.fn()
 const recordFeatureInteractionMock = vi.fn()
 const setDragRootNodeMock = vi.fn()
+const maximizeMocks = vi.hoisted(() => ({
+  groupId: null as string | null,
+  setMaximizedTabGroupId: vi.fn()
+}))
 const useAppStoreMock = vi.fn(
   (
     selector: (state: {
@@ -23,6 +27,10 @@ vi.mock('../../store', () => ({
       setTabGroupSplitRatio: typeof setTabGroupSplitRatioMock
     }) => unknown
   ) => useAppStoreMock(selector)
+}))
+
+vi.mock('./tab-group-maximize-state', () => ({
+  useValidatedMaximizedTabGroupId: () => maximizeMocks.groupId
 }))
 
 vi.mock('./TabGroupPanel', () => ({
@@ -70,6 +78,8 @@ describe('TabGroupSplitLayout', () => {
     recordFeatureInteractionMock.mockClear()
     setDragRootNodeMock.mockClear()
     useAppStoreMock.mockClear()
+    maximizeMocks.groupId = null
+    maximizeMocks.setMaximizedTabGroupId.mockClear()
   })
 
   function getLayoutWrapper(element: ReturnType<typeof TabGroupSplitLayout>) {
@@ -103,7 +113,6 @@ describe('TabGroupSplitLayout', () => {
       isVisible: boolean
       isFocused: boolean
       hasSplitGroups: boolean
-      reserveClosedExplorerToggleSpace: boolean
       reserveCollapsedSidebarHeaderSpace: boolean
     }
   }
@@ -116,7 +125,6 @@ describe('TabGroupSplitLayout', () => {
         isVisible: false,
         isFocused: false,
         hasSplitGroups: false,
-        reserveClosedExplorerToggleSpace: true,
         reserveCollapsedSidebarHeaderSpace: true
       })
     )
@@ -130,7 +138,6 @@ describe('TabGroupSplitLayout', () => {
         isVisible: true,
         isFocused: true,
         hasSplitGroups: false,
-        reserveClosedExplorerToggleSpace: true,
         reserveCollapsedSidebarHeaderSpace: true
       })
     )
@@ -147,7 +154,7 @@ describe('TabGroupSplitLayout', () => {
     expect(asElement(getLayoutWrapper(element)).props.ref).toBe(setDragRootNodeMock)
   })
 
-  it('only reserves top-right header space for the floating explorer toggle', () => {
+  it('only reserves top-left header space for the collapsed sidebar controls', () => {
     const element = TabGroupSplitLayout({
       layout: {
         type: 'split',
@@ -166,25 +173,47 @@ describe('TabGroupSplitLayout', () => {
     const leftChild = asElement(rootChildren[0]).props.children
     const rightChild = asElement(rootChildren[2]).props.children
     const leftPanelProps = asElement(invokeComponent(asElement(leftChild))).props as {
-      reserveClosedExplorerToggleSpace: boolean
       reserveCollapsedSidebarHeaderSpace: boolean
     }
     const rightPanelProps = asElement(invokeComponent(asElement(rightChild))).props as {
-      reserveClosedExplorerToggleSpace: boolean
       reserveCollapsedSidebarHeaderSpace: boolean
     }
 
     expect(leftPanelProps).toEqual(
       expect.objectContaining({
-        reserveClosedExplorerToggleSpace: false,
         reserveCollapsedSidebarHeaderSpace: true
       })
     )
     expect(rightPanelProps).toEqual(
       expect.objectContaining({
-        reserveClosedExplorerToggleSpace: true,
         reserveCollapsedSidebarHeaderSpace: false
       })
+    )
+  })
+
+  it('keeps sibling groups mounted but hides them while one middle pane is maximized', () => {
+    maximizeMocks.groupId = 'right-group'
+    const element = TabGroupSplitLayout({
+      layout: {
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.4,
+        first: { type: 'leaf', groupId: 'left-group' },
+        second: { type: 'leaf', groupId: 'right-group' }
+      },
+      worktreeId: 'wt-1',
+      focusedGroupId: 'right-group',
+      isWorktreeActive: true
+    })
+
+    const rootElement = asElement(getSplitNodeElement(element))
+    const rootChildren = rootElement.props.children as unknown[]
+    expect(asElement(rootChildren[0]).props.style).toEqual(
+      expect.objectContaining({ display: 'none' })
+    )
+    expect(rootChildren[1]).toBeNull()
+    expect(asElement(rootChildren[2]).props.style).toEqual(
+      expect.objectContaining({ display: 'flex', flex: '1 1 0%' })
     )
   })
 

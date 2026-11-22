@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-status-get-snapshot"
+description = "Enables the agent_status_get_snapshot command without any pre-configured scope."
+commands.allow = ["agent_status_get_snapshot"]
+
+[[permission]]
+identifier = "deny-agent-status-get-snapshot"
+description = "Denies the agent_status_get_snapshot command without any pre-configured scope."
+commands.deny = ["agent_status_get_snapshot"]

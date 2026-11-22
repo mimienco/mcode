@@ -87,7 +87,13 @@ export function createMarkdownLinkAction(
             return
           }
           // Why: markdown file:// links need the same user-gesture authorization terminal links get, so external paths (e.g. /tmp screenshots) can open in MCode.
-          await window.api.fs.authorizeExternalPath({ targetPath: target.absolutePath })
+          try {
+            await window.api.fs.authorizeExternalPath({ targetPath: target.absolutePath })
+          } catch (error) {
+            // Why: the renderer-facing grant channel fails closed for out-of-root paths; surface the denial instead of an unhandled rejection.
+            toast.error(error instanceof Error ? error.message : String(error))
+            return
+          }
         } else {
           let stats: { isDirectory: boolean }
           try {

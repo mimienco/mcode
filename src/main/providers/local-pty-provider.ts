@@ -311,7 +311,9 @@ function killLocalPtyProcess(proc: pty.IPty, immediate: boolean): void {
     proc.kill('SIGTERM')
     return
   }
-  forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'))
+  forceKillPosixPtyProcessGroups(proc.pid, () => proc.kill('SIGKILL'), {
+    ptsName: readPtsName(proc)
+  })
 }
 
 function armLocalPtyForceKill(

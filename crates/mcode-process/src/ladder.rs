@@ -1,7 +1,9 @@
 //! The stop ladder rungs: graceful signal, bounded wait, forced kill — with
 //! a recycled-pid guard before any group-wide signal.
 
-use std::process::{ExitStatus, Stdio};
+use std::process::ExitStatus;
+#[cfg(windows)]
+use std::process::Stdio;
 
 use crate::handle::{ExitObservation, ProcessHandle};
 
@@ -30,7 +32,9 @@ pub fn observation_from_status(status: ExitStatus) -> ExitObservation {
 pub fn graceful_kill(pid: u32) -> bool {
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
         std::process::Command::new("taskkill")
+            .creation_flags(0x08000000)
             .arg("/pid")
             .arg(pid.to_string())
             .stdin(Stdio::null())
@@ -63,7 +67,9 @@ pub fn force_kill(
         if let Some(job) = job {
             let _ = job.terminate();
         }
+        use std::os::windows::process::CommandExt;
         let _ = std::process::Command::new("taskkill")
+            .creation_flags(0x08000000)
             .args(["/F", "/T", "/pid", &pid.to_string()])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -94,24 +100,27 @@ pub fn force_kill(
     }
 }
 
-/// POSIX recycled-pid guard: re-read /proc to confirm the pid still belongs
-/// to the spawn-time group before aiming a group SIGKILL at it.
+/// Verify group ownership with the OS on Linux and macOS before signaling the group.
 #[cfg(unix)]
 fn group_matches(pid: u32, expected_pgid: libc::pid_t) -> bool {
-    let stat_path = format!("/proc/{pid}/stat");
-    let Ok(stat) = std::fs::read_to_string(stat_path) else {
+    if pid == 0 || expected_pgid <= 0 {
         return false;
-    };
-    // Field 5 (1-based) is pgrp; field 2 (comm) may contain spaces, so parse
-    // after the closing parenthesis.
-    let Some(rest) = stat.rsplit_once(')').map(|(_, r)| r) else {
-        return false;
-    };
-    let fields: Vec<&str> = rest.split_whitespace().collect();
-    // After ')': state(0), ppid(1), pgrp(2).
-    fields
-        .get(2)
-        .and_then(|v| v.parse::<i64>().ok())
-        .map(|pgid| pgid == expected_pgid as i64)
-        .unwrap_or(false)
+    }
+    unsafe { libc::getpgid(pid as libc::pid_t) == expected_pgid }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn group_ownership_uses_the_platform_process_table() {
+        let pid = std::process::id();
+        let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
+        assert!(pgid > 0);
+        assert!(group_matches(pid, pgid));
+        assert!(!group_matches(pid, 0));
+        assert!(!group_matches(0, pgid));
+        assert!(!group_matches(pid, pgid.saturating_add(1)));
+    }
 }

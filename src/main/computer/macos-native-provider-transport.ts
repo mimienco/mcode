@@ -103,9 +103,11 @@ export async function startMacOSNativeProviderSocket({
     // Why: connect failures happen after spawn; terminate the detached helper
     // so repeated startup attempts do not leave orphan providers.
     provider.kill('SIGTERM')
-    if (isCurrent(socketPath)) {
-      cleanupSocketDirectory(socketDirectory)
-    }
+    // Why: this attempt created the directory, so it owns removing it even when
+    // a newer startup superseded it mid-flight; otherwise every superseded
+    // attempt leaks one mkdtemp dir holding the provider token and socket.
+    rmSync(socketTokenPath, { force: true })
+    cleanupSocketDirectory(socketDirectory)
     throw error
   }
 }

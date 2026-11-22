@@ -1,10 +1,9 @@
 import type { ManagedPaneInternal } from './pane-manager-types'
 import { disposeWebgl } from './pane-webgl-renderer'
 
-// MCode raises Blink's active-context ceiling to 128, but retained contexts
-// still consume GPU memory. Six keeps recent switch-backs on WebGL without
-// letting hidden worktrees grow that cost with the mounted-pane population.
-const MAX_RETAINED_HIDDEN_WEBGL_CONTEXTS = 6
+// MCode raises Blink's active-context ceiling to 128. Twenty-four retains a
+// dense 4x4 workspace for instant switch-back while bounding hidden GPU memory.
+const MAX_RETAINED_HIDDEN_WEBGL_CONTEXTS = 24
 
 type RetainedHiddenEntry = {
   owner: object

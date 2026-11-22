@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "runtime-environment-commands",
+  "description": "Read saved runtime connection metadata without credentials in the primary window.",
+  "windows": ["main"],
+  "permissions": ["allow-runtime-environments-list"]
+}
