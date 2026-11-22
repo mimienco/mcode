@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RefObject } from 'react'
 
-const detectInstallCommandMock = vi.hoisted(() => vi.fn(async () => 'winget install ripgrep'))
+const detectInstallCommandMock = vi.hoisted(() => vi.fn(() => 'winget install ripgrep'))
 
 vi.mock('../../../../shared/quick-open-install-rg', () => ({
   detectInstallCommand: detectInstallCommandMock

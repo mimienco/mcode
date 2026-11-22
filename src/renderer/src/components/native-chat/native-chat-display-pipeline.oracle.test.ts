@@ -23,16 +23,16 @@ function makeMessage(shape: Shape, timestamp: number): NativeChatMessage {
       return {
         id,
         role: 'assistant',
-        agentType: 'pi',
         timestamp,
+        source: 'transcript',
         blocks: [{ type: 'text', text: `assistant ${id}` } as never]
       }
     case 'tool':
       return {
         id,
         role: 'tool',
-        agentType: 'pi',
         timestamp,
+        source: 'transcript',
         blocks: [
           { type: 'tool-call', name: 'read', arguments: {} } as never,
           { type: 'tool-result', content: 'ok' } as never
@@ -43,6 +43,7 @@ function makeMessage(shape: Shape, timestamp: number): NativeChatMessage {
         id,
         role: 'user',
         timestamp,
+        source: 'transcript',
         blocks: [{ type: 'text', text: `user ${id}` } as never]
       }
     default:
@@ -50,6 +51,7 @@ function makeMessage(shape: Shape, timestamp: number): NativeChatMessage {
         id,
         role: 'system',
         timestamp,
+        source: 'transcript',
         blocks: [{ type: 'text', text: `<system-reminder>noise ${id}</system-reminder>` } as never]
       }
   }

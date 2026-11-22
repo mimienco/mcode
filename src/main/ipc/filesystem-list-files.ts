@@ -15,7 +15,7 @@ import {
   shouldIncludeQuickOpenPath
 } from '../../shared/quick-open-filter'
 import { isQuickOpenReaddirBudgetError } from '../../shared/quick-open-readdir-walk'
-import { buildInstallRgMessage } from '../../shared/quick-open-install-rg'
+import { buildInstallRgMessage } from '../../shared/quick-open-install-rg-node'
 import {
   limitQuickOpenFilesBySerializedBytes,
   serializedQuickOpenPathBytes

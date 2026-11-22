@@ -32,6 +32,15 @@ describe('extractUserMessageImagePaths', () => {
     expect(result.text).toBe('check this')
   })
 
+  it('splits concatenated Windows image paths from immediately following prompt text', () => {
+    const first = 'C:\\Users\\Milan M\\AppData\\Local\\Temp\\first.png'
+    const second = 'C:\\Users\\Milan M\\AppData\\Local\\Temp\\second.png'
+    const result = extractUserMessageImagePaths(`${first}${second}what happened?`)
+
+    expect(result.imagePaths).toEqual([first, second])
+    expect(result.text).toBe('what happened?')
+  })
+
   it('matches image extensions case-insensitively', () => {
     const result = extractUserMessageImagePaths('"C:\\pics\\A.JPG" and /b/B.JPEG')
 
@@ -66,9 +75,7 @@ describe('extractUserMessageImagePaths', () => {
   })
 
   it('dedupes repeated paths while preserving first-seen order', () => {
-    const result = extractUserMessageImagePaths(
-      '/a/one.png then /b/two.png then /a/one.png again'
-    )
+    const result = extractUserMessageImagePaths('/a/one.png then /b/two.png then /a/one.png again')
 
     expect(result.imagePaths).toEqual(['/a/one.png', '/b/two.png'])
     expect(result.text).not.toMatch(/\.png/)

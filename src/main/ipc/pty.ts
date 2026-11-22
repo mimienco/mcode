@@ -362,6 +362,14 @@ const CLAUDE_CHILD_SESSION_STAMP_ENV_KEYS = [
   'CLAUDE_CODE_BRIDGE_SESSION_ID'
 ] as const
 
+// Why: these extension recursion guards contain the PID of the owning Pi/OMP or
+// Prime process. They may flow through an outer agent into MCode itself, but a
+// terminal spawned by MCode is a fresh top-level boundary and must choose its own owner.
+const PI_FAMILY_AGENT_STATUS_OWNER_ENV_KEYS = [
+  'MCODE_PI_STATUS_OWNED',
+  'MCODE_PRIME_AGENT_STATUS_OWNED'
+] as const
+
 export function getPtyIdForPaneKey(paneKey: string): string | undefined {
   return paneKeyPtyId.get(paneKey)
 }
@@ -4880,7 +4888,8 @@ export function registerPtyHandlers(
         isDaemonHostSpawn || args.connectionId ? LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS : [],
         isDaemonHostSpawn ? getInheritedAgentHookEnvKeysToDelete(env) : [],
         // Why: ungated, unlike the agent-hook keys — the local provider and the relay host also spread their own process.env into every spawn.
-        getInheritedClaudeSessionStampEnvKeysToDelete(env)
+        getInheritedClaudeSessionStampEnvKeysToDelete(env),
+        PI_FAMILY_AGENT_STATUS_OWNER_ENV_KEYS
       )
       if (skipCodexHomeEnv) {
         spawnOptions.envToDelete = mergePtyEnvDeletions(
@@ -6630,6 +6639,7 @@ export function registerPtyHandlers(
           isDaemonHostSpawn || args.connectionId ? LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS : [],
           isDaemonHostSpawn ? getInheritedAgentHookEnvKeysToDelete(spawnEnv) : [],
           getInheritedClaudeSessionStampEnvKeysToDelete(spawnEnv),
+          PI_FAMILY_AGENT_STATUS_OWNER_ENV_KEYS,
           skipCodexHomeEnv ? CODEX_HOME_ENV_KEYS : [],
           // Why: the persistent daemon compares its own merged CODEX_HOME pair;
           // main cannot safely decide ownership for a process it may not parent.

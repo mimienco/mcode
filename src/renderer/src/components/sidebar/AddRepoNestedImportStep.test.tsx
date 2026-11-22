@@ -53,6 +53,16 @@ function renderStepMarkup(
 function findButton(
   container: HTMLElement,
   label: string,
+  options?: { optional?: false }
+): HTMLButtonElement
+function findButton(
+  container: HTMLElement,
+  label: string,
+  options: { optional: true }
+): HTMLButtonElement | null
+function findButton(
+  container: HTMLElement,
+  label: string,
   { optional = false }: { optional?: boolean } = {}
 ): HTMLButtonElement | null {
   const button = Array.from(container.querySelectorAll('button')).find((entry) =>

@@ -1,7 +1,6 @@
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import { stripNoiseMessages } from './native-chat-noise'
 import { orderNativeChatMessages } from './native-chat-message-grouping'
-import { foldToolMessages } from './native-chat-tool-fold'
 import { isToolCallBlock, isToolResultBlock } from '../../../../shared/native-chat-types'
 
 // Why: PERF-07 — strip/order/fold over the whole transcript ran on every

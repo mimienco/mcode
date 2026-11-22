@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
-  "id": "mcode-multipass-recipes",
-  "publisher": "stablyai",
+  "id": "plugin-multipass-recipes",
+  "publisher": "mcode",
   "name": "Multipass VM Recipes",
   "version": "1.0.0",
   "description": "A reviewed starter lifecycle for disposable Multipass workspaces.",

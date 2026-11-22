@@ -377,6 +377,18 @@ describe('registerPtyHandlers', () => {
           ])
         )
       })
+      it('strips inherited Pi-family extension owner markers from daemon spawns', async () => {
+        const spawnOptions = await daemonSpawnAndGetOptions(undefined, undefined, undefined, {
+          MCODE_PI_STATUS_OWNED: '5656',
+          MCODE_PRIME_AGENT_STATUS_OWNED: '5656'
+        })
+
+        expect(spawnOptions.envToDelete).toEqual(
+          expect.arrayContaining(['MCODE_PI_STATUS_OWNED', 'MCODE_PRIME_AGENT_STATUS_OWNED'])
+        )
+        expect(spawnOptions.env.MCODE_PI_STATUS_OWNED).toBeUndefined()
+        expect(spawnOptions.env.MCODE_PRIME_AGENT_STATUS_OWNED).toBeUndefined()
+      })
       it('preserves an explicitly requested Claude child-session stamp', async () => {
         // Why: only inherited values are poison; a caller deliberately spawning a
         // nested Claude child passes the stamp in args.env and must keep it.

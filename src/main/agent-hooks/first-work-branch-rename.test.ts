@@ -233,6 +233,41 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
     expect(onRenamed).toHaveBeenCalledWith(FOLDER_WORKTREE_ID)
   })
 
+  it('routes legacy root ids owned by folder repos without probing git', async () => {
+    const folderRepo = {
+      id: REPO_ID,
+      path: '/workspace/platform',
+      kind: 'folder',
+      connectionId: undefined
+    } as Repo
+    const { deps, onRenamed, setDisplayName } = makeDeps({
+      getRepo: () => folderRepo,
+      getFolderWorkspacePath: () => folderRepo.path,
+      isPendingFirstAgentMessageRename: () => true
+    })
+
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+
+    expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
+    expect(setDisplayName).toHaveBeenCalledWith(WORKTREE_ID, 'Fix auth')
+    expect(onRenamed).toHaveBeenCalledWith(WORKTREE_ID)
+  })
+
+  it('settles a legacy local workspace when Git reports that it is not a repository', async () => {
+    gitExecFileAsyncMock.mockRejectedValue(
+      Object.assign(new Error('fatal: not a git repository'), {
+        stderr: 'fatal: not a git repository (or any of the parent directories): .git\n'
+      })
+    )
+    const { deps, setRenameError } = makeDeps()
+
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+
+    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(1)
+    expect(setRenameError).toHaveBeenCalledWith(WORKTREE_ID, null)
+  })
+
   it('does not rename folder workspace titles without the pending marker', async () => {
     const { deps, setDisplayName } = makeDeps({
       resolveWorktreeIdForTab: () => FOLDER_WORKTREE_ID,

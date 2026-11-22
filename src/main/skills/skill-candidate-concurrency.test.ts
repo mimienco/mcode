@@ -18,4 +18,17 @@ describe('runSkillCandidateTasks', () => {
     expect(maxActive).toBe(4)
     expect(results).toEqual(Array.from({ length: 12 }, (_, index) => index))
   })
+  it('yields to the event loop while immediately resolved candidates drain', async () => {
+    let timerRan = false
+    const timer = setImmediate(() => {
+      timerRan = true
+    })
+
+    try {
+      await runSkillCandidateTasks(Array.from({ length: 32 }, () => async () => undefined))
+      expect(timerRan).toBe(true)
+    } finally {
+      clearImmediate(timer)
+    }
+  })
 })

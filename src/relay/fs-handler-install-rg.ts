@@ -1,11 +1,10 @@
 import {
   buildInstallRgMessage as buildSharedInstallRgMessage,
-  buildRipgrepRequiredMessage as buildSharedRipgrepRequiredMessage,
-  detectInstallCommand,
-  detectLinuxInstallCommandFromOsRelease
-} from '../shared/quick-open-install-rg'
+  buildRipgrepRequiredMessage as buildSharedRipgrepRequiredMessage
+} from '../shared/quick-open-install-rg-node'
+import { detectLinuxInstallCommandFromOsRelease } from '../shared/quick-open-install-rg'
 
-export { detectInstallCommand, detectLinuxInstallCommandFromOsRelease }
+export { detectLinuxInstallCommandFromOsRelease }
 
 export function buildInstallRgMessage(cause: unknown): Promise<string> {
   return buildSharedInstallRgMessage(cause, 'remote')

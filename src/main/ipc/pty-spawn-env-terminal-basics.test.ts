@@ -189,6 +189,18 @@ describe('registerPtyHandlers', () => {
       expect(env.CLAUDE_CODE_SESSION_ID).toBeUndefined()
       expect(env.CLAUDE_CODE_BRIDGE_SESSION_ID).toBeUndefined()
     })
+    it('strips inherited Pi-family extension owner markers from a fresh terminal', async () => {
+      // Why: these PIDs only identify the OMP/Prime process that owns an extension.
+      // Letting an outer agent leak them through MCode makes a new top-level agent
+      // mistake itself for a nested child and skip every native-chat status hook.
+      const env = await spawnAndGetEnv(undefined, {
+        MCODE_PI_STATUS_OWNED: '5656',
+        MCODE_PRIME_AGENT_STATUS_OWNED: '5656'
+      })
+
+      expect(env.MCODE_PI_STATUS_OWNED).toBeUndefined()
+      expect(env.MCODE_PRIME_AGENT_STATUS_OWNED).toBeUndefined()
+    })
     it('keeps an explicitly requested Claude child-session stamp on a local spawn', async () => {
       const env = await spawnAndGetEnv(
         { CLAUDE_CODE_CHILD_SESSION: '1' },

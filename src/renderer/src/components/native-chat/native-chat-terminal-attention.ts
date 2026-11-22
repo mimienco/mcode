@@ -7,6 +7,25 @@ const TERMINAL_ATTENTION_POLL_MS = 500
 
 export type NativeChatTerminalAttention = 'codex-hooks-review' | 'agent-auth-required'
 
+/** Claude Code update banner state surfaced above the native chat view. */
+export type NativeChatTerminalNotice =
+  | { kind: 'update-available'; command?: string | null }
+  | {
+      kind: 'update-complete'
+      features: number
+      bugfixes: number
+      otherChanges: number
+      changelogUrl: string
+    }
+
+// Why: one-click updates run unsandboxed in a new tab, so only exact official
+// Claude Code update commands are ever allowed through.
+const ALLOWED_CLAUDE_UPDATE_COMMANDS: readonly string[] = ['claude update', 'claude migrate-installer']
+
+export function isAllowedClaudeUpdateCommand(command: string): boolean {
+  return ALLOWED_CLAUDE_UPDATE_COMMANDS.includes(command.trim())
+}
+
 function compactTerminalText(value: string): string {
   // Why: alternate-screen TUIs position words with cursor escapes, so prompt
   // detection cannot depend on literal spaces or terminal wrapping.

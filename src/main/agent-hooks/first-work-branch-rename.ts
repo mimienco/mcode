@@ -1,6 +1,7 @@
 // On first agent work in a fresh workspace, replace the auto-generated creature branch (e.g. `you/Nautilus`) with a short work-derived name.
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { Repo } from '../../shared/repo-types'
+import { isFolderRepo } from '../../shared/repo-kind'
 import { getRepoIdFromWorktreeId, splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { parsePaneKey } from '../../shared/stable-pane-id'
@@ -72,6 +73,13 @@ export type FirstWorkBranchRenameDeps = {
 const inFlightWorktreeIds = new Set<string>()
 const settledWorktreeIds = new Set<string>()
 export const FIRST_WORK_BRANCH_RENAME_SETTLED_CACHE_LIMIT = 500
+
+function isNotGitRepositoryError(error: unknown): boolean {
+  const stderr =
+    typeof error === 'object' && error !== null && 'stderr' in error ? String(error.stderr) : ''
+  const message = error instanceof Error ? error.message : String(error)
+  return /not a git repository/i.test(`${message}\n${stderr}`)
+}
 
 /** Test seam: clear the per-process dedupe sets. */
 export function resetFirstWorkBranchRenameState(): void {
@@ -153,7 +161,8 @@ async function runAutoRename(
   }
 
   const workspaceScope = parseWorkspaceKey(worktreeId)
-  if (workspaceScope?.type === 'folder') {
+  const repo = deps.getRepo(getRepoIdFromWorktreeId(worktreeId))
+  if (workspaceScope?.type === 'folder' || (repo && isFolderRepo(repo))) {
     return runFolderWorkspaceTitleAutoRename(
       worktreeId,
       prompt,
@@ -163,8 +172,6 @@ async function runAutoRename(
       retry
     )
   }
-
-  const repo = deps.getRepo(getRepoIdFromWorktreeId(worktreeId))
   // Why: folder-workspace ids carry a synthetic `::workspace:<uuid>` suffix that's not a real dir; resolve to the backing folder for Git's cwd.
   const parsed = splitWorktreeIdForFilesystem(worktreeId)
   if (!repo || !parsed) {
@@ -180,7 +187,15 @@ async function runAutoRename(
     ? (args) => provider.exec(args, worktreePath)
     : (args) => gitExecFileAsync(args, { cwd: worktreePath })
 
-  const currentBranch = (await exec(['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim()
+  let currentBranch: string
+  try {
+    currentBranch = (await exec(['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim()
+  } catch (error) {
+    if (!repo.connectionId && isNotGitRepositoryError(error)) {
+      return stop('workspace is not a git repository', true)
+    }
+    throw error
+  }
   if (!currentBranch || currentBranch === 'HEAD') {
     return retry(`no checked-out branch (${currentBranch || 'empty'})`)
   }

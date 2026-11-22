@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
-  "id": "mcode-portuguese",
-  "publisher": "stablyai",
+  "id": "plugin-portuguese",
+  "publisher": "mcode",
   "name": "Português do Brasil",
   "version": "1.0.0",
   "description": "Brazilian Portuguese translations for common MCode navigation.",

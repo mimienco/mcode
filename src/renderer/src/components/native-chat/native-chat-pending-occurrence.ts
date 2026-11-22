@@ -3,6 +3,7 @@ import {
   normalizedNativeChatUserMessageText
 } from '../../../../shared/native-chat-image-transcript-markers'
 import { isImageRefBlock, type NativeChatMessage } from '../../../../shared/native-chat-types'
+import { extractUserMessageImagePaths } from './native-chat-user-message-image-paths'
 
 export type NativeChatPendingOccurrence = {
   text: string
@@ -29,19 +30,36 @@ export function nativeChatPendingContentKey(
   return imagePaths.length > 0 ? `images:${JSON.stringify(imagePaths)}` : 'empty'
 }
 
-function nativeChatUserMessageContentKey(message: NativeChatMessage): string | null {
+function nativeChatUserMessageContent(message: NativeChatMessage): {
+  text: string
+  imagePaths: string[]
+} | null {
   if (message.role !== 'user') {
     return null
   }
-  const text = normalizedNativeChatUserMessageText(message) ?? ''
-  if (text) {
-    return `text:${text}`
+  // Why: some agents persist pasted attachments as raw absolute paths directly
+  // before the prompt text. The composer tracks those paths separately, so use
+  // the same extraction as rendering before comparing transcript and pending rows.
+  const extracted = extractUserMessageImagePaths(normalizedNativeChatUserMessageText(message) ?? '')
+  const text = normalizeNativeChatPendingText(extracted.text)
+  const imagePaths = Array.from(
+    new Set([
+      ...message.blocks
+        .filter(isImageRefBlock)
+        .map((block) => block.path)
+        .filter((path): path is string => Boolean(path)),
+      ...extracted.imagePaths
+    ])
+  )
+  return { text, imagePaths }
+}
+
+function nativeChatUserMessageContentKey(message: NativeChatMessage): string | null {
+  const content = nativeChatUserMessageContent(message)
+  if (!content) {
+    return null
   }
-  const imagePaths = message.blocks
-    .filter(isImageRefBlock)
-    .map((block) => block.path)
-    .filter((path): path is string => Boolean(path))
-  const key = nativeChatPendingContentKey({ text: '', imagePaths })
+  const key = nativeChatPendingContentKey(content)
   return key === 'empty' ? null : key
 }
 
@@ -91,7 +109,7 @@ export function advancedNativeChatUserRows(
   const waiting: NativeChatUserRow[] = []
   for (const message of messages) {
     if (message.role === 'user') {
-      const text = normalizedNativeChatUserMessageText(message)
+      const text = nativeChatUserMessageContent(message)?.text
       if (text) {
         waiting.push({ id: message.id, text })
       }
@@ -109,7 +127,7 @@ export function matchingNativeChatUserRows(
 ): readonly NativeChatUserRow[] {
   const rows: NativeChatUserRow[] = []
   for (const message of messages) {
-    const text = normalizedNativeChatUserMessageText(message)
+    const text = nativeChatUserMessageContent(message)?.text
     if (text) {
       rows.push({ id: message.id, text })
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type {
   SearchFileResult,
@@ -9,6 +9,7 @@ import { detectInstallCommand } from '../../../../shared/quick-open-install-rg'
 import type { SearchRow } from './search-rows'
 import { FileResultRow, MatchResultRow } from './SearchResultItems'
 import { translate } from '@/i18n/i18n'
+import { getShortcutPlatform } from '@/lib/shortcut-platform'
 
 const SEARCH_VIRTUAL_OVERSCAN = 12
 
@@ -33,19 +34,7 @@ export function SearchResultsPane({
   onToggleCollapsedFile,
   onMatchClick
 }: SearchResultsPaneProps): React.JSX.Element {
-  // Why: the install command is OS-dependent; resolve once per mount.
-  const [installCommand, setInstallCommand] = useState('')
-  useEffect(() => {
-    let alive = true
-    void detectInstallCommand().then((command) => {
-      if (alive) {
-        setInstallCommand(command)
-      }
-    })
-    return () => {
-      alive = false
-    }
-  }, [])
+  const installCommand = detectInstallCommand(getShortcutPlatform())
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,

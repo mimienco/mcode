@@ -31,3 +31,13 @@ export function watcherHostFailure(
 export function isWatcherProcessFailure(error: unknown): error is WatcherProcessFailure {
   return error instanceof WatcherProcessFailure
 }
+
+/** Teardown aborts the subscription deliberately; only that exact shape is
+ *  expected, every other watcher failure stays reportable. */
+export function isExpectedWatcherProcessCancellation(error: unknown): boolean {
+  return (
+    isWatcherProcessFailure(error) &&
+    error.scope === 'subscription' &&
+    error.code === 'subscribe_aborted'
+  )
+}

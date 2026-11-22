@@ -1,24 +1,14 @@
-import { readNodeFileWithinLimit } from './node-bounded-file-reader'
 import { getProcessOutputFields, iterateProcessOutputLines } from './process-output-field-scanner'
 
-const GENERIC_LINUX_RIPGREP_INSTALL =
+export const GENERIC_LINUX_RIPGREP_INSTALL =
   'install ripgrep via your package manager (e.g. apt/dnf/pacman)'
 const OS_RELEASE_ID_LIKE_MAX_FIELDS = 16
-const MAX_OS_RELEASE_BYTES = 64 * 1024
 
-export async function detectInstallCommand(): Promise<string> {
-  if (process.platform === 'darwin') {
+export function detectInstallCommand(platform: NodeJS.Platform): string {
+  if (platform === 'darwin') {
     return 'brew install ripgrep'
   }
-  if (process.platform === 'linux') {
-    try {
-      const osRelease = (
-        await readNodeFileWithinLimit('/etc/os-release', MAX_OS_RELEASE_BYTES)
-      ).buffer.toString('utf8')
-      return detectLinuxInstallCommandFromOsRelease(osRelease)
-    } catch {
-      /* fall through to generic guidance */
-    }
+  if (platform === 'linux') {
     return GENERIC_LINUX_RIPGREP_INSTALL
   }
   return 'install ripgrep (https://github.com/BurntSushi/ripgrep#installation)'
@@ -75,23 +65,3 @@ function readOsReleaseValue(rawValue: string): string {
     : trimmed
 }
 
-export async function buildInstallRgMessage(
-  cause: unknown,
-  host: 'local' | 'remote' = 'local'
-): Promise<string> {
-  const reason = cause instanceof Error ? cause.message : String(cause)
-  const cmd = await detectInstallCommand()
-  const location = host === 'local' ? 'on the host running the Quick Open scan' : 'on the remote'
-  return (
-    `Quick Open scan too large (${reason}). ` +
-    `Install ripgrep ${location} to enable fast, gitignore-aware listing: ${cmd}`
-  )
-}
-
-export async function buildRipgrepRequiredMessage(
-  host: 'local' | 'remote' = 'local'
-): Promise<string> {
-  const cmd = await detectInstallCommand()
-  const location = host === 'local' ? 'on the host running Quick Open' : 'on the remote'
-  return `Quick Open search requires ripgrep ${location} to stay resource-bounded. Install it with: ${cmd}`
-}

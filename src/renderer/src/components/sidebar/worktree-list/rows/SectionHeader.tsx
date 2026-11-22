@@ -322,7 +322,7 @@ export function renderWorktreeSectionHeaderRow(args: {
                   iconClassName="size-3.5"
                 />
               ) : (
-                <row.icon className="size-3" />
+                <row.icon className="size-3.5" />
               )}
             </div>
           ) : null}
@@ -331,11 +331,11 @@ export function renderWorktreeSectionHeaderRow(args: {
             <div className="flex min-w-0 items-center gap-1.5">
               {/* Test Bench legend: section headers are instrument labels —
                   uppercase micro-type so worktree rows own the hierarchy. */}
-              <div className="min-w-0 truncate text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-muted-foreground">
+              <div className="min-w-0 truncate text-xs font-semibold uppercase leading-4 tracking-[0.05em] text-muted-foreground">
                 {row.label}
               </div>
               {isQuickChatsHeader ? (
-                <span className="readout shrink-0 text-[10px] text-muted-foreground">
+                <span className="readout shrink-0 text-[11px] leading-4 text-muted-foreground">
                   {row.count}
                 </span>
               ) : null}

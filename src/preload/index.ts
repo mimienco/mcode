@@ -15,7 +15,8 @@ import type {
   DashboardRevealAgentArgs,
   DashboardSleepWorkspaceArgs,
   DashboardSnapshot,
-  DashboardSpawnAgentArgs
+  DashboardSpawnAgentArgs,
+  DashboardView
 } from '../shared/dashboard-snapshot'
 import type {
   TerminalPreviewConnectResult,
@@ -2437,7 +2438,7 @@ const api = {
 
   dashboard: {
     // Open the pop-out dashboard window, or focus it if already open.
-    openPopout: (view?: 'board' | 'map'): Promise<void> =>
+    openPopout: (view?: DashboardView): Promise<void> =>
       ipcRenderer.invoke('dashboardPopout:open', view),
 
     // ── Producer side (main window) ──────────────────────────────────────

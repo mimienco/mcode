@@ -47,6 +47,17 @@ export function configureAiVaultSessionSources(next: AiVaultSessionSources): voi
   sources = next
 }
 
+/** Codex `sessions` dirs for configured additional codex homes. Exported so the
+ *  transcript-path gate validates against exactly the roots the scanner reads. */
+export function getAiVaultAdditionalCodexSessionsDirs(): string[] {
+  // Why: these dirs may be POSIX runtime paths (serve mode), so join with
+  // '/' — Windows fs accepts forward slashes, and platform.join would
+  // mangle remote-style paths into backslash soup.
+  return (
+    sources.getAdditionalCodexHomePaths?.().map((homePath) => posixPath.join(homePath, 'sessions')) ?? []
+  )
+}
+
 export async function listAiVaultSessions(
   args?: AiVaultListArgs,
   options: { signal?: AbortSignal } = {}
@@ -75,11 +86,7 @@ export async function listAiVaultSessions(
     force: args?.force,
     signal: options.signal,
     start: async (scanSignal) => {
-      const additionalCodexSessionsDirs =
-        // Why: these dirs may be POSIX runtime paths (serve mode), so join with
-        // '/' — Windows fs accepts forward slashes, and platform.join would
-        // mangle remote-style paths into backslash soup.
-        sources.getAdditionalCodexHomePaths?.().map((homePath) => posixPath.join(homePath, 'sessions')) ?? []
+      const additionalCodexSessionsDirs = getAiVaultAdditionalCodexSessionsDirs()
       const result = await scanAiVaultSessionsInBackground(
         {
           limit: args?.limit,
